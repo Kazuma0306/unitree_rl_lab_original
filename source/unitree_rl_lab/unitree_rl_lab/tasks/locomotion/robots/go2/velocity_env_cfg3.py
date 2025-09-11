@@ -16,7 +16,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns, CameraCfg
+from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns, CameraCfg, TiledCameraCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
@@ -91,8 +91,7 @@ DESCRETE_OBSTACLES_CFG = terrain_gen.TerrainGeneratorCfg(
         # ),
 
         "descrete_obstacles": terrain_gen.HfDiscreteObstaclesTerrainCfg(
-             proportion=0.1, border_width=0.25, obstacle_width_range =(0.5,  0.9) , obstacle_height_range = (0.0, 0.1), num_obstacles = 100, 
-
+             proportion=0.1, border_width=0.25, obstacle_width_range =(0.8,  0.9) , obstacle_height_range = (0.05, 0.1), num_obstacles = 30
         ),
     },
 )
@@ -142,9 +141,9 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
     use_cache=False,
     sub_terrains={
         "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
-        # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
-        #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
-        # ),
+        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
+        ),
         # "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
         #     proportion=0.1, slope_range=(0.0, 0.4), platform_width=2.0, border_width=0.25
         # ),
@@ -182,9 +181,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",  # "plane", "generator"
-        terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
+        # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
-        # terrain_generator=DESCRETE_OBSTACLES_CFG,
+        terrain_generator=DESCRETE_OBSTACLES_CFG,
         # terrain_generator= STEPPING_STONES_CFG, #TODO
         max_init_terrain_level=0,
         collision_group=-1,
@@ -214,18 +213,38 @@ class RobotSceneCfg(InteractiveSceneCfg):
     #     mesh_prim_paths=["/World/ground"],
     # )
 
-    camera = CameraCfg(
+    camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
         debug_vis = True,
-        update_period=0.1,
+        update_period=0.02,
         height=64,
         width=64,
-        data_types=["rgb"],
+        data_types=["depth"],
+        # spawn=sim_utils.PinholeCameraCfg(
+        #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 5.0)
+        # ),
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+            focal_length=24.0, focus_distance=10.0, horizontal_aperture=20.955, clipping_range=(0.1, 3.0)
         ),
-        offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        depth_clipping_behavior = "max",
+        # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.2), rot=(0.418761, -0.612372, 0.581238, -0.327329), convention="ros"),
+
+
     )
+
+    # camera = CameraCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
+    #     debug_vis = True,
+    #     update_period=0.0,
+    #     height=64,
+    #     width=64,
+    #     data_types=["depth"],
+    #     spawn=sim_utils.PinholeCameraCfg(
+    #         focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+    #     ),
+    #     offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+    # )
 
 
 
@@ -275,15 +294,15 @@ class EventCfg:
     )
 
     # reset
-    base_external_force_torque = EventTerm(
-        func=mdp.apply_external_force_torque,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
-            "force_range": (0.0, 0.0),
-            "torque_range": (-0.0, 0.0),
-        },
-    )
+    # base_external_force_torque = EventTerm(
+    #     func=mdp.apply_external_force_torque,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+    #         "force_range": (0.0, 0.0),
+    #         "torque_range": (-0.0, 0.0),
+    #     },
+    # )
 
     reset_base = EventTerm(
         func=mdp.reset_root_state_uniform,
@@ -312,39 +331,44 @@ class EventCfg:
     )
 
     # interval
-    push_robot = EventTerm(
-        func=mdp.push_by_setting_velocity,
-        mode="interval",
-        interval_range_s=(5.0, 10.0),
-        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
-    )
+    # push_robot = EventTerm(
+    #     func=mdp.push_by_setting_velocity,
+    #     mode="interval",
+    #     interval_range_s=(5.0, 10.0),
+    #     params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+    # )
 
 
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    # base_velocity = mdp.UniformLevelVelocityCommandCfg(
-    #     asset_name="robot",
-    #     resampling_time_range=(10.0, 10.0),
-    #     rel_standing_envs=0.1,
-    #     debug_vis=True,
-    #     ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
-    #         lin_vel_x=(-0.1, 0.1), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-1, 1)
-    #     ),
-    #     limit_ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
-    #         lin_vel_x=(-1.0, 1.0), lin_vel_y=(-0.4, 0.4), ang_vel_z=(-1.0, 1.0)
-    #     ),
-    # )
-
-
-    goal_position = mdp.UniformPose2dCommandCfg(
+    base_velocity = mdp.UniformLevelVelocityCommandCfg(
         asset_name="robot",
-        simple_heading=False,
         resampling_time_range=(20.0, 20.0),
+        rel_standing_envs=0.1,
         debug_vis=True,
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(1.5, 4.9), pos_y=(-1.0, 1.0), heading=(-math.pi/4, math.pi/4)),
+        # ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+        #     lin_vel_x=(0.25, 1.0), lin_vel_y=(-0.25, 0.25), ang_vel_z=(-1, 1)
+        # ),
+
+        ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+            lin_vel_x=(0.25, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-0.3, 0.3)
+        ),
+
+        limit_ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+            lin_vel_x=(-1.0, 1.0), lin_vel_y=(-0.4, 0.4), ang_vel_z=(-1.0, 1.0)
+        ),
     )
+
+
+    # goal_position = mdp.UniformPose2dCommandCfg(
+    #     asset_name="robot",
+    #     simple_heading=False,
+    #     resampling_time_range=(8.0, 8.0),
+    #     debug_vis=True,
+    #     ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(1.5, 4.9), pos_y=(-3.0, 3.0), heading=(-math.pi/4, math.pi/4)),
+    # )
 
 
 @configclass
@@ -368,7 +392,7 @@ class ObservationsCfg:
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100), noise=Unoise(n_min=-0.05, n_max=0.05))
         position_commands = ObsTerm(
-            func = mdp.generated_commands, params={"command_name": "goal_position"}
+            func = mdp.generated_commands, params={"command_name": "base_velocity"}
         )
         joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel, clip=(-100, 100), noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel_rel = ObsTerm(
@@ -380,18 +404,17 @@ class ObservationsCfg:
         #     clip=(-1.0, 5.0),
         # )
 
-        # def __post_init__(self):
-        #     self.history_length = 3
+       
 
 
         camera_image = ObsTerm(
             func=mdp.image, # mdpに関数がある場合。なければ自作関数
-            params={"sensor_cfg": SceneEntityCfg("camera")}
+            params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
         )
         
 
         def __post_init__(self):
-            # self.history_length = 5
+            self.history_length = 4
             self.enable_corruption = True
             self.concatenate_terms = False
 
@@ -408,136 +431,35 @@ class ObservationsCfg:
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100), noise=Unoise(n_min=-0.05, n_max=0.05))
         position_commands = ObsTerm(
-            func = mdp.generated_commands, params={"command_name": "goal_position"}
+            func = mdp.generated_commands, params={"command_name": "base_velocity"}
         )
         joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel, clip=(-100, 100), noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel_rel = ObsTerm(
             func=mdp.joint_vel_rel, scale=0.05, clip=(-100, 100), noise=Unoise(n_min=-1.5, n_max=1.5)
         )
+        # joint_effort = ObsTerm(func=mdp.joint_effort, scale=0.01, clip=(-100, 100))
         last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
         # height_scanner = ObsTerm(func=mdp.height_scan,
         #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
         #     clip=(-1.0, 5.0),
         # )
 
-        # def __post_init__(self):
-        #     self.history_length = 3
-
-
     
         camera_image = ObsTerm(
             func=mdp.image, # mdpに関数がある場合。なければ自作関数
-            params={"sensor_cfg": SceneEntityCfg("camera")}
+            params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
         )
     
-        # このグループ全体に history_length を適用
-        # def __post_init__(self):
-        #     self.history_length = 4@configclass
-
     
 
         def __post_init__(self):
             self.concatenate_terms = False
-        #     self.history_length = 5
+            self.history_length = 4
 
     # privileged observations
     critic: CriticCfg = CriticCfg()
 
 
-
-
-# @configclass
-# class ObservationsCfg:
-#     """Observation specifications for the MDP."""
-#     @configclass
-#     class PolicyCfg(ObsGroup):
-#         """Policyが受け取る観測全体を定義するグループ。"""
-#         @configclass
-#         class ProprioceptionGroupCfg(ObsGroup):
-#             """身体感覚グループ。このクラス名がキー 'proprioception' になります。"""
-#             base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-#             base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
-#             projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100), noise=Unoise(n_min=-0.05, n_max=0.05))
-#             position_commands = ObsTerm(
-#                 func = mdp.generated_commands, params={"command_name": "goal_position"}
-#             )
-#             joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel, clip=(-100, 100), noise=Unoise(n_min=-0.01, n_max=0.01))
-#             joint_vel_rel = ObsTerm(
-#                 func=mdp.joint_vel_rel, scale=0.05, clip=(-100, 100), noise=Unoise(n_min=-1.5, n_max=1.5)
-#             )
-#             last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
-
-#             def __post_init__(self):
-#                 # このグループ内のデータは結合して一つのベクトルにする
-#                 self.concatenate_terms = True
-            
-#             # def __post_init__(self):
-#             #     self.history_length = 3
-
-#         @configclass
-#         class VisionGroupCfg(ObsGroup):
-#             """視覚グループ。このクラス名がキー 'vision' になります。"""
-#             camera_image = ObsTerm(
-#                 func=mdp.image, # mdpに関数がある場合。なければ自作関数
-#                 params={"sensor_cfg": SceneEntityCfg("camera")}
-#             )
-
-#         # --- ここでグループを定義 ---
-#         # 変数名 'proprioception' が、辞書のキーになります
-#         proprioception: ProprioceptionGroupCfg = ProprioceptionGroupCfg()
-#         vision: VisionGroupCfg = VisionGroupCfg()
-        
-#         def __post_init__(self):
-#             # グループ分けを維持するための重要な設定
-#             self.concatenate_terms = False
-
-#     # 最終的な観測グループを定義
-#     policy: PolicyCfg = PolicyCfg()
-
-
-#     @configclass
-#     class CriticCfg(ObsGroup):
-#         @configclass
-#         class ProprioceptionGroupCfg(ObsGroup):
-#             """身体感覚グループ。このクラス名がキー 'proprioception' になります。"""
-#             base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-#             base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
-#             projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100), noise=Unoise(n_min=-0.05, n_max=0.05))
-#             position_commands = ObsTerm(
-#                 func = mdp.generated_commands, params={"command_name": "goal_position"}
-#             )
-#             joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel, clip=(-100, 100), noise=Unoise(n_min=-0.01, n_max=0.01))
-#             joint_vel_rel = ObsTerm(
-#                 func=mdp.joint_vel_rel, scale=0.05, clip=(-100, 100), noise=Unoise(n_min=-1.5, n_max=1.5)
-#             )
-#             last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
-            
-#             # def __post_init__(self):
-#             #     self.history_length = 3
-
-#             def __post_init__(self):
-#                 # このグループ内のデータは結合して一つのベクトルにする
-#                 self.concatenate_terms = True
-
-#         @configclass
-#         class VisionGroupCfg(ObsGroup):
-#             """視覚グループ。このクラス名がキー 'vision' になります。"""
-#             camera_image = ObsTerm(
-#                 func=mdp.image, # mdpに関数がある場合。なければ自作関数
-#                 params={"sensor_cfg": SceneEntityCfg("camera")}
-#             )
-
-#         # --- ここでグループを定義 ---
-#         # 変数名 'proprioception' が、辞書のキーになります
-#         proprioception: ProprioceptionGroupCfg = ProprioceptionGroupCfg()
-#         vision: VisionGroupCfg = VisionGroupCfg()
-        
-#         def __post_init__(self):
-#             # グループ分けを維持するための重要な設定
-#             self.concatenate_terms = False
-
-#     # 最終的な観測グループを定義
-#     critic: CriticCfg = CriticCfg()
 
 
 
@@ -547,49 +469,60 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # -- task
-    # track_lin_vel_xy = RewTerm(
-    #     func=mdp.track_lin_vel_xy_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
-    # )
-    # track_ang_vel_z = RewTerm(
-    #     func=mdp.track_ang_vel_z_exp, weight=0.75, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
-    # )
+    track_lin_vel_xy = RewTerm(
+        func=mdp.track_lin_vel_xy_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    )
+    track_ang_vel_z = RewTerm(
+        func=mdp.track_ang_vel_z_exp, weight=0.75, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    )
+
+  
 
     # position_tracking = RewTerm(
-    #     func=mdp.position_tracking, weight=1.0, params={"std":1.0, "duration":4.0, "command_name": "goal_position"}
+    #     func=mdp.position_command_error_tanh,
+    #     weight=15.0,
+    #     params={"std": 2.0, "command_name": "goal_position"},
     # )
 
-    position_tracking = RewTerm(
-        func=mdp.position_command_error_tanh,
-        weight=15.0,
-        params={"std": 2.0, "command_name": "goal_position"},
-    )
-
-    orientation_tracking = RewTerm(
-        func=mdp.heading_command_error_abs,
-        weight=-1.0,
-        params={"command_name": "goal_position"},
-    )
+    # orientation_tracking = RewTerm(
+    #     func=mdp.heading_command_error_abs,
+    #     weight=-0.5,
+    #     params={"command_name": "goal_position"},
+    # )
 
 
     # -- base
-    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
-    base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
+    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.1)
+    base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.1)
     joint_vel = RewTerm(func=mdp.joint_vel_l2, weight=-0.001)
     joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-10.0)
-    energy = RewTerm(func=mdp.energy, weight=-2e-5)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
+    dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-10.0)
+    energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
     # -- robot
-    dont_wait = RewTerm(
-        func=mdp.dont_wait, weight=-5.0, # 前回実装した自作関数 -2.0 for simple walking
-        params={"velocity_threshold": 0.2, "distance_threshold": 1.0, "command_name": "goal_position"}
-    )
+    # dont_wait = RewTerm(
+    #     func=mdp.dont_wait, weight=-2.0, # 前回実装した自作関数 -2.0 for simple walking
+    #     params={"velocity_threshold": 0.2, "distance_threshold": 1.0, "command_name": "goal_position"}
+    # )
 
-    base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
+    # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
 
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-5.0) #-5.0 for simple walking
+    # flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0) #-5.0 for simple walking
+
+    # for navigation
+    # joint_pos = RewTerm(
+    #     func=mdp.joint_position_penalty,
+    #     weight=-0.7,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+    #         "stand_still_scale": 5.0,
+    #         "velocity_threshold": 0.3,
+    #         "distance_threshold": 0.5,
+    #         "command_name": "goal_position",
+    #     },
+    # )
 
     joint_pos = RewTerm(
         func=mdp.joint_position_penalty,
@@ -598,8 +531,6 @@ class RewardsCfg:
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
             "stand_still_scale": 5.0,
             "velocity_threshold": 0.3,
-            "distance_threshold": 0.5,
-            "command_name": "goal_position",
         },
     )
 
@@ -649,15 +580,15 @@ class RewardsCfg:
 
     termination_penalty = RewTerm(func=mdp.is_terminated, weight= -10.0)
 
-    stand_still = RewTerm(
-        func=mdp.stand_still,
-        weight=3.0,  # この重みは調整が必要です
-        params={
-            "distance_threshold": 0.25,  # 25cm以内
-            "heading_threshold": 0.8,    # 0.5ラジアン以内
-            "time_threshold": 2.0,       # 最後の2秒間
-        }
-    )
+    # stand_still = RewTerm(
+    #     func=mdp.stand_still,
+    #     weight=3.0,  # この重みは調整が必要です
+    #     params={
+    #         "distance_threshold": 0.25,  # 25cm以内
+    #         "heading_threshold": 0.8,    # 0.5ラジアン以内
+    #         "time_threshold": 2.0,       # 最後の2秒間
+    #     }
+    # )
 
 
 @configclass
@@ -676,9 +607,10 @@ class TerminationsCfg:
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
 
-    # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
-    # lin_vel_cmd_levels = CurrTerm(mdp.lin_vel_cmd_levels)
-    terrain_levels = CurrTerm(func=mdp.terrain_level_curriculum) #new Curriculum
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+    # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel_proj)
+    lin_vel_cmd_levels = CurrTerm(mdp.lin_vel_cmd_levels)
+    # terrain_levels = CurrTerm(func=mdp.terrain_level_curriculum) #new Curriculum
 
 
 
@@ -686,7 +618,7 @@ class CurriculumCfg:
 class RobotEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
     # Scene settings
-    scene: RobotSceneCfg = RobotSceneCfg(num_envs=1, env_spacing=2.5)
+    scene: RobotSceneCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -707,6 +639,8 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
+
+        self.render_on_reset = True
 
         # エラーが ~820,000 を要求しているので、それより大きい2のべき乗（例: 2**20）に設定するのが一般的です。
         # self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
@@ -765,8 +699,8 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         # self.events.base_external_force_torque = None
         # self.events.push_robot = None
 
-        self.scene.terrain.terrain_generator.curriculum = False
+        # self.scene.terrain.terrain_generator.curriculum = False
 
-        self.scene.terrain.terrain_levels = 0
+        # self.scene.terrain.terrain_levels = 0
 
      

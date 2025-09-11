@@ -5,15 +5,87 @@
 
 from isaaclab.utils import configclass
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg, RslRlRndCfg
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic
+
+
+@configclass
+class VisionMLPActorCriticCfg(RslRlPpoActorCriticCfg):
+    """あなたのカスタムモデルVisionMLPActorCritic用の設定クラス。"""
+    
+    # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
+
+    class_name: str = "VisionMLPActorCritic"
+
+    # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
+    prop_obs_keys: list[str] = [
+        "base_lin_vel", "base_ang_vel", "projected_gravity",
+        "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
+    ]
+    vision_obs_key: str = "camera_image"
+
+    # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
+    init_noise_std: float = 1.0
+    actor_hidden_dims: list[int] = [256, 128]  # 例
+    critic_hidden_dims: list[int] = [256, 128] # 例
+    activation: str = "elu"
+
+
+
+@configclass
+class LocoTransformerActorCriticCfg(RslRlPpoActorCriticCfg):
+    """あなたのカスタムモデルVisionMLPActorCritic用の設定クラス。"""
+    
+    # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
+
+    class_name: str = "LocoTransformerActorCritic"
+
+    # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
+    prop_obs_keys: list[str] = [
+        "base_lin_vel", "base_ang_vel", "projected_gravity",
+        "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
+    ]
+    vision_obs_key: str = "camera_image"
+
+    # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
+    init_noise_std: float = 1.0
+    actor_hidden_dims: list[int] = [256, 128]  # 例
+    critic_hidden_dims: list[int] = [256, 128] # 例
+    activation: str = "elu"
+
 
 
 @configclass
 class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 1000 #50000
+    max_iterations = 1200 #50000
     save_interval = 100
     experiment_name = ""  # same as task name
-    empirical_normalization = False
+    # empirical_normalization = False 
+    actor_obs_normalization=False, 
+    critic_obs_normalization=False,
+
+    #for paper 1
+
+    # obs_groups =  {
+    #     "policy": ["base_lin_vel",
+    #             "base_ang_vel",
+    #             "projected_gravity",
+    #             "position_commands",
+    #             "joint_pos_rel",
+    #             "joint_vel_rel",
+    #             "last_action", "height_scanner"],
+    #     "critic":["base_lin_vel",
+    #             "base_ang_vel",
+    #             "projected_gravity",
+    #             "position_commands",
+    #             "joint_pos_rel",
+    #             "joint_vel_rel",
+    #             "joint_effort",
+    #             "last_action", "height_scanner"],
+
+
+    # }
+
     # policy = RslRlPpoActorCriticCfg(
     #     init_noise_std=1.0,
     #     actor_hidden_dims=[512, 256, 128],
@@ -21,41 +93,35 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     #     activation="elu",
     # )
 
-    #for paper2
-    # ▼▼▼ この policy の定義を以下のように書き換えます ▼▼▼
-    policy: dict = {
-        "init_noise_std": 1.0,
-        "activation": "elu",
-        # 'module'キーは、RSL-RLにカスタムネットワーククラスを使用するよう指示します
-        "module": {
-            # あなたが作成したカスタムクラスへの完全なPythonパス
-            "_target_": "unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer.VisionMLPActorCritic",
-            
-            # --- ここに LocoTransformerActorCriticクラスの__init__メソッドに必要な引数を記述 ---
+    # for paper2
 
-            "prop_obs_keys": [
-                "base_lin_vel",
+    obs_groups =  {
+        "policy": ["base_lin_vel",
                 "base_ang_vel",
                 "projected_gravity",
                 "position_commands",
                 "joint_pos_rel",
                 "joint_vel_rel",
-                "last_action"
-            ],
-            # 視覚として扱う観測のキーを渡す
-            "vision_obs_key": "camera_image",
-            
-            "prop_obs_dim": 61,              # 例：あなたの身体感覚の観測データの次元数に置き換えてください
-            "vision_obs_shape": (3, 64, 64), # 観測設定と一致するカメラ画像の形状 (チャンネル数, 高さ, 幅)
-            "num_actions": 12,               # 例：あなたのロボットのアクションの次元数（関節数）に置き換えてください
-            
-            # デフォルトから変更したい場合は、他の__init__引数もここに追加できます
-            # "transformer_hidden_dim": 256,
-            # "transformer_num_layers": 2,
-        },
+                "last_action", 
+                "camera_image"
+                ],
+        "critic":["base_lin_vel",
+                "base_ang_vel",
+                "projected_gravity",
+                "position_commands",
+                "joint_pos_rel",
+                "joint_vel_rel",
+                # "joint_effort",
+                "last_action",
+                 "camera_image"
+                 ],
+
+
 
     }
-    # ▲▲▲ 修正はここまで ▲▲▲
+      
+    # policy: RslRlPpoActorCriticCfg = VisionMLPActorCriticCfg()
+    policy: RslRlPpoActorCriticCfg = LocoTransformerActorCriticCfg()
 
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
@@ -63,14 +129,18 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         clip_param=0.2,
         entropy_coef=0.01,
         num_learning_epochs=5,
-        num_mini_batches=4,
-        learning_rate=1.0e-3,
-        schedule="adaptive",
+        # num_mini_batches=4,
+        num_mini_batches=96, # for transformer
+        # learning_rate=1.0e-3,
+        learning_rate=1.0e-4, # for transformer
+        # schedule="adaptive",
+        schedule="constant",
         gamma=0.99,
         lam=0.95,
         desired_kl=0.01,
         max_grad_norm=1.0,
     )
+
     rnd =  RslRlRndCfg(
         weight = 1.0,
         learning_rate = 1.0e-4,

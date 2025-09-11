@@ -61,6 +61,7 @@ from isaaclab_tasks.utils import get_checkpoint_path
 
 import unitree_rl_lab.tasks  # noqa: F401
 from unitree_rl_lab.utils.parser_cfg import parse_env_cfg
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic
 
 
 def main():
@@ -113,9 +114,18 @@ def main():
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
+    #for paper2
+
+    test_cfg = agent_cfg.to_dict()
+    # # 2. 次に、その「辞書」の中身をクラスオブジェクトで上書きします
+    # #    (辞書なので、アクセスは[]を使います)
+    # test_cfg["policy"]["class_name"] = VisionMLPActorCritic
+    test_cfg["policy"]["class_name"] = LocoTransformerActorCritic
+
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
-    ppo_runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    # ppo_runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    ppo_runner = OnPolicyRunner(env, test_cfg, log_dir=log_dir, device=agent_cfg.device)
     ppo_runner.load(resume_path)
 
     # obtain the trained policy for inference
@@ -132,15 +142,26 @@ def main():
 
     # export policy to onnx/jit
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_jit(policy_nn, ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.pt")
+
+    # runnerにobs_normalizerが存在するかを安全にチェックし、なければNoneを取得
+    obs_normalizer = getattr(ppo_runner, "obs_normalizer", None)
+
+    # JITモデルをエクスポート
+    export_policy_as_jit(policy_nn, obs_normalizer, path=export_model_dir, filename="policy.pt")
+    # export_policy_as_jit(policy_nn, ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.pt")
+    # export_policy_as_onnx(
+    #     policy_nn, normalizer=ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.onnx"
+    # )
     export_policy_as_onnx(
-        policy_nn, normalizer=ppo_runner.obs_normalizer, path=export_model_dir, filename="policy.onnx"
+        policy_nn, normalizer=obs_normalizer, path=export_model_dir, filename="policy.onnx"
     )
 
     dt = env.unwrapped.step_dt
 
-    # reset environment
-    obs, _ = env.get_observations()
+    # reset environment 
+    # obs, _ = env.get_observations() #before update
+    obs = env.get_observations()
+
     timestep = 0
     # simulate environment
     while simulation_app.is_running():

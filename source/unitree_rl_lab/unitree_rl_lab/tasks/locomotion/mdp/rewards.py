@@ -27,20 +27,20 @@ def energy(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("r
     return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
 
 
-def stand_still(
-    env: ManagerBasedRLEnv,distance_threshold: float, command_name: str = "goal_position", asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
-) -> torch.Tensor:
-    asset: Articulation = env.scene[asset_cfg.name]
+# def stand_still(
+#     env: ManagerBasedRLEnv,distance_threshold: float, command_name: str = "goal_position", asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+# ) -> torch.Tensor:
+#     asset: Articulation = env.scene[asset_cfg.name]
 
-    root_pos_w = asset.data.root_pos_w
+#     root_pos_w = asset.data.root_pos_w
 
-    command = env.command_manager.get_command(command_name)
-    des_pos_b = command[:, :3]
-    distance = torch.norm(des_pos_b, dim=1)
+#     command = env.command_manager.get_command(command_name)
+#     des_pos_b = command[:, :3]
+#     distance = torch.norm(des_pos_b, dim=1)
 
-    reward = -torch.sum(torch.abs(asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
-    cmd_norm = torch.norm(env.command_manager.get_command(command_name), dim=1)
-    return reward * (distance < distance_threshold)
+#     reward = -torch.sum(torch.abs(asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
+#     cmd_norm = torch.norm(env.command_manager.get_command(command_name), dim=1)
+#     return reward * (distance < distance_threshold)
 
 
 def stand_still(
@@ -114,16 +114,18 @@ def upward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("r
     return reward
 
 
-# def joint_position_penalty(
-#     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, stand_still_scale: float, velocity_threshold: float
-# ) -> torch.Tensor:
-#     """Penalize joint position error from default on the articulation."""
-#     # extract the used quantities (to enable type-hinting)
-#     asset: Articulation = env.scene[asset_cfg.name]
-#     cmd = torch.linalg.norm(env.command_manager.get_command("base_velocity"), dim=1)
-#     body_vel = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
-#     reward = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
-#     return torch.where(torch.logical_or(cmd > 0.0, body_vel > velocity_threshold), reward, stand_still_scale * reward)
+def joint_position_penalty(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, stand_still_scale: float, velocity_threshold: float
+) -> torch.Tensor:
+    """Penalize joint position error from default on the articulation."""
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    cmd = torch.linalg.norm(env.command_manager.get_command("base_velocity"), dim=1)
+    body_vel = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1)
+    reward = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
+    return torch.where(torch.logical_or(cmd > 0.0, body_vel > velocity_threshold), reward, stand_still_scale * reward)
+
+
 
 
 # def joint_position_penalty(
@@ -131,59 +133,31 @@ def upward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("r
 #     asset_cfg: SceneEntityCfg,
 #     stand_still_scale: float,
 #     velocity_threshold: float,
-#     distance_threshold: float, # <-- 新しい引数を追加
+#     distance_threshold: float,
 #     command_name: str,
 # ) -> torch.Tensor:
 #     """ナビゲーションタスクに合わせて修正された関節位置ペナルティ。"""
-#     # extract the used quantities (to enable type-hinting)
 #     asset: Articulation = env.scene[asset_cfg.name]
 
-#     # [修正点 1] ロボットの現在位置と目標位置から、目標までの距離を計算
-#     robot_pos = asset.data.root_pos_w
-#     target_pos = env.command_manager.get_command(command_name)
-#     distance_to_target = torch.linalg.norm(target_pos[:, :2] - robot_pos[:, :2], dim=1)
-#     # [修正点 2] 「動くべきか」の判定ロジックを変更
-#     #             コマンドのノルム > 0  ->  目標までの距離 > 閾値
-#     should_be_moving = distance_to_target > distance_threshold
-#     # ロボットが実際に動いているかの判定はそのまま
+#     # [修正点] ワールド座標系に統一して、目標までの正確な距離を計算
+#     # 1. ロボットのワールド座標を取得
+#     robot_pos_w = asset.data.root_pos_w
+#     # 2. コマンド（環境原点からの相対座標）を取得
+#     command = env.command_manager.get_command(command_name)
+#     des_pos_b = command[:, :3]
+#     distance = torch.norm(des_pos_b, dim=1)
+    
+#     # 「動くべきか」の判定ロジック
+#     should_be_moving = distance > distance_threshold
+    
+#     # 「実際に動いているか」の判定 (ここはローカル速度の大きさなので修正不要)
 #     is_moving = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1) > velocity_threshold
-#     # 関節のズレに対するペナルティの大きさは同じ
+    
+#     # 関節のズレに対するペナルティ (修正不要)
 #     penalty = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
-#     # 「動くべき」または「動いている」場合は通常のペナルティ、
-#     # 「止まるべき（目標に到達済み）」かつ「止まっている」場合はより強いペナルティを適用
+    
+#     # ペナルティを適用
 #     return torch.where(torch.logical_or(should_be_moving, is_moving), penalty, stand_still_scale * penalty)
-
-
-def joint_position_penalty(
-    env: ManagerBasedRLEnv,
-    asset_cfg: SceneEntityCfg,
-    stand_still_scale: float,
-    velocity_threshold: float,
-    distance_threshold: float,
-    command_name: str,
-) -> torch.Tensor:
-    """ナビゲーションタスクに合わせて修正された関節位置ペナルティ。"""
-    asset: Articulation = env.scene[asset_cfg.name]
-
-    # [修正点] ワールド座標系に統一して、目標までの正確な距離を計算
-    # 1. ロボットのワールド座標を取得
-    robot_pos_w = asset.data.root_pos_w
-    # 2. コマンド（環境原点からの相対座標）を取得
-    command = env.command_manager.get_command(command_name)
-    des_pos_b = command[:, :3]
-    distance = torch.norm(des_pos_b, dim=1)
-    
-    # 「動くべきか」の判定ロジック
-    should_be_moving = distance > distance_threshold
-    
-    # 「実際に動いているか」の判定 (ここはローカル速度の大きさなので修正不要)
-    is_moving = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1) > velocity_threshold
-    
-    # 関節のズレに対するペナルティ (修正不要)
-    penalty = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
-    
-    # ペナルティを適用
-    return torch.where(torch.logical_or(should_be_moving, is_moving), penalty, stand_still_scale * penalty)
 
 
 """

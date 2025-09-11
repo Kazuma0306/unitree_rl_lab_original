@@ -381,7 +381,7 @@ class ObservationsCfg:
         def __post_init__(self):
             # self.history_length = 5
             self.enable_corruption = True
-            self.concatenate_terms = True
+            self.concatenate_terms = False
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
@@ -407,7 +407,8 @@ class ObservationsCfg:
             clip=(-1.0, 5.0),
         )
 
-        # def __post_init__(self):
+        def __post_init__(self):
+            self.concatenate_terms = False
         #     self.history_length = 5
 
     # privileged observations
@@ -623,7 +624,7 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         # --- 以下は再生（テスト）時専用の設定 ---
         
         # 表示する環境の数を減らす
-        self.scene.num_envs = 1
+        self.scene.num_envs = 2
         
         # 表示する地形のサイズを小さくする
         if self.scene.terrain.terrain_generator is not None:
@@ -640,7 +641,7 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         # self.events.base_external_force_torque = None
         # self.events.push_robot = None
 
-        # self.scene.terrain.terrain_generator.curriculum = False
+        self.scene.terrain.terrain_generator.curriculum = False
      
 
        

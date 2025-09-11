@@ -7,6 +7,24 @@
 
 """Launch Isaac Sim Simulator first."""
 
+import sys
+import os
+
+
+# ワークスペースのルートディレクトリへのパスを作成
+# (train.pyから3階層上に上がると isaac_ws になるため)
+# workspace_root = os.path.abspath(os.path.join(script_dir, "../../.."))
+
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, "../../"))
+source_dir = os.path.join(project_root, "source")
+
+# Pythonの検索パスの先頭にsourceディレクトリを追加
+if source_dir not in sys.path:
+    sys.path.insert(0, source_dir)
+
+
 import argparse
 import sys
 
@@ -14,6 +32,11 @@ from isaaclab.app import AppLauncher
 
 # local imports
 import cli_args  # isort: skip
+
+
+
+
+
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
@@ -94,12 +117,57 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import unitree_rl_lab.tasks  # noqa: F401
 from unitree_rl_lab.utils.export_deploy_cfg import export_deploy_cfg
 
-from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import MultiModalEnvWrapper
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
+
+
+
+class DictObsToPolicyWrapper(gym.Wrapper):
+    """
+    Isaac Lab環境が返す観測データを、RSL-RLが期待する形式に変換する最終ラッパー。
+
+    - OnPolicyRunnerの初期化で呼ばれる `get_observations` が返す値を、
+      {"policy": obs_dict} という辞書形式に修正します。
+    - `reset` と `step` が返す観測データも、
+      内側の辞書 obs_dict を取り出して返します。
+    """
+    def get_observations(self) -> dict[str, torch.Tensor]:
+        """
+        OnPolicyRunnerの初期化エラーを解決するための、最重要メソッド。
+        内部の環境が返す観測データを、期待される辞書形式にラップします。
+        """
+        # 内部の環境(RslRlVecEnvWrapper)のget_observationsを呼び出す
+        # 返り値は TensorDict 型だが、実質的には辞書またはタプル
+        obs_data = self.env.get_observations()
+        
+        # OnPolicyRunnerが期待する {"policy": ...} の形式で返す
+        return {"policy": obs_data}
+
+    def reset(self, **kwargs):
+        """
+        環境をリセットし、観測データの中から学習に使う部分だけを返します。
+        """
+        # 内部の環境のresetを呼び出す
+        obs, info = self.env.reset(**kwargs)
+        # OnPolicyRunnerの学習ループは、この内側の辞書/タプルをモデルに渡す
+        return obs, info
+
+    def step(self, action):
+        """
+        環境を1ステップ進め、観測データの中から学習に使う部分だけを返します。
+        """
+        # 内部の環境のstepを呼び出す
+        obs, reward, done, info = self.env.step(action)
+        # info["truncation"] = info.get("time_outs", torch.zeros_like(done)) # 必要に応じて
+        
+        # OnPolicyRunnerの学習ループは、この内側の辞書/タプルをモデルに渡す
+        # `done`は bool/int になっている必要があるので .bool() や .int() をつける
+        return obs, reward, done.bool(), info
+
 
 
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
@@ -162,13 +230,22 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print_dict(video_kwargs, nesting=4)
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
-    # wrap around environment for rsl-rl
-    # env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-    env = MultiModalEnvWrapper(env,  clip_actions=agent_cfg.clip_actions)
+    # wrap around environment for rsl-rl
+    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+
+
+
+    train_cfg = agent_cfg.to_dict()
+    # 2. 次に、その「辞書」の中身をクラスオブジェクトで上書きします
+    #    (辞書なので、アクセスは[]を使います)
+    # train_cfg["policy"]["class_name"] = VisionMLPActorCritic
+    train_cfg["policy"]["class_name"] = LocoTransformerActorCritic
+
 
     # create runner from rsl-rl
-    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    # runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    runner = OnPolicyRunner(env, train_cfg, log_dir=log_dir, device=agent_cfg.device)
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
     # load the checkpoint
