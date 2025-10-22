@@ -1,4 +1,4 @@
-#paper Learning Vision-Guided Quadrupedal Locomotion End-to-End with Cross-Modal Transformers
+#proposed method
 
 
 
@@ -107,21 +107,33 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     border_width=20.0,
     num_rows=10,
     num_cols=20,
-    horizontal_scale=0.08,
+    horizontal_scale=0.05,
     vertical_scale=0.005,
     slope_threshold=0.75,
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        # "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
+        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
         # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
         #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # ),
 
         "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=1.0, border_width=0.25,  horizontal_scale = 0.08, stone_height_max = 0.01, stone_width_range = (0.25, 0.9), stone_distance_range = (0.08, 0.2),  holes_depth = -5.0, platform_width = 1.5,
+             proportion=0.2, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (1.0, 1.5), stone_distance_range = (0.05, 0.08),  holes_depth = -5.0, platform_width = 1.5,
 
         ),
+
+        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+             proportion=0.7, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (0.7, 1.5), stone_distance_range = (0.05, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+
+        ),
+
+
+        #difficult version
+        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+        #      proportion=0.9, border_width=0.25,  horizontal_scale = 0.05, stone_height_max = 0.01, stone_width_range = (0.5, 0.9), stone_distance_range = (0.06, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+
+        # ),
 
         # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
         #      proportion=1.0, border_width=0.25,  stone_height_max = 0.05, stone_width_range = (0.2, 0.9), stone_distance_range = (0.08, 0.26),  holes_depth = -5.0, platform_width = 1.5,
@@ -144,10 +156,13 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
+        # "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
         # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
         #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # ),
+        "descrete_obstacles": terrain_gen.HfDiscreteObstaclesTerrainCfg(
+             proportion=0.1, border_width=0.25, obstacle_width_range =(0.8,  0.9) , obstacle_height_range = (0.01, 0.05), num_obstacles = 80
+        ),
         # "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
         #     proportion=0.1, slope_range=(0.0, 0.4), platform_width=2.0, border_width=0.25
         # ),
@@ -187,8 +202,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         terrain_type="generator",  # "plane", "generator"
         # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
-        terrain_generator=DESCRETE_OBSTACLES_CFG,
-        # terrain_generator= STEPPING_STONES_CFG, #TODO
+        # terrain_generator=DESCRETE_OBSTACLES_CFG,
+        terrain_generator= STEPPING_STONES_CFG, #TODO
         max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -208,35 +223,35 @@ class RobotSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = UNITREE_GO2_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # sensors
-    # height_scanner = RayCasterCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/base",
-    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-    #     attach_yaw_only=True,
-    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-    #     debug_vis=True,
-    #     mesh_prim_paths=["/World/ground"],
-    # )
-
-    camera = TiledCameraCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
-        debug_vis = True,
-        update_period=0.02,
-        height=64,
-        width=64,
-        data_types=["depth","normals"],
-        # spawn=sim_utils.PinholeCameraCfg(
-        #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 5.0)
-        # ),
-        spawn=sim_utils.PinholeCameraCfg(
-            focal_length=24.0, focus_distance=10.0, horizontal_aperture=20.955, clipping_range=(0.1, 3.0)
-        ),
-        # depth_clipping_behavior = "max",
-        depth_clipping_behavior = "zero",
-        # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
-        offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.2), rot=(0.418761, -0.612372, 0.581238, -0.327329), convention="ros"),
-
-
+    height_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        attach_yaw_only=True,
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
+        debug_vis=True,
+        mesh_prim_paths=["/World/ground"],
     )
+
+    # camera = TiledCameraCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
+    #     debug_vis = True,
+    #     update_period=0.02,
+    #     height=64,
+    #     width=64,
+    #     data_types=["depth","normals"],
+    #     # spawn=sim_utils.PinholeCameraCfg(
+    #     #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 5.0)
+    #     # ),
+    #     spawn=sim_utils.PinholeCameraCfg(
+    #         focal_length=24.0, focus_distance=10.0, horizontal_aperture=20.955, clipping_range=(0.1, 3.0)
+    #     ),
+    #     # depth_clipping_behavior = "max",
+    #     depth_clipping_behavior = "zero",
+    #     # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+    #     offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.2), rot=(0.418761, -0.612372, 0.581238, -0.327329), convention="ros"),
+
+
+    # )
 
     # camera = CameraCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
@@ -253,7 +268,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=16, track_air_time=True)
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -309,22 +324,22 @@ class EventCfg:
     #     },
     # )
 
-    reset_base = EventTerm(
-        func=mdp.reset_root_state_uniform,
-        mode="reset",
-        params={
-            # "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
-            "pose_range": {"x": (-0.01, 0.01), "y": (-0.01, 0.01), "yaw": (-0.5, 0.5)},
-            "velocity_range": {
-                "x": (0.0, 0.0),
-                "y": (0.0, 0.0),
-                "z": (0.0, 0.0),
-                "roll": (0.0, 0.0),
-                "pitch": (0.0, 0.0),
-                "yaw": (0.0, 0.0),
-            },
-        },
-    )
+    # reset_base = EventTerm(
+    #     func=mdp.reset_root_state_uniform,
+    #     mode="reset",
+    #     params={
+    #         # "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+    #         "pose_range": {"x": (-0.01, 0.01), "y": (-0.01, 0.01), "yaw": (-0.5, 0.5)},
+    #         "velocity_range": {
+    #             "x": (0.0, 0.0),
+    #             "y": (0.0, 0.0),
+    #             "z": (0.0, 0.0),
+    #             "roll": (0.0, 0.0),
+    #             "pitch": (0.0, 0.0),
+    #             "yaw": (0.0, 0.0),
+    #         },
+    #     },
+    # )
 
     reset_robot_joints = EventTerm(
         func=mdp.reset_joints_by_scale,
@@ -357,8 +372,12 @@ class CommandsCfg:
         #     lin_vel_x=(0.25, 1.0), lin_vel_y=(-0.25, 0.25), ang_vel_z=(-1, 1)
         # ),
 
+        # ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+        #     lin_vel_x=(0.25, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-0.3, 0.3)
+        # ),
+
         ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.25, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-0.3, 0.3)
+            lin_vel_x=(0.6, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-0.3, 0.3)
         ),
 
         limit_ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
@@ -407,31 +426,44 @@ class ObservationsCfg:
             func=mdp.joint_vel_rel, scale=0.05, clip=(-100, 100), noise=Unoise(n_min=-1.5, n_max=1.5)
         )
         last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
-        # height_scanner = ObsTerm(func=mdp.height_scan,
-        #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-        #     clip=(-1.0, 5.0),
-        # )
+        height_scanner = ObsTerm(func=mdp.height_scan,
+            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+            clip=(-1.0, 5.0),
+        )
+
+        ft_stack = ObsTerm(
+            func=mdp.contact_ft_stack,   # 下の関数
+            params=dict(
+                sensor_cfg=SceneEntityCfg("contact_forces",
+                body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"]),
+                mass_kg=30.0,
+                return_shape="bkl3",
+            ),
+            clip=(-3.0, 3.0),
+        )
+
+
 
        
 
 
-        front_depth = ObsTerm(
-            func=mdp.image, # mdpに関数がある場合。なければ自作関数
-            params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
-        )
+        # front_depth = ObsTerm(
+        #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
+        #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
+        # )
 
-        front_normals = ObsTerm(
-                func=mdp.image,
-                params=dict(
-                    sensor_cfg=SceneEntityCfg("camera"),
-                    data_type="normals",
-                    normalize=False,            # ← [-1,1]のままもらう
-                ),
-        )
+        # front_normals = ObsTerm(
+        #         func=mdp.image,
+        #         params=dict(
+        #             sensor_cfg=SceneEntityCfg("camera"),
+        #             data_type="normals",
+        #             normalize=False,            # ← [-1,1]のままもらう
+        #         ),
+        # )
         
 
         def __post_init__(self):
-            self.history_length = 4
+            # self.history_length = 3
             self.enable_corruption = True
             self.concatenate_terms = False
 
@@ -459,31 +491,42 @@ class ObservationsCfg:
         )
         # joint_effort = ObsTerm(func=mdp.joint_effort, scale=0.01, clip=(-100, 100))
         last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
-        # height_scanner = ObsTerm(func=mdp.height_scan,
-        #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-        #     clip=(-1.0, 5.0),
-        # )
+        height_scanner = ObsTerm(func=mdp.height_scan,
+            params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+            clip=(-1.0, 5.0),
+        )
+
+        ft_stack = ObsTerm(
+            func=mdp.contact_ft_stack,   # 下の関数
+            params=dict(
+                sensor_cfg=SceneEntityCfg("contact_forces",
+                body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"]),
+                mass_kg=15.0,
+                return_shape="bkl3",
+            ),
+            clip=(-3.0, 3.0),
+        )
 
     
-        front_depth = ObsTerm(
-            func=mdp.image, # mdpに関数がある場合。なければ自作関数
-            params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
-        )
+        # front_depth = ObsTerm(
+        #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
+        #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
+        # )
 
-        front_normals = ObsTerm(
-                func=mdp.image,
-                params=dict(
-                    sensor_cfg=SceneEntityCfg("camera"),
-                    data_type="normals",
-                    normalize=False,            # ← [-1,1]のままもらう
-                ),
-        )
+        # front_normals = ObsTerm(
+        #         func=mdp.image,
+        #         params=dict(
+        #             sensor_cfg=SceneEntityCfg("camera"),
+        #             data_type="normals",
+        #             normalize=False,            # ← [-1,1]のままもらう
+        #         ),
+        # )
     
     
 
         def __post_init__(self):
             self.concatenate_terms = False
-            self.history_length = 4
+            # self.history_length = 3
 
     # privileged observations
     critic: CriticCfg = CriticCfg()
@@ -498,6 +541,12 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # -- task
+    # track_lin_vel_xy = RewTerm(
+    #     func=mdp.track_lin_vel_xy_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
+    # track_ang_vel_z = RewTerm(
+    #     func=mdp.track_ang_vel_z_exp, weight=0.75, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
     track_lin_vel_xy = RewTerm(
         func=mdp.track_lin_vel_xy_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
     )
@@ -546,12 +595,12 @@ class RewardsCfg:
     base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.5)
     base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
     joint_vel = RewTerm(func=mdp.joint_vel_l2, weight=-0.001)
-    joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    # joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
     # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
-    dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-10.0)
-    energy = RewTerm(func=mdp.energy, weight=-2e-5)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+    dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
+    energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
     # -- robot
     # dont_wait = RewTerm(
@@ -563,7 +612,7 @@ class RewardsCfg:
 
     # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
 
-    # flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0) #-5.0 for simple walking
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0) #-5.0 for simple walking
 
     # for navigation
     # joint_pos = RewTerm(
@@ -580,7 +629,7 @@ class RewardsCfg:
 
     joint_pos = RewTerm(
         func=mdp.joint_position_penalty,
-        weight=-0.7,
+        weight=-0.4,
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
             "stand_still_scale": 5.0,
@@ -598,12 +647,12 @@ class RewardsCfg:
     #         "threshold": 0.5,
     #     },
     # )
-    air_time_variance = RewTerm(
-        func=mdp.air_time_variance_penalty,
-        # weight=-1.0,
-        weight=-0.2,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
-    )
+    # air_time_variance = RewTerm(
+    #     func=mdp.air_time_variance_penalty,
+    #     # weight=-1.0,
+    #     weight=-0.2,
+    #     params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
+    # )
     feet_slide = RewTerm(
         func=mdp.feet_slide,
         weight=-0.1,
@@ -654,62 +703,49 @@ class RewardsCfg:
 
 
 
-# # ==== 石ヒット（上面帯 & 安定接触） ====
-# feet_on_stone_hf = RewTerm(
-#     func=mdp.feet_on_stone_reward_hf, weight=0.25,   # ← 導入値（スケジュールで +1.0〜+1.2 へ）
-#     params=dict(
-#         robot_cfg=SceneEntityCfg("robot", body_names=".*_foot"),
-#         contact_cfg=SceneEntityCfg("contact_forces", body_names=".*_foot"),
-#         terrain_entity_name="terrain",
-#         # 石判定の帯：穴面より高い場所を石とみなす
-#         stone_eps=0.48,          # 1cm（穴面との差）で石ゾーンを判定
-#         top_tol=0.02,            # 上面帯 ±2cm
-#         min_contact_time=0.01,   # 安定接触の最小時間[s]
-#         foot_sole_offset=0.02,
-#         normalize_by_feet=True,
-#         # 任意の品質ゲート（必要に応じて使う）
-#         # vz_tol=0.25,
-#         # force_z_thresh=None,
-#     ),
-# )
+    # ==== 石ヒット（上面帯 & 安定接触） ====
 
-# # ==== 踏み外し（石ゾーン外 or 上面帯から下方に外れた接触） ====
-# feet_off_stone_hf = RewTerm(
-#     func=mdp.feet_off_stone_penalty_hf, weight=-0.9,  # ← 導入値（スケジュールで −2.5〜−3.0 へ）
-#     params=dict(
-#         robot_cfg=SceneEntityCfg("robot", body_names=".*_foot"),
-#         contact_cfg=SceneEntityCfg("contact_forces", body_names=".*_foot"),
-#         terrain_entity_name="terrain",
-#         top_band=0.02,            # 上面帯の半幅（=ヒット側の top_tol と揃える）
-#         stone_eps=0.48,
-#         min_contact_time=0.01,
-#         foot_sole_offset=0.02,
-#         normalize_by_feet=True,
-#         both_off_multiplier=2.0,  # 両足オフは重めに
-#         penalize_air_miss=True,   # 接触なしの“空振り”も薄く罰する
-#         air_miss_scale=0.5,
-#         # vz_tol=0.25,
-#         # force_z_thresh=None,
-#     ),
-# )
+    # feet_on_stone = RewTerm(
+    #     func=mdp.feet_on_stone_height_only,
+    #     weight=+0.5,
+    #     params={
+    #         "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
+    #         "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #         "hole_z":           -5.0,     # 固定
+    #         "stone_eps":        4.8,     # 4.5m 高ければ“石上”
+    #         "min_contact_time": 0.02,     # 接地ヒステリシス
+    #         "force_z_thresh":   50.0,     # 任意: 力でも接地救済
+    #         "foot_sole_offset": 0.0,      # 足リンク原点→足底の補正（必要なら調整）
+    #         "normalize_by_feet": True,
+    #     },
+    # )
 
-# # ==== クリアランス（近傍ローカル最大 + マージン基準） ====
-# foot_clearance = RewTerm(
-#     func=mdp.foot_clearance_hf_reward, weight=0.08,   # ← 導入値（スケジュールで +0.30〜+0.40 へ）
-#     params=dict(
-#         robot_cfg=SceneEntityCfg("robot", body_names=".*_foot"),
-#         contact_cfg=SceneEntityCfg("contact_forces", body_names=".*_foot"),
-#         terrain_entity_name="terrain",
-#         min_clear_over_hole=0.05,  # 穴面から最低確保したい高さ
-#         local_margin=0.02,         # 近傍ローカル最大上に追加マージン
-#         top_soft=0.03,
-#         look_radius=0.08,          # 近傍サンプル半径
-#         use_diagonals=True,
-#         speed_mult=2.0,
-#         foot_sole_offset=0.02,
-#         normalize_by_feet=True,
-#     ),
-# )
+    # # ==== 踏み外し（石ゾーン外 or 上面帯から下方に外れた接触） ====
+
+    # feet_gap_pen = RewTerm(
+    #     func=mdp.feet_gap_contact_penalty,
+    #     weight=-20.0,   # まずはこのくらいから
+    #     params={
+    #         "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
+    #         "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #         "hole_z":           -5.0,   # 固定
+    #         "gap_tol":          4.75,   # 穴面+4.7 以内で接地→減点
+    #         "min_contact_time": 0.02,
+    #         "force_z_thresh":   60.0,   # 任意（無ければ None）
+    #         "foot_sole_offset": 0.0,
+    #         "normalize_by_feet": False,
+    #     },
+    # )
+
+    feet_gap_pen = RewTerm(
+        func=mdp.feet_gap_discrete_penalty,
+        weight=-8.0,   # まずはこのくらいから
+        params={
+            "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
+            "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+        },
+    )
+
 
 
 
@@ -743,8 +779,8 @@ class CurriculumCfg:
     #     func = mdp.schedule_reward_weight,
     #     params = {
     #         "term_name" : "track_lin_vel_xy",
-    #         "weight": 1.0,
-    #         "num_steps": 1200
+    #         "weight": 0.8,
+    #         "num_steps": 3000
 
     #     }
     # )
@@ -754,7 +790,7 @@ class CurriculumCfg:
     #     params = {
     #         "term_name" : "track_ang_vel_z",
     #         "weight": 0.5,
-    #         "num_steps": 1200
+    #         "num_steps": 3000
 
     #     }
     # )
@@ -762,9 +798,9 @@ class CurriculumCfg:
     # schedule_stone_on = CurrTerm(
     #     func = mdp.schedule_reward_weight,
     #     params = {
-    #         "term_name" : "feet_on_stone_hf",
-    #         "weight": 1.0,
-    #         "num_steps": 1200
+    #         "term_name" : "feet_on_stone",
+    #         "weight": 0.5,
+    #         "num_steps": 3000
 
     #     }
     # )
@@ -772,23 +808,14 @@ class CurriculumCfg:
     # schedule_stone_off = CurrTerm(
     #     func = mdp.schedule_reward_weight,
     #     params = {
-    #         "term_name" : "feet_off_stone_hf",
-    #         "weight": -3.0,
-    #         "num_steps": 1200
+    #         "term_name" : "feet_gap_pen",
+    #         "weight": -1.0,
+    #         "num_steps": 3000
 
     #     }
     # )
 
-    # schedule_clearance = CurrTerm(
-    #     func = mdp.schedule_reward_weight,
-    #     params = {
-    #         "term_name" : "foot_clearance_hf_reward",
-    #         "weight": 0.3,
-    #         "num_steps": 1200   
-
-    #     }
-    # )
-
+   
 
 
 
@@ -798,7 +825,7 @@ class CurriculumCfg:
 class RobotEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
     # Scene settings
-    scene: RobotSceneCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+    scene: RobotSceneCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -818,12 +845,12 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
-        self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
+        # self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
 
-        self.render_on_reset = True
+        # self.render_on_reset = True
 
         # エラーが ~820,000 を要求しているので、それより大きい2のべき乗（例: 2**20）に設定するのが一般的です。
-        # self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
+        self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
 
         # update sensor update periods
         # we tick all the sensors based on the smallest update period (physics update period)
@@ -862,12 +889,12 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         # --- 以下は再生（テスト）時専用の設定 ---
         
         # 表示する環境の数を減らす
-        self.scene.num_envs = 4
+        self.scene.num_envs = 1
         
         # 表示する地形のサイズを小さくする
         if self.scene.terrain.terrain_generator is not None:
             self.scene.terrain.terrain_generator.num_rows = 2
-            self.scene.terrain.terrain_generator.num_cols = 2
+            self.scene.terrain.terrain_generator.num_cols = 1
         
         # [最終修正] 古い速度コマンドの行を、新しい位置コマンドの設定に変更
         # hasattrで "base_position" が存在するか安全にチェック
@@ -879,7 +906,7 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         # self.events.base_external_force_torque = None
         # self.events.push_robot = None
 
-        # self.scene.terrain.terrain_generator.curriculum = False
+        self.scene.terrain.terrain_generator.curriculum = False
 
         # self.scene.terrain.terrain_levels = 0
 

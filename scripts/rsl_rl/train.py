@@ -117,7 +117,8 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import unitree_rl_lab.tasks  # noqa: F401
 from unitree_rl_lab.utils.export_deploy_cfg import export_deploy_cfg
 
-from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic,  LocoTransformerFinetune
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer_force import LocoTransformerHFP
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -236,11 +237,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
 
 
+    #for paper2
     train_cfg = agent_cfg.to_dict()
     # 2. 次に、その「辞書」の中身をクラスオブジェクトで上書きします
     #    (辞書なので、アクセスは[]を使います)
     # train_cfg["policy"]["class_name"] = VisionMLPActorCritic
-    train_cfg["policy"]["class_name"] = LocoTransformerActorCritic
+    # train_cfg["policy"]["class_name"] = LocoTransformerActorCritic
+    # train_cfg["policy"]["class_name"] = LocoTransformerFinetune
+    train_cfg["policy"]["class_name"] = LocoTransformerHFP
 
 
     # create runner from rsl-rl

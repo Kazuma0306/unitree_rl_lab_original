@@ -9,6 +9,9 @@ if TYPE_CHECKING:
 
 from isaaclab.managers import SceneEntityCfg
 
+from isaaclab.managers import CurriculumTermCfg, ManagerTermBase
+
+import math
 
 
 def lin_vel_cmd_levels(
@@ -120,6 +123,39 @@ def ang_vel_cmd_levels(
 #     return torch.mean(terrain_levels_tensor.float())
 
 
+def terrain_levels_nav(
+    env,
+    env_ids,
+    goal_key: str = "goal_position",
+    success_radius: float = 0.3,          # 到達半径[m]
+    demote_radius: float = 1.3,           # まだこれより遠ければ降格（地形/タイルに合わせ調整）
+    check_after_frac: float = 0.5,        # エピソード半分経過で降格判定を許可
+    ):
+    terrain = env.scene.terrain
+    if len(env_ids) == 0:
+        return terrain.terrain_levels.float().mean()
+
+    # 相対ゴール（body frame）: XYのみの残距離
+    cmd  = env.command_manager.get_command(goal_key)[env_ids]
+    dist = torch.norm(cmd[:, :3], dim=1)          # 残距離 d_t
+
+    # 成功（到達）
+    move_up = dist < success_radius
+
+    # 降格（時間が半分以上経過 & まだ遠い & 未達）
+    max_steps = getattr(env, "max_episode_length", None)
+    if max_steps is None:
+        ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
+        max_steps = int(env.cfg.episode_length_s / ctrl_dt)
+    elapsed_enough = env.episode_length_buf[env_ids] > int(check_after_frac * max_steps)
+
+    move_down = (~move_up) & elapsed_enough & (dist > demote_radius)
+
+    # 公式と同じAPI
+    terrain.update_env_origins(env_ids, move_up, move_down)
+    return terrain.terrain_levels.float().mean()
+
+
 # def terrain_levels_vel_proj(
 #     env: ManagerBasedRLEnv, done_env_ids: torch.Tensor, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 #     promote=0.7, demote=0.4
@@ -213,3 +249,60 @@ def terrain_levels_vel_proj(
         env._cur_reqdist[done_env_ids] = 0.0
 
     return torch.mean(terrain.terrain_levels.float())
+
+
+
+class schedule_reward_weight(ManagerTermBase):
+    """Curriculum that smoothly modifies a reward term's weight during training.
+
+    - 公式の構成と同じく `__init__(cfg, env)` と `__call__(env, env_ids, term_name, weight, num_steps)` を提供。
+    - `num_steps` 期間で現在の重みから `weight` へ滑らかに遷移します（線形/余弦スケジュール）。
+    - しきい値を超えた瞬間に一発で置き換える挙動にしたい場合は、cfg側の `schedule="step"` を指定してください。
+    """
+
+    def __init__(self, cfg: CurriculumTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+
+        # obtain term configuration (公式と同じ流れ)
+        term_name = cfg.params["term_name"]
+        self._term_name = term_name
+        self._term_cfg = env.reward_manager.get_term_cfg(term_name)
+
+        # 追加：開始時の重みをキャプチャ（滑らか遷移の始点）
+        self._start_weight = float(self._term_cfg.weight)
+
+
+    def __call__(
+        self,
+        env: ManagerBasedRLEnv,
+        env_ids: Sequence[int],
+        term_name: str,
+        weight: float,
+        num_steps: int,
+    ) -> float:
+        # 呼び出し毎に現在stepから α を計算し、開始重み→目標重み へ補間
+        # 公式と同じ署名・戻り値（現在の設定重み）を維持
+
+
+        t = int(env.common_step_counter)
+        target_w = float(weight)
+        dur = max(0, int(num_steps))
+
+        # α（0→1）計算
+      
+        # 滑らか遷移（linear / cosine）
+        if dur <= 0:
+            alpha = 1.0
+        else:
+            x = max(0.0, min(1.0, t / float(dur))) 
+            alpha = 0.5 - 0.5 * math.cos(math.pi * x)
+
+        # 補間（始点＝初期重み、終点＝引数のweight）
+        new_w = (1.0 - alpha) * self._start_weight + alpha * target_w
+
+        # 反映（idempotent）
+        if self._term_cfg.weight != new_w:
+            self._term_cfg.weight = new_w
+            env.reward_manager.set_term_cfg(term_name, self._term_cfg)
+
+        return self._term_cfg.weight

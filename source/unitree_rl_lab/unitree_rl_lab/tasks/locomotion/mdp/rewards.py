@@ -128,36 +128,36 @@ def joint_position_penalty(
 
 
 
-# def joint_position_penalty(
-#     env: ManagerBasedRLEnv,
-#     asset_cfg: SceneEntityCfg,
-#     stand_still_scale: float,
-#     velocity_threshold: float,
-#     distance_threshold: float,
-#     command_name: str,
-# ) -> torch.Tensor:
-#     """ナビゲーションタスクに合わせて修正された関節位置ペナルティ。"""
-#     asset: Articulation = env.scene[asset_cfg.name]
+def joint_position_penalty_nav(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    stand_still_scale: float,
+    velocity_threshold: float,
+    distance_threshold: float,
+    command_name: str,
+) -> torch.Tensor:
+    """ナビゲーションタスクに合わせて修正された関節位置ペナルティ。"""
+    asset: Articulation = env.scene[asset_cfg.name]
 
-#     # [修正点] ワールド座標系に統一して、目標までの正確な距離を計算
-#     # 1. ロボットのワールド座標を取得
-#     robot_pos_w = asset.data.root_pos_w
-#     # 2. コマンド（環境原点からの相対座標）を取得
-#     command = env.command_manager.get_command(command_name)
-#     des_pos_b = command[:, :3]
-#     distance = torch.norm(des_pos_b, dim=1)
+    # [修正点] ワールド座標系に統一して、目標までの正確な距離を計算
+    # 1. ロボットのワールド座標を取得
+    robot_pos_w = asset.data.root_pos_w
+    # 2. コマンド（環境原点からの相対座標）を取得
+    command = env.command_manager.get_command(command_name)
+    des_pos_b = command[:, :3]
+    distance = torch.norm(des_pos_b, dim=1)
     
-#     # 「動くべきか」の判定ロジック
-#     should_be_moving = distance > distance_threshold
+    # 「動くべきか」の判定ロジック
+    should_be_moving = distance > distance_threshold
     
-#     # 「実際に動いているか」の判定 (ここはローカル速度の大きさなので修正不要)
-#     is_moving = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1) > velocity_threshold
+    # 「実際に動いているか」の判定 (ここはローカル速度の大きさなので修正不要)
+    is_moving = torch.linalg.norm(asset.data.root_lin_vel_b[:, :2], dim=1) > velocity_threshold
     
-#     # 関節のズレに対するペナルティ (修正不要)
-#     penalty = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
+    # 関節のズレに対するペナルティ (修正不要)
+    penalty = torch.linalg.norm((asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
     
-#     # ペナルティを適用
-#     return torch.where(torch.logical_or(should_be_moving, is_moving), penalty, stand_still_scale * penalty)
+    # ペナルティを適用
+    return torch.where(torch.logical_or(should_be_moving, is_moving), penalty, stand_still_scale * penalty)
 
 
 """
@@ -348,6 +348,124 @@ def base_accel_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
 
 
 
+
+
+@torch.no_grad()
+def delta_T_mask(env, last_seconds: float) -> torch.Tensor:
+    """残り `last_seconds` 秒だけ1になる時間マスク δ_T."""
+    # 1エピソードの総ステップ数を取得
+    max_steps = getattr(env, "max_episode_length", None)
+    if max_steps is None:
+        ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
+        max_steps = int(env.cfg.episode_length_s / ctrl_dt)
+    steps_left = max_steps - env.episode_length_buf   # (N,)
+    # 閾値（秒→ステップ）
+    ctrl_dt = env.sim.get_physics_dt() * env.cfg.decimation
+    last_steps = int(last_seconds / ctrl_dt + 1e-6)
+    return (steps_left <= last_steps).float()         # (N,)
+
+@torch.no_grad()
+def delta_p_mask(env, command_name: str = "goal_position", radius: float = 0.3) -> torch.Tensor:
+    """ゴールから半径 `radius` m 以内で1になる空間マスク δ_p（相対コマンド想定, XYのみ）."""
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+    dist = des_pos_b.norm(dim=1)
+    return (dist < radius).float()
+
+
+
+@torch.no_grad()
+def position_endgame_reward(env, command_name="goal_position",
+                            sigma: float = 1.0, last_seconds: float = 2.0) -> torch.Tensor:
+    """
+    位置追従 r_pos = 1 / (1 + ||d/sigma||^2) を δ_T で終盤だけ有効化。
+    相対コマンド (body) を想定。XY距離で評価。
+    """
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+    d = des_pos_b.norm(dim=1) / (sigma + 1e-8)
+    r = 1.0 / (1.0 + d * d)
+    return r * delta_T_mask(env, last_seconds)
+
+@torch.no_grad()
+def heading_endgame_reward(env, command_name="goal_position",
+                           last_seconds: float = 2.0, activate_radius: float = 2.5) -> torch.Tensor:
+    """
+    ヘディング合わせ（前方 x 軸とゴール方向の内積）を
+    “近づいた時だけ” & “終盤だけ”有効化： δ_p · δ_T。
+    """
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+    dir_b = des_pos_b / (des_pos_b.norm(dim=1, keepdim=True) + 1e-8)
+    fwd_b = torch.tensor([1.0, 0.0], device=env.device).expand_as(dir_b)
+    cos = (fwd_b * dir_b).sum(dim=1)              # [-1,1]
+    r = 0.5 * (cos + 1.0)                         # [0,1]
+    return r * delta_T_mask(env, last_seconds) * delta_p_mask(env, command_name, activate_radius)
+
+
+# def move_in_direction_early(env, command_name="goal_position") -> torch.Tensor:
+#     """
+#     学習初期だけ使う“方向合わせのshaping”（目標方向速度）。
+#     後で外しやすいように単体関数化。
+#     """
+#     des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+#     dir_b = des_pos_b / (des_pos_b.norm(dim=1, keepdim=True) + 1e-8)
+#     v_b = env.scene["robot"].data.root_lin_vel_b[:, :2]
+#     v_par = (v_b * dir_b).sum(dim=1)
+#     return torch.clamp(v_par, min=0.0)
+
+
+
+
+def move_in_direction_early(
+    env,
+    command_name: str = "goal_position",
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """
+    Move-in-Direction (論文準拠):
+    cos⟨v_b, dir_b⟩ をそのまま返す（[-1,1]）。
+    - 距離ゲートなし
+    - 学習初期のみランナー側で weight>0 にする
+    """
+    # 目標方向（body座標の相対コマンド）
+    des = env.command_manager.get_command(command_name)[:, :2]             # (N,2)
+    dir_b = des / (des.norm(dim=1, keepdim=True) + eps)                    # (N,2)
+
+    # 機体速度（body）
+    v_b = env.scene["robot"].data.root_lin_vel_b[:, :2]                    # (N,2)
+    v_n = v_b.norm(dim=1) + eps                                            # (N,)
+
+    # コサイン整合（ゼロ平均のshaping）
+    cos_align = (v_b * dir_b).sum(dim=1) / v_n                             # (N,)
+    return cos_align  # [-1, 1]
+
+
+def progress_potential_rel(env, command_name="goal_position", clip: float = 0.05) -> torch.Tensor:
+    """
+    一歩で縮めた距離 d_{t-1}-d_t を褒める（潜在報酬）。相対コマンド(body)前提。
+    clip は1ステップの最大ご褒美（m）で、ノイズ抑制用。
+    """
+    des = env.command_manager.get_command(command_name)[:, :2]       # (N,2) 相対ゴール in body
+    d_t = des.norm(dim=1)                                            # (N,)
+
+    # 初期化
+    if not hasattr(env, "_prev_dist") or env._prev_dist.shape[0] != env.num_envs:
+        env._prev_dist = d_t.clone()
+
+    prog = env._prev_dist - d_t                                      # 縮めた距離（負なら後退）
+    env._prev_dist = d_t                                             # 更新
+
+    return torch.clamp(prog, min=-clip, max=clip)  
+
+
+def heading_alignment_rel(env, command_name: str = "goal_position") -> torch.Tensor:
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+    dir_b = des_pos_b / (des_pos_b.norm(dim=1, keepdim=True) + 1e-8)
+    fwd_b = torch.tensor([1.0, 0.0], device=env.device).expand_as(dir_b)  # 機体前方 = x軸
+    cos = (fwd_b * dir_b).sum(dim=1)                                      # [-1,1]
+    return 0.5 * (cos + 1.0)                                              # [0,1]
+
+
+
+
 def position_command_error_tanh(env: ManagerBasedRLEnv, std: float, command_name: str) -> torch.Tensor:
     """Reward position tracking with tanh kernel."""
     command = env.command_manager.get_command(command_name)
@@ -361,6 +479,22 @@ def heading_command_error_abs(env: ManagerBasedRLEnv, command_name: str) -> torc
     command = env.command_manager.get_command(command_name)
     heading_b = command[:, 3]
     return heading_b.abs()
+
+
+
+def stand_still_negative(env, last_seconds: float = 1.0,
+                         lin_coef: float = 2.5, ang_coef: float = 1.0,
+                         command_name: str = "goal_position", reach_radius: float = 0.1) -> torch.Tensor:
+    """
+    到達域 終盤(最後の1s)で “動くこと”を罰する（＝静止させる）。
+    論文の Stand Still を負項として実装。
+    """
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+    reached = (des_pos_b.norm(dim=1) < reach_radius).float()
+    mT = delta_T_mask(env, last_seconds)
+    v_lin = env.scene["robot"].data.root_lin_vel_b[:, :2].norm(dim=1)
+    w_z   = env.scene["robot"].data.root_ang_vel_b[:, 2].abs()
+    return (lin_coef * v_lin + ang_coef * w_z) * reached * mT
 
 
 def dont_wait(
@@ -386,3 +520,122 @@ def dont_wait(
     is_waiting = (distance > distance_threshold) & (speed < velocity_threshold)
     
     return is_waiting.float()
+
+
+
+def dont_wait_rel(env, command_name: str = "goal_position",
+                           distance_threshold: float = 0.8, velocity_threshold: float = 0.1) -> torch.Tensor:
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+    dist  = des_pos_b.norm(dim=1)
+    speed = env.scene["robot"].data.root_lin_vel_b[:, :2].norm(dim=1)
+    # 遠い & 遅い ほど強い罰（連続値）
+    a = torch.sigmoid(10*(dist - distance_threshold))
+    b = torch.sigmoid(10*(velocity_threshold - speed))
+    return a * b 
+
+
+
+
+
+
+def _contacts_bool(env, sensor_cfg, min_contact_time: float, force_z_thresh: float|None):
+    """ContactSensor から安定接地のboolを作る（時間,力の併用でチャタリング抑制）"""
+    cs = env.scene.sensors[sensor_cfg.name]
+
+    time_ok = None
+    if hasattr(cs.data, "current_contact_time"):
+        time_ok = cs.data.current_contact_time[:, sensor_cfg.body_ids] > (min_contact_time - 1e-9)
+
+    force_ok = None
+    if hasattr(cs.data, "net_forces_w_history") and force_z_thresh is not None:
+        fz_max = cs.data.net_forces_w_history[:, :, sensor_cfg.body_ids, 2].abs().max(dim=1)[0]
+        force_ok = fz_max > force_z_thresh
+
+    if time_ok is None and force_ok is None:
+        nf = cs.data.net_forces_w_history[:, :, sensor_cfg.body_ids, :].norm(dim=-1).max(dim=1)[0]
+        return nf > 1.0
+    if time_ok is None:
+        return force_ok
+    if force_ok is None:
+        return time_ok
+    return time_ok | force_ok
+
+
+def feet_on_stone_height_only(
+    env,
+    sensor_cfg,
+    asset_cfg=SceneEntityCfg("robot"),
+    *,
+    hole_z: float = -5.0,
+    stone_eps: float = 4.7,
+    min_contact_time: float = 0.04,
+    force_z_thresh: float | None = None,
+    foot_sole_offset: float = 0.0,
+    normalize_by_feet: bool = True,
+) -> torch.Tensor:
+    """
+    最小版: (接地) ∧ (足底Z > hole_z + stone_eps) の脚を数えて加点。
+    地形／スキャナ依存なし。まずは学習を前に進めるためのシグナルとして。
+    """
+    contact = _contacts_bool(env, sensor_cfg, min_contact_time, force_z_thresh)  # (B,F) bool
+    robot   = env.scene[asset_cfg.name]
+
+    pos_w   = robot.data.body_pos_w[:, asset_cfg.body_ids, :]   # (B,F,3)
+    foot_z  = pos_w[..., 2] - foot_sole_offset
+
+    ok = contact & (foot_z > (hole_z + stone_eps))
+    r  = ok.float().sum(dim=1)
+
+    v = env.scene[asset_cfg.name].data.root_lin_vel_w[:, :2].norm(dim=-1)  # 実速度[m/s]
+    gate = ((v - 0.05) / (0.30 - 0.05)).clamp(0.0, 1.0)  # 0→1へ滑らか遷移
+    return r* gate / ok.shape[1] if normalize_by_feet else r
+
+
+
+def feet_gap_contact_penalty(
+    env,
+    sensor_cfg,
+    asset_cfg=SceneEntityCfg("robot"),
+    *,
+    hole_z: float = -5.0,       # 穴面の固定Z
+    gap_tol: float = 4.7,      # この高さ帯以下で接地→減点
+    min_contact_time: float = 0.04,
+    force_z_thresh: float | None = None,
+    foot_sole_offset: float = 0.0,
+    normalize_by_feet: bool = True,
+) -> torch.Tensor:
+    """
+    条件: (接地) ∧ (足底Z < hole_z + gap_tol)
+    接地中に“穴面近傍”で踏んだ脚を数えて減点します。
+    """
+    contact = _contacts_bool(env, sensor_cfg, min_contact_time, force_z_thresh)  # (B,F) bool
+    robot   = env.scene[asset_cfg.name]
+
+    pos_w   = robot.data.body_pos_w[:, asset_cfg.body_ids, :]   # (B,F,3)
+    foot_z  = pos_w[..., 2] - foot_sole_offset
+
+    bad = contact & (foot_z < (hole_z + gap_tol))
+    r = bad.float().sum(dim=1)
+    return r / bad.shape[1] if normalize_by_feet else r
+
+
+def feet_gap_discrete_penalty(
+    env,
+    sensor_cfg,
+    asset_cfg=SceneEntityCfg("robot"),
+    *,
+    stone_top_z: float = 0.0,      # 石の天面Z（均一前提）
+    edge_band: float = 0.03,       # 天面から下へ2cmを“危険帯”とみなす
+    min_contact_time: float = 0.01,
+    foot_sole_offset: float = 0.0,
+    normalize_by_feet: bool = False,  # ★希釈しない
+) -> torch.Tensor:
+    # 接地（ヒステリシス弱め）
+    cs = env.scene.sensors[sensor_cfg.name]
+    contact = cs.data.current_contact_time[:, sensor_cfg.body_ids] > (min_contact_time - 1e-9)  # (B,F)
+    # 足底高さ
+    foot_z = env.scene[asset_cfg.name].data.body_pos_w[:, asset_cfg.body_ids, 2] - foot_sole_offset  # (B,F)
+    # 天面より edge_band 以上低い場所での接地＝危険
+    bad = contact & (foot_z < (stone_top_z - edge_band))  # (B,F)
+    r = bad.float().sum(dim=1)  # 1脚1カウント
+    return r / bad.shape[1] if normalize_by_feet else r

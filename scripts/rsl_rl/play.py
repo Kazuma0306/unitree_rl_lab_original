@@ -17,7 +17,7 @@ import cli_args  # isort: skip
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
+parser.add_argument("--video_length", type=int, default=400, help="Length of the recorded video (in steps).")
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
@@ -61,7 +61,8 @@ from isaaclab_tasks.utils import get_checkpoint_path
 
 import unitree_rl_lab.tasks  # noqa: F401
 from unitree_rl_lab.utils.parser_cfg import parse_env_cfg
-from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic, LocoTransformerFinetune
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer_force import LocoTransformerHFP
 
 
 def main():
@@ -120,7 +121,9 @@ def main():
     # # 2. 次に、その「辞書」の中身をクラスオブジェクトで上書きします
     # #    (辞書なので、アクセスは[]を使います)
     # test_cfg["policy"]["class_name"] = VisionMLPActorCritic
-    test_cfg["policy"]["class_name"] = LocoTransformerActorCritic
+    # test_cfg["policy"]["class_name"] = LocoTransformerActorCritic
+    # test_cfg["policy"]["class_name"] = LocoTransformerFinetune
+    test_cfg["policy"]["class_name"] = LocoTransformerHFP
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model

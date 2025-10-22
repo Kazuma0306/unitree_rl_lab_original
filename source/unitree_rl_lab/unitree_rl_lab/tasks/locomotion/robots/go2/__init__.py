@@ -33,3 +33,15 @@ gym.register(
         "skrl_cfg_entry_point": f"unitree_rl_lab.tasks.locomotion.agents:skrl_ppo_cfg.yaml",
     },
 )
+
+gym.register(
+    id="Unitree-Go2-Proposed",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.velocity_env_cfg4:RobotEnvCfg",
+        "play_env_cfg_entry_point": f"{__name__}.velocity_env_cfg4:RobotPlayEnvCfg",
+        "rsl_rl_cfg_entry_point": f"unitree_rl_lab.tasks.locomotion.agents.rsl_rl_ppo_cfg:BasePPORunnerCfg",
+        # "skrl_cfg_entry_point": f"unitree_rl_lab.tasks.locomotion.agents:skrl_ppo_cfg.yaml",
+    },
+)

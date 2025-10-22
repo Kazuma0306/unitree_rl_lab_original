@@ -6,6 +6,7 @@
 from isaaclab.utils import configclass
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg, RslRlRndCfg
 from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer_force import LocoTransformerHFP
 
 
 @configclass
@@ -21,7 +22,10 @@ class VisionMLPActorCriticCfg(RslRlPpoActorCriticCfg):
         "base_lin_vel", "base_ang_vel", "projected_gravity",
         "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
     ]
-    vision_obs_key: str = "camera_image"
+    # vision_obs_key: str = "camera_image"
+
+    vision_depth_key: str = "front_depth"
+    vision_normals_key: str = "front_normals"
 
     # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
     init_noise_std: float = 1.0
@@ -37,14 +41,19 @@ class LocoTransformerActorCriticCfg(RslRlPpoActorCriticCfg):
     
     # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
 
-    class_name: str = "LocoTransformerActorCritic"
+    # class_name: str = "LocoTransformerActorCritic"
+    class_name: str = "LocoTransformerFinetune"
+
 
     # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
     prop_obs_keys: list[str] = [
         "base_lin_vel", "base_ang_vel", "projected_gravity",
         "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
     ]
-    vision_obs_key: str = "camera_image"
+    # vision_obs_key: str = "camera_image"
+    vision_depth_key: str = "front_depth"
+    vision_normals_key: str = "front_normals"
+
 
     # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
     init_noise_std: float = 1.0
@@ -55,9 +64,37 @@ class LocoTransformerActorCriticCfg(RslRlPpoActorCriticCfg):
 
 
 @configclass
+class LocoTransformerHFPCfg(RslRlPpoActorCriticCfg):
+    
+    # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
+
+    # class_name: str = "LocoTransformerActorCritic"
+    class_name: str = "LocoTransformerHFP"
+
+
+    # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
+    prop_obs_keys: list[str] = [
+        "base_lin_vel", "base_ang_vel", "projected_gravity",
+        "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
+    ]
+    # vision_obs_key: str = "camera_image"
+    heightmap_key : str = "height_scanner"
+    ft_stack_key : str = "ft_stack"
+
+
+    # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
+    init_noise_std: float = 1.0
+    actor_hidden_dims: list[int] = [256, 128]  # 例
+    critic_hidden_dims: list[int] = [256, 128] # 例
+    activation: str = "elu"
+
+
+
+
+@configclass
 class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 1200 #50000
+    max_iterations = 5000 #50000
     save_interval = 100
     experiment_name = ""  # same as task name
     # empirical_normalization = False 
@@ -103,7 +140,12 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
                 "joint_pos_rel",
                 "joint_vel_rel",
                 "last_action", 
-                "camera_image"
+                # "camera_image",
+                # "front_depth",
+                # "front_normals",
+                "height_scanner",
+                "ft_stack"
+
                 ],
         "critic":["base_lin_vel",
                 "base_ang_vel",
@@ -113,7 +155,11 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
                 "joint_vel_rel",
                 # "joint_effort",
                 "last_action",
-                 "camera_image"
+                #  "camera_image",
+                # "front_depth",
+                # "front_normals".
+                "height_scanner",
+                "ft_stack"
                  ],
 
 
@@ -121,20 +167,24 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     }
       
     # policy: RslRlPpoActorCriticCfg = VisionMLPActorCriticCfg()
-    policy: RslRlPpoActorCriticCfg = LocoTransformerActorCriticCfg()
+    # policy: RslRlPpoActorCriticCfg = LocoTransformerActorCriticCfg()
+    policy: RslRlPpoActorCriticCfg = LocoTransformerHFPCfg()
+
 
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
         entropy_coef=0.01,
-        num_learning_epochs=5,
+        # num_learning_epochs=5,
+        num_learning_epochs=3,
         # num_mini_batches=4,
-        num_mini_batches=96, # for transformer
+        num_mini_batches = 32, # for transformer
         # learning_rate=1.0e-3,
-        learning_rate=1.0e-4, # for transformer
-        # schedule="adaptive",
-        schedule="constant",
+        # learning_rate=1.0e-4, # for transformer
+        learning_rate=1.0e-5, # for finetune
+        schedule="adaptive",
+        # schedule="constant",
         gamma=0.99,
         lam=0.95,
         desired_kl=0.01,
