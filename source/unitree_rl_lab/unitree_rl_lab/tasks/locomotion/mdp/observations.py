@@ -59,3 +59,39 @@ def contact_ft_stack(
 
     B, K, L, D = X.shape
     return X if return_shape == "bkl3" else X.view(B, K * L * D)
+
+
+
+from .helpers_single_block import _block_pos_w, _block_quat_w, _yaw_from_quat
+
+from .helpers_single_block import _base_pos_xy, _base_yaw
+
+
+
+
+def fr_target_xy_rel_single_block(env, cmd_name="step_fr_to_block", block_key="stone2"):
+    # コマンド: [ux, uy]
+    t_local = env.command_manager.get_command(cmd_name)  # [B,2]
+    ux, uy = t_local[..., 0], t_local[..., 1]
+
+    # ブロック中心 (world) と yaw
+    blk_pos_w = _block_pos_w(env, key=block_key)             # [B,3]
+    yaw_blk   = _yaw_from_quat(_block_quat_w(env, key=block_key))  # [B]
+
+    # ブロック座標(ux,uy) → world
+    cy, sy = torch.cos(yaw_blk), torch.sin(yaw_blk)
+    R = torch.stack([torch.stack([cy, -sy], dim=-1),
+                     torch.stack([sy,  cy], dim=-1)], dim=-2)      # [B,2,2]
+    t_xy = torch.stack([ux, uy], dim=-1)                           # [B,2]
+    tgt_xy_w = (R @ t_xy.unsqueeze(-1)).squeeze(-1) + blk_pos_w[..., :2]  # [B,2]
+
+    # world → base座標（相対）
+    yaw_base = _base_yaw(env)                                      # [B]
+    cyb, syb = torch.cos(yaw_base), torch.sin(yaw_base)
+    Rinv = torch.stack([torch.stack([cyb, syb], dim=-1),
+                        torch.stack([-syb, cyb], dim=-1)], dim=-2) # [B,2,2]
+    rel = (Rinv @ (tgt_xy_w - _base_pos_xy(env)).unsqueeze(-1)).squeeze(-1)  # [B,2]
+    return rel
+
+
+

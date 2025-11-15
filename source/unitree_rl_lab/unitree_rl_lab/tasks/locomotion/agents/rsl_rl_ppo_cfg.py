@@ -35,31 +35,31 @@ class VisionMLPActorCriticCfg(RslRlPpoActorCriticCfg):
 
 
 
-@configclass
-class LocoTransformerActorCriticCfg(RslRlPpoActorCriticCfg):
-    """あなたのカスタムモデルVisionMLPActorCritic用の設定クラス。"""
+# @configclass
+# class LocoTransformerActorCriticCfg(RslRlPpoActorCriticCfg):
+#     """あなたのカスタムモデルVisionMLPActorCritic用の設定クラス。"""
     
-    # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
+#     # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
 
-    # class_name: str = "LocoTransformerActorCritic"
-    class_name: str = "LocoTransformerFinetune"
-
-
-    # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
-    prop_obs_keys: list[str] = [
-        "base_lin_vel", "base_ang_vel", "projected_gravity",
-        "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
-    ]
-    # vision_obs_key: str = "camera_image"
-    vision_depth_key: str = "front_depth"
-    vision_normals_key: str = "front_normals"
+#     # class_name: str = "LocoTransformerActorCritic"
+#     class_name: str = "LocoTransformerFinetune"
 
 
-    # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
-    init_noise_std: float = 1.0
-    actor_hidden_dims: list[int] = [256, 128]  # 例
-    critic_hidden_dims: list[int] = [256, 128] # 例
-    activation: str = "elu"
+#     # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
+#     prop_obs_keys: list[str] = [
+#         "base_lin_vel", "base_ang_vel", "projected_gravity",
+#         "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
+#     ]
+#     # vision_obs_key: str = "camera_image"
+#     vision_depth_key: str = "front_depth"
+#     vision_normals_key: str = "front_normals"
+
+
+#     # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
+#     init_noise_std: float = 1.0
+#     actor_hidden_dims: list[int] = [256, 128]  # 例
+#     critic_hidden_dims: list[int] = [256, 128] # 例
+#     activation: str = "elu"
 
 
 
@@ -78,7 +78,7 @@ class LocoTransformerHFPCfg(RslRlPpoActorCriticCfg):
         "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
     ]
     # vision_obs_key: str = "camera_image"
-    heightmap_key : str = "height_scanner"
+    # heightmap_key : str = "height_scanner"
     ft_stack_key : str = "ft_stack"
 
 
@@ -90,11 +90,37 @@ class LocoTransformerHFPCfg(RslRlPpoActorCriticCfg):
 
 
 
+@configclass
+class MlpHFPCfg(RslRlPpoActorCriticCfg):
+    
+    # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
+
+    # class_name: str = "LocoTransformerActorCritic"
+    class_name: str = "MlpHFP"
+
+
+    # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
+    prop_obs_keys: list[str] = [
+        "base_lin_vel", "base_ang_vel", "projected_gravity",
+        "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
+    ]
+    # vision_obs_key: str = "camera_image"
+    # heightmap_key : str = "height_scanner"
+    ft_stack_key : str = "ft_stack"
+
+
+    # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
+    init_noise_std: float = 1.0
+    actor_hidden_dims: list[int] = [256, 128]  # 例
+    critic_hidden_dims: list[int] = [256, 128] # 例
+    activation: str = "elu"
+
+
 
 @configclass
 class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 5000 #50000
+    max_iterations = 2000 #50000
     save_interval = 100
     experiment_name = ""  # same as task name
     # empirical_normalization = False 
@@ -143,7 +169,7 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
                 # "camera_image",
                 # "front_depth",
                 # "front_normals",
-                "height_scanner",
+                # "height_scanner",
                 "ft_stack"
 
                 ],
@@ -158,7 +184,7 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
                 #  "camera_image",
                 # "front_depth",
                 # "front_normals".
-                "height_scanner",
+                # "height_scanner",
                 "ft_stack"
                  ],
 
@@ -168,7 +194,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
       
     # policy: RslRlPpoActorCriticCfg = VisionMLPActorCriticCfg()
     # policy: RslRlPpoActorCriticCfg = LocoTransformerActorCriticCfg()
-    policy: RslRlPpoActorCriticCfg = LocoTransformerHFPCfg()
+    # policy: RslRlPpoActorCriticCfg = LocoTransformerHFPCfg()
+    policy: RslRlPpoActorCriticCfg =  MlpHFPCfg()
 
 
     algorithm = RslRlPpoAlgorithmCfg(
@@ -180,9 +207,9 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         num_learning_epochs=3,
         # num_mini_batches=4,
         num_mini_batches = 32, # for transformer
-        # learning_rate=1.0e-3,
+        learning_rate=1.0e-3,
         # learning_rate=1.0e-4, # for transformer
-        learning_rate=1.0e-5, # for finetune
+        # learning_rate=1.0e-5, # for finetune
         schedule="adaptive",
         # schedule="constant",
         gamma=0.99,

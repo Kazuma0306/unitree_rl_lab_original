@@ -316,6 +316,24 @@ def joint_mirror(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mirror_joint
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def base_accel_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
     """論文の"Base Accel. Penalty"を再現します。
 
@@ -639,3 +657,428 @@ def feet_gap_discrete_penalty(
     bad = contact & (foot_z < (stone_top_z - edge_band))  # (B,F)
     r = bad.float().sum(dim=1)  # 1脚1カウント
     return r / bad.shape[1] if normalize_by_feet else r
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#single block env
+
+
+from .helpers_single_block import _block_pos_w, _block_quat_w, _block_ang_vel_w, _yaw_from_quat
+
+from .helpers_single_block import _base_pos_xy, _base_yaw
+
+
+
+def _fr_foot_pos_w(env):
+    robot = env.scene.articulations["robot"]
+    fr_id = robot.body_names.index("FR_foot")
+    return robot.data.body_pos_w[:, fr_id, :3]  # [B,3]
+
+
+
+
+def _block_center_xy(env, key="stone2"):
+    return _block_pos_w(env, key)[..., :2]  # [B,2]
+
+def _block_yaw_w(env, key="stone2"):
+    return _yaw_from_quat(_block_quat_w(env, key))      # [B]
+
+def _block_theta(env, key="stone2"):
+    q = _block_quat_w(env, key)                         # [B,4]
+    w,x,y,z = q.unbind(-1)
+    zc = 1.0 - 2.0*(x*x + y*y)
+    return torch.arccos(torch.clamp(zc, -1.0, 1.0))     # [B]
+
+def _block_wmag(env, key="stone2"):
+    w = _block_ang_vel_w(env, key)                      # [B,3]
+    return torch.linalg.norm(w, dim=-1)
+
+
+
+
+def fr_on_block_rect(env: ManagerBasedRLEnv, margin=0.02):
+    """FRが上面矩形(内側にmargin)に入っていれば＋"""
+    fr_p = _fr_foot_pos_w(env)                   # [B,3]
+    c_xy = _block_center_xy(env)                 # [B,2]
+    yaw  = _block_yaw_w(env)                     # [B]
+    # 上面矩形半辺（[hx,hy]）：env側で保持（各env同一なら [B,2] へtile）
+    hx = 0.1 - margin   # [B]  x方向
+    hy = 0.1 - margin   # [B]  y方向
+
+    cy, sy = torch.cos(-yaw), torch.sin(-yaw)  # world→block
+    Rinv = torch.stack([torch.stack([cy, -sy], dim=-1),
+                        torch.stack([sy,  cy], dim=-1)], dim=-2)  # [B,2,2]
+    d_xy = (Rinv @ (fr_p[..., :2]-c_xy).unsqueeze(-1)).squeeze(-1)  # [B,2]
+    inside = (d_xy[...,0].abs() <= hx) & (d_xy[...,1].abs() <= hy)
+    return inside.float()  # [B]
+
+
+
+def fr_on_block_bonus(env: ManagerBasedRLEnv, margin=0.02, block_key="stone2"):
+    """
+    FR足がブロック上面の矩形内にあり、かつ高さが適合している場合にボーナスを与える。
+    """
+    # --- 1. 必要なデータの取得 ---
+    fr_p = _fr_foot_pos_w(env)                   # [B,3]
+    c_xy = _block_center_xy(env)                 # [B,2]
+    yaw  = _block_yaw_w(env)                     # [B]
+    
+    # ブロックの寸法（環境設定に合わせて調整してください）
+    block_half_width = 0.1 
+    block_half_length = 0.1
+    # ★重要: ブロックの上面の高さ（Z）
+    # 中心Z + 半分の高さ = 上面
+    block_pos = _block_pos_w(env, block_key)     # [B,3]
+    block_top_z = block_pos[..., 2] + 0.15       # 例: 厚みが0.3なら半分は0.15
+
+    # --- 2. XY平面の矩形判定（元のロジック） ---
+    hx = block_half_width - margin
+    hy = block_half_length - margin
+
+    cy, sy = torch.cos(-yaw), torch.sin(-yaw)
+    Rinv = torch.stack([torch.stack([cy, -sy], dim=-1),
+                        torch.stack([sy,  cy], dim=-1)], dim=-2) # [B,2,2]
+    
+    # ローカル座標への変換
+    vec_xy = fr_p[..., :2] - c_xy
+    d_xy = (Rinv @ vec_xy.unsqueeze(-1)).squeeze(-1) # [B,2]
+    
+    is_xy_inside = (d_xy[..., 0].abs() <= hx) & (d_xy[..., 1].abs() <= hy)
+
+    # --- 3. ★追加: 高さ（Z）の判定 ---
+    # 足のZ座標が、ブロック上面付近にあるか (誤差 ±2cm以内など)
+    fr_z = fr_p[..., 2]
+    z_err = torch.abs(fr_z - block_top_z)
+    is_z_correct = z_err < 0.03  # 3cm以内の誤差なら「乗っている」とみなす
+
+    # --- 4. ★追加: 接触/安定性の判定 ---
+
+    ft = env.scene.sensors["contact_forces"].data.net_forces_w
+    robot = env.scene.articulations["robot"]
+    # leg_index = {"FL": 0, "FR": 1, "RL": 2, "RR": 3}[leg]
+    fr_id = robot.body_names.index("FR_foot")
+    fz = ft[:, fr_id, 2]
+
+    # contact_forces = env.scene.net_contact_forces[:, body_idx, :]
+    is_touching = torch.norm(fz, dim=-1) > 1.0
+
+    # --- 5. 総合判定 ---
+    # XYが入っていて、かつ 高さも合っていて、かつ 
+    success = is_xy_inside & is_z_correct & is_touching
+
+    # ボーナス値を返す (bool -> float -> value)
+    return success.float() * 5.0  # 大きめのボーナス（例: +5.0）
+
+
+
+
+# def fr_fz(env):
+#     ft = env.scene.sensors["contact_forces"].data.net_forces_w  # [B,4,3]
+#     return ft[:, 1, 2]  # FRのZ
+
+# def impact_spike_penalty_fr(env, dfz_thresh=0.15):
+#     fz_hist = env._buf.ft_stack[..., 2]  # [B,K,4] (あなたのft_stackをバッファ化しておく)
+
+#     print(fz_hist)
+
+#     FR = 1  # ["FL","FR","RL","RR"] の順想定
+#     dfz = fz_hist[:, 1:, FR] - fz_hist[:, :-1, FR]  # 時系列差分 [B, K-1]
+#     spike = torch.clamp(dfz, min=0.0).amax(dim=1)   # 上方向スパイクの最大値
+#     excess = torch.clamp(spike - dfz_thresh, min=0.0)
+
+#     return excess
+
+
+#holr alive
+# def support_reg(env):
+#     return env._buf.is_holding.float()
+
+
+def ang_vel(env):
+    return (_block_wmag(env)**2)
+
+def block_tilt_margin(env):
+    return (torch.clamp(_block_theta(env)/0.20, 0, 1.0)**2.5)
+
+
+# def support_force_band_reward(env: ManagerBasedRLEnv, sensor_cfg,
+#                               fz_min=0.03, fz_max=0.20,
+#                               leg="FR", mass_kg=15.0, normalize=True):
+#     # 接触センサ（ワールド座標の合力）: [B,4,3]  [FL,FR,RL,RR]想定
+#     ft = env.scene.sensors[sensor_cfg.name].data.net_forces_w
+#     leg_index = {"FL": 0, "FR": 1, "RL": 2, "RR": 3}[leg]
+#     fz = ft[:, leg_index, 2]  # [B] Newton
+
+#     if normalize:
+#         fz = fz / (mass_kg * 9.81)  # → 体重比
+
+#     inside = (fz >= fz_min) & (fz <= fz_max)
+#     return inside.float()  # [B]
+
+
+
+
+def fr_target_progress_reward2(env, d_clip=0.05, cmd_name="step_fr_to_block", block_key="stone2"):
+    # 目標XY（world）
+    cmd = env.command_manager.get_command(cmd_name)  # [B,2] = (ux,uy)
+    ux, uy = cmd[..., 0], cmd[..., 1]
+    c_xy = _block_pos_w(env, block_key)[..., :2]
+    yaw  = _yaw_from_quat(_block_quat_w(env, block_key))
+    cy, sy = torch.cos(yaw), torch.sin(yaw)
+    R = torch.stack([torch.stack([cy, -sy], dim=-1),
+                     torch.stack([sy,  cy], dim=-1)], dim=-2)      # [B,2,2]
+    tgt_xy = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + c_xy  # [B,2]
+
+    # FR 足の位置と速度（world）
+    robot = env.scene.articulations["robot"]
+    fr_id = robot.body_names.index("FR_foot")
+    fr_xy = robot.data.body_pos_w[:, fr_id, :2]          # [B,2]
+    fr_vxy = robot.data.body_vel_w[:, fr_id, :2]         # [B,2]
+
+    # 方向ベクトル（FR→目標）
+    diff = tgt_xy - fr_xy                                # [B,2]
+    dist = torch.linalg.norm(diff, dim=-1).clamp_min(1e-6)
+    dir_to_tgt = diff / dist.unsqueeze(-1)               # [B,2]
+
+    # 接近速度 = dir_to_tgt · v  （正なら近づいている）
+    approach_speed = (dir_to_tgt * fr_vxy).sum(dim=-1)   # [B], m/s
+
+    # 1 ステップの距離進捗 ≈ approach_speed * dt
+    # dt = getattr(env, "dt", 0.005)
+    dt  = env.step_dt
+    r = (approach_speed * dt).clamp(min=0.0, max=d_clip) # [B]  ← 常に >=0
+    return r
+
+
+
+# def fr_target_distance_reward(env, cmd_name="step_fr_to_block", block_key="stone2"):
+#     """
+#     目標地点との「距離」そのものを評価する報酬。
+#     近づくほど指数関数的に高くなる (Kernel function)。
+#     """
+#     # --- 1. 目標座標 (tgt_xy) の計算 (Progressと同じ) ---
+#     cmd = env.command_manager.get_command(cmd_name)
+#     ux, uy = cmd[..., 0], cmd[..., 1]
+#     c_xy = _block_pos_w(env, block_key)[..., :2]
+#     yaw  = _yaw_from_quat(_block_quat_w(env, block_key))
+#     cy, sy = torch.cos(yaw), torch.sin(yaw)
+#     R = torch.stack([torch.stack([cy, -sy], dim=-1),
+#                      torch.stack([sy,  cy], dim=-1)], dim=-2)
+#     tgt_xy = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + c_xy
+
+#     # --- 2. FR足の現在位置 ---
+#     robot = env.scene.articulations["robot"]
+#     fr_id = robot.body_names.index("FR_foot")
+#     fr_xy = robot.data.body_pos_w[:, fr_id, :2]
+
+#     # --- 3. 距離の計算 ---
+#     dist = torch.linalg.norm(tgt_xy - fr_xy, dim=-1)
+    
+#     # --- 4. 報酬変換 (距離0で1.0, 離れると減衰) ---
+#     # sigma が小さいほど「高精度」を要求する (例: 0.1m 〜 0.2m)
+#     sigma = 0.1
+#     return torch.exp(- (dist / sigma)**2 )
+
+
+
+
+# def fr_target_distance_reward3d(env, cmd_name="step_fr_to_block", block_key="stone2"):
+#     """
+#     目標地点との「3次元距離」を評価する報酬。
+#     XYが合っていても、高さ(Z)が合わなければ報酬が最大にならないようにする。
+#     """
+#     # --- 1. 目標座標 (tgt_xy) の計算 ---
+#     cmd = env.command_manager.get_command(cmd_name)
+#     ux, uy = cmd[..., 0], cmd[..., 1]
+    
+#     block_pos = _block_pos_w(env, block_key) # [B, 3]
+#     c_xy = block_pos[..., :2]
+#     c_z  = block_pos[..., 2]
+    
+#     yaw  = _yaw_from_quat(_block_quat_w(env, block_key))
+#     cy, sy = torch.cos(yaw), torch.sin(yaw)
+#     R = torch.stack([torch.stack([cy, -sy], dim=-1),
+#                      torch.stack([sy,  cy], dim=-1)], dim=-2)
+    
+#     # XYの目標 (石上のローカル座標をワールドへ)
+#     tgt_xy = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + c_xy
+
+#     # ★ Zの目標 (重要)
+#     # 石の高さ(厚み)が  なので、中心から  が上面。
+#     # そこに足の半径(例: 0.02)やめり込みを考慮した目標高さを設定。
+#     # ここでは「石の上面」をターゲットにします。
+#     stone_half_height = 0.15 
+#     tgt_z = c_z + stone_half_height
+
+#     # [B, 3] の目標座標結合
+#     tgt_pos = torch.cat([tgt_xy, tgt_z.unsqueeze(-1)], dim=-1)
+
+#     # --- 2. FR足の現在位置 (3D) ---
+#     robot = env.scene.articulations["robot"]
+#     fr_id = robot.body_names.index("FR_foot")
+#     fr_pos = robot.data.body_pos_w[:, fr_id, :3] # [B, 3]
+
+#     # --- 3. 3次元距離の計算 ---
+#     dist = torch.linalg.norm(tgt_pos - fr_pos, dim=-1)
+    
+#     # --- 4. 報酬変換 ---
+#     # これにより、空中に浮いていると dist が 0 にならず、報酬が減るため、
+#     # ロボットは足を着地させようとします。
+#     sigma = 0.1
+#     # return torch.exp(- (dist / sigma)**2 )
+#     return 1.0 / (1.0 + dist * 5.0)
+
+
+
+
+# def fr_target_distance_reward_3d2(env, cmd_name="step_fr_to_block", block_key="stone2"):
+#     # --- 1. 目標座標 (tgt_xy) の計算 ---
+#     cmd = env.command_manager.get_command(cmd_name)
+#     ux, uy = cmd[..., 0], cmd[..., 1]
+    
+#     block_pos = _block_pos_w(env, block_key) # [B, 3]
+#     blk_pos_w = p[:, 0, :] if p.ndim == 3 else p
+
+#     c_xy = block_pos[..., :2]
+#     c_z  = block_pos[..., 2]
+    
+#     yaw  = _yaw_from_quat(_block_quat_w(env, block_key))
+#     cy, sy = torch.cos(yaw), torch.sin(yaw)
+#     R = torch.stack([torch.stack([cy, -sy], dim=-1),
+#                      torch.stack([sy,  cy], dim=-1)], dim=-2)
+    
+#     # XYの目標 (石上のローカル座標をワールドへ)
+#     tgt_xy = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + c_xy
+
+#     # ★ Zの目標 (重要)
+#     # 石の高さ(厚み)が  なので、中心から  が上面。
+#     # そこに足の半径(例: 0.02)やめり込みを考慮した目標高さを設定。
+#     # ここでは「石の上面」をターゲットにします。
+#     stone_half_height = 0.15 
+#     tgt_z = c_z + stone_half_height
+#     # ... (目標座標 tgt_xy, tgt_z の計算までは同じ) ...
+    
+#     # 現在位置
+#     robot = env.scene.articulations["robot"]
+#     fr_id = robot.body_names.index("FR_foot")
+
+#     # 可視化コードと同様の分岐処理
+#     if hasattr(robot.data, "body_link_pose_w"):
+#         fr_pose_w = robot.data.body_link_pose_w[:, fr_id] # [B,7]
+#         curr_pose = fr_pose_w[:, :3]
+#     else:
+#         curr_pose = robot.data.body_pos_w[:, fr_id, :3]
+
+#     curr_pos = robot.data.body_pos_w[:, fr_id, :3]
+    
+#     dist_xy = torch.linalg.norm(tgt_xy - curr_pos[..., :2], dim=-1)
+#     dist_z  = torch.abs(tgt_z - curr_pos[..., 2]) # L1 distance for Z is often better
+
+#     # --- ★ 修正ポイント ---
+    
+#     # 1. XY距離報酬: 近づくことへの報酬
+#     rew_xy = 1.0 / (1.0 + dist_xy * 5.0)
+    
+#     # 2. 足上げ（クリアランス）報酬
+#     # 「まだXY的に遠い(例えば10cm以上)なら、足はターゲットより高くあってほしい」
+#     # ブロックの高さより少し上を維持するように促す
+#     clearance_height = tgt_z + 0.05  # 目標より5cm上
+#     is_far = (dist_xy > 0.06).float()
+    
+#     # 遠い時は「高さ」をターゲットにするのではなく、「クリアランス高さ」周辺にいることを報酬にする
+#     # 近い時は「ターゲット高さ(着地)」に合うことを報酬にする
+#     target_z_dynamic = is_far * clearance_height + (1.0 - is_far) * tgt_z
+    
+#     dist_z_dynamic = torch.abs(target_z_dynamic - curr_pos[..., 2])
+#     rew_z = 1.0 / (1.0 + dist_z_dynamic * 10.0)
+
+#     # 3. 衝突ペナルティ（オプション）
+#     # 足の高さがブロックより低いのに、XYがブロックに近い場合はペナルティ
+    
+#     # 最終報酬: XYとZの積、あるいは重み付け和
+#     return rew_xy * rew_z
+
+
+
+
+def fr_target_distance_reward_3d3(env, cmd_name="step_fr_to_block", block_name="stone2"):
+    """
+    可視化コードと全く同じロジックで計算する距離報酬
+    """
+    # --- 1. ブロック位置の取得（可視化コード準拠） ---
+    block = env.scene.rigid_objects[block_name]
+    
+    # 位置: 次元を確認して [B, 3] に整形
+    p = block.data.root_pos_w
+    blk_pos_w = p[:, 0, :] if p.ndim == 3 else p
+    
+    # 回転: 次元を確認して [B, 4] -> yaw -> R
+    q = block.data.root_quat_w
+    blk_quat_w = q[:, 0, :] if q.ndim == 3 else q
+    
+    w, x, y, z = blk_quat_w.unbind(-1)
+    yaw_blk = torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+    
+    cy, sy = torch.cos(yaw_blk), torch.sin(yaw_blk)
+    R = torch.stack(
+        [torch.stack([cy, -sy], dim=-1), torch.stack([sy, cy], dim=-1)],
+        dim=-2,
+    ) # [B,2,2]
+
+    # --- 2. ターゲット座標の計算（可視化コード準拠） ---
+    cmd = env.command_manager.get_command(cmd_name) # [B,2] or [B,3]
+    ux, uy = cmd[..., 0], cmd[..., 1]
+    t_xy = torch.stack([ux, uy], dim=-1) # [B,2]
+
+    # XY: ローカル座標 ux,uy をワールドへ
+    tgt_xy_w = (R @ t_xy.unsqueeze(-1)).squeeze(-1) + blk_pos_w[..., :2]
+    
+    # ★ Z: 可視化コードと完全に同じオフセットにする
+    # もし可視化でマーカーがちょうどいい位置にあるなら、これに従う
+    tgt_z_w = blk_pos_w[..., 2] + 0.15
+    
+    # 目標位置結合 [B,3]
+    tgt_pos_w = torch.cat([tgt_xy_w, tgt_z_w.unsqueeze(-1)], dim=-1)
+
+    # --- 3. FR足の位置（可視化コード準拠） ---
+    robot = env.scene.articulations["robot"]
+    fr_id = robot.body_names.index("FR_foot")
+    
+    # 可視化コードと同様の分岐処理
+    if hasattr(robot.data, "body_link_pose_w"):
+        fr_pose_w = robot.data.body_link_pose_w[:, fr_id] # [B,7]
+        fr_pos_w = fr_pose_w[:, :3]
+    else:
+        fr_pos_w = robot.data.body_pos_w[:, fr_id, :3]
+
+    # --- 4. 距離計算と報酬 ---
+    # XYとZを分ける（推奨）
+    dist_xy = torch.linalg.norm(tgt_pos_w[..., :2] - fr_pos_w[..., :2], dim=-1)
+    dist_z  = torch.abs(tgt_pos_w[..., 2] - fr_pos_w[..., 2])
+    
+    # (A) まずXYを近づける
+    rew_xy = 1.0 / (1.0 + dist_xy * 5.0)
+    
+    # (B) Zに関しては「クリアランス」を考慮
+    # ターゲットより遠い(>10cm)ときは、ターゲット高さ+5cm(回避高さ)を目指す
+    # ターゲットに近い(<10cm)ときは、ターゲット高さそのもの(着地)を目指す
+    is_far = (dist_xy > 0.10).float()
+    target_z_adaptive = is_far * (tgt_z_w + 0.05) + (1.0 - is_far) * tgt_z_w
+    
+    dist_z_adaptive = torch.abs(target_z_adaptive - fr_pos_w[..., 2])
+    rew_z = 1.0 / (1.0 + dist_z_adaptive * 10.0)
+
+    return rew_xy * rew_z
+
+
