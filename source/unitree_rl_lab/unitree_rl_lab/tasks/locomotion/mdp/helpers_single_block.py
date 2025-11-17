@@ -26,6 +26,27 @@ def _yaw_from_quat(q):  # q: [B,4] (w,x,y,z)
     return torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))  # [B]
 
 
+# def _yaw_from_quat(q, order="Auto"):
+#     if order == "xyzw":
+#         x, y, z, w = q.unbind(-1)
+#     elif order == "wxyz":
+#         w, x, y, z = q.unbind(-1)
+#     else:  # auto: w成分が先頭か末尾かで推定（多くの姿勢で有効）
+#         # いちばん大きい成分が w であることが多い性質を利用
+#         idx = q.abs().argmax(dim=-1)  # [...], 先頭or末尾が多い
+#         is_wxyz = (idx == 0)
+#         # 先頭をwとみなすケース
+#         w1, x1, y1, z1 = q.unbind(-1)
+#         # 末尾をwとみなすケース
+#         x2, y2, z2, w2 = q.unbind(-1)
+#         yaw_wxyz = torch.atan2(2*(w1*z1 + x1*y1), 1 - 2*(y1*y1 + z1*z1))
+#         yaw_xyzw = torch.atan2(2*(w2*z2 + x2*y2), 1 - 2*(y2*y2 + z2*z2))
+#         # 先頭がwと推定した要素は yaw_wxyz、そうでない要素は yaw_xyzw を採用
+#         return torch.where(is_wxyz, yaw_wxyz, yaw_xyzw)
+
+#     return torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+
+
 
 
 # --- block（単一インスタンス "stone2"） ---

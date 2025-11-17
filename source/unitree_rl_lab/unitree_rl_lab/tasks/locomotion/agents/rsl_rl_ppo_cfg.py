@@ -166,6 +166,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
                 "joint_pos_rel",
                 "joint_vel_rel",
                 "last_action", 
+                "fr_target_xy_rel",
+                "leg_position",
                 # "camera_image",
                 # "front_depth",
                 # "front_normals",
@@ -181,6 +183,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
                 "joint_vel_rel",
                 # "joint_effort",
                 "last_action",
+                "fr_target_xy_rel",
+                "leg_position",
                 #  "camera_image",
                 # "front_depth",
                 # "front_normals".

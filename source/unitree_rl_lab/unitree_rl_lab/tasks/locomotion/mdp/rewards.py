@@ -10,6 +10,7 @@ from isaaclab.sensors import ContactSensor
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.managers import ManagerTermBase, RewardTermCfg
 
 from isaaclab.utils.math import quat_apply_inverse
 
@@ -676,7 +677,7 @@ def feet_gap_discrete_penalty(
 
 from .helpers_single_block import _block_pos_w, _block_quat_w, _block_ang_vel_w, _yaw_from_quat
 
-from .helpers_single_block import _base_pos_xy, _base_yaw
+# from .helpers_single_block import _base_pos_xy, _base_yaw
 
 
 
@@ -722,6 +723,97 @@ def fr_on_block_rect(env: ManagerBasedRLEnv, margin=0.02):
     d_xy = (Rinv @ (fr_p[..., :2]-c_xy).unsqueeze(-1)).squeeze(-1)  # [B,2]
     inside = (d_xy[...,0].abs() <= hx) & (d_xy[...,1].abs() <= hy)
     return inside.float()  # [B]
+
+
+
+
+
+
+
+# def _rotmat_body_to_world_from_quat_wxyz(q):  # q=(w,x,y,z)
+#     w,x,y,z = q.unbind(-1)
+#     xx,yy,zz = x*x, y*y, z*z
+#     xy,xz,yz = x*y, x*z, y*z
+#     wx,wy,wz = w*x, w*y, w*z
+#     r00 = 1 - 2*(yy+zz); r01 = 2*(xy - wz);  r02 = 2*(xz + wy)
+#     r10 = 2*(xy + wz);   r11 = 1 - 2*(xx+zz); r12 = 2*(yz - wx)
+#     r20 = 2*(xz - wy);   r21 = 2*(yz + wx);  r22 = 1 - 2*(xx+yy)
+#     return torch.stack([torch.stack([r00,r01,r02],-1),
+#                         torch.stack([r10,r11,r12],-1),
+#                         torch.stack([r20,r21,r22],-1)], -2)
+
+# def _yaw_from_quat_wxyz(q):  # q=(w,x,y,z)
+#     w,x,y,z = q.unbind(-1)
+#     return torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+
+# def _rot2d(yaw):
+#     cy, sy = torch.cos(yaw), torch.sin(yaw)
+#     return torch.stack([torch.stack([cy, -sy], dim=-1),
+#                         torch.stack([sy,  cy], dim=-1)], dim=-2)  # [...,2,2]
+
+# # --- ベース座標で使えるユーティリティ ---
+# def _base_pose(env):
+#     robot = env.scene.articulations["robot"]
+#     p = robot.data.root_pos_w
+#     q = getattr(robot.data, "root_quat_w", robot.data.root_state[..., 3:7])  # wxyz
+#     R_bw = _rotmat_body_to_world_from_quat_wxyz(q)  # body->world
+#     R_wb = R_bw.transpose(1, 2)                     # world->body (base)
+#     return p, q, R_wb
+
+# def _fr_foot_pos_b(env):  # [B,3] (base座標)
+#     robot = env.scene.articulations["robot"]
+#     p_w, _, R_wb = _base_pose(env)
+#     i = robot.body_names.index("FR_foot")
+#     if hasattr(robot.data, "body_link_pose_w"):
+#         foot_w = robot.data.body_link_pose_w[:, i, :3]
+#     else:
+#         foot_w = robot.data.body_pos_w[:, i, :3]
+#     return torch.einsum('bij,bi->bj', R_wb, foot_w - p_w)
+
+# def _block_center_xy_b(env, key="stone2"):  # [B,2] (base座標XY)
+#     p_w, _, R_wb = _base_pose(env)
+#     blk = env.scene.rigid_objects[key]
+#     bp = blk.data.root_pos_w
+#     bp = bp[:, 0, :] if bp.ndim == 3 else bp
+#     c_b = torch.einsum('bij,bi->bj', R_wb, bp - p_w)
+#     return c_b[..., :2]
+
+# def _block_yaw_rel_base(env, key="stone2"):  # ブロックYaw - ベースYaw（相対yaw）
+#     _, q_base, _ = _base_pose(env)
+#     yaw_base = _yaw_from_quat_wxyz(q_base)
+#     blk = env.scene.rigid_objects[key]
+#     q = blk.data.root_quat_w
+#     q = q[:, 0, :] if q.ndim == 3 else q
+#     yaw_blk = _yaw_from_quat_wxyz(q)
+#     # 相対yaw（base基準で見たブロック面の向き）
+#     return (yaw_blk - yaw_base)
+
+# # --- 矩形内判定（ベース座標版） ---
+# def fr_on_block_rect_base(env, margin=0.02, key="stone2", half_x=0.1, half_y=0.1):
+#     """
+#     FR足がブロック上面の矩形（内側にmargin）に入っていれば1（ベース座標系で判定）
+#     """
+#     fr_b_xy = _fr_foot_pos_b(env)[..., :2]     # [B,2]
+#     c_b_xy  = _block_center_xy_b(env, key)     # [B,2]
+#     yaw_rel = _block_yaw_rel_base(env, key)    # [B]
+
+#     # base座標XY での相対位置を、ブロック軸に合わせて回転
+#     # R_base->block = rot2d(-(yaw_rel))
+#     R = _rot2d(-yaw_rel)                        # [B,2,2]
+#     d_xy_b = fr_b_xy - c_b_xy                   # [B,2]
+#     d_xy_block = (R @ d_xy_b.unsqueeze(-1)).squeeze(-1)  # [B,2]
+
+#     hx = half_x - margin
+#     hy = half_y - margin
+#     inside = (d_xy_block[..., 0].abs() <= hx) & (d_xy_block[..., 1].abs() <= hy)
+#     return inside.float()
+
+
+
+
+
+
+
 
 
 
@@ -779,6 +871,120 @@ def fr_on_block_bonus(env: ManagerBasedRLEnv, margin=0.02, block_key="stone2"):
 
     # ボーナス値を返す (bool -> float -> value)
     return success.float() * 5.0  # 大きめのボーナス（例: +5.0）
+
+
+
+
+
+
+
+
+def _yaw_from_quat_wxyz(q):
+    w,x,y,z = q.unbind(-1)
+    return torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+
+def _rot2d(yaw):
+    cy, sy = torch.cos(yaw), torch.sin(yaw)
+    return torch.stack([torch.stack([cy,-sy],-1),
+                        torch.stack([sy, cy],-1)], -2)
+
+class FROnBlockBonusOnce(ManagerTermBase):
+    """
+    FR がブロック上面矩形内(+接触)を T_hold_s 連続で満たした瞬間だけボーナス支払い。
+    RewardManager が *dt を掛ける前提なので、支払いステップのみ bonus/dt を返す。
+    """
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.block_name = P.get("block_name", "stone2")
+        self.half_x     = P.get("half_x", 0.10)
+        self.half_y     = P.get("half_y", 0.10)
+        self.margin     = P.get("margin", 0.02)
+        self.T_hold_s   = P.get("T_hold_s", 0.50)
+        self.bonus      = P.get("bonus", 5.0)
+        self.require_contact = P.get("require_contact", True)
+        self.contact_sensor  = P.get("contact_sensor_name", "contact_forces")
+
+        self.robot = env.scene.articulations["robot"]
+        self.fr_id = self.robot.body_names.index("FR_foot")
+        self.block = env.scene.rigid_objects[self.block_name]
+
+        # per-env 状態
+        self.hold_t = torch.zeros(env.num_envs, device=env.device)
+        self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+        # 任意: 接触センサ（あれば使う）
+        self.sensor = env.scene.sensors.get(self.contact_sensor, None)
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # --- ブロック yaw / 中心 ---
+        p = self.block.data.root_pos_w; blk_pos = p[:,0,:] if p.ndim==3 else p
+        q = self.block.data.root_quat_w; blk_q = q[:,0,:] if q.ndim==3 else q
+        yaw = _yaw_from_quat_wxyz(blk_q)
+        Rz = _rot2d(yaw); R_wb2 = Rz.transpose(-1,-2)
+
+        # --- FR 足先 ---
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            fr_w = self.robot.data.body_link_pose_w[:, self.fr_id, :3]
+        else:
+            fr_w = self.robot.data.body_pos_w[:, self.fr_id, :3]
+
+        # --- 矩形内判定（ブロック座標XY） ---
+        d_xy_blk = (R_wb2 @ (fr_w[...,:2] - blk_pos[...,:2]).unsqueeze(-1)).squeeze(-1)
+        hx = self.half_x - self.margin; hy = self.half_y - self.margin
+        inside = (d_xy_blk[...,0].abs() <= hx) & (d_xy_blk[...,1].abs() <= hy)
+
+        # --- 接触（あれば使う、無ければ inside のみ） ---
+
+        ft = env.scene.sensors["contact_forces"].data.net_forces_w
+        robot = env.scene.articulations["robot"]
+        # leg_index = {"FL": 0, "FR": 1, "RL": 2, "RR": 3}[leg]
+        fr_id = robot.body_names.index("FR_foot")
+        fz = ft[:, fr_id, 2]
+
+        # contact_forces = env.scene.net_contact_forces[:, body_idx, :]
+        on_contact = torch.norm(fz, dim=-1) > 1.0
+
+        good = inside & on_contact
+
+        # if self.require_contact and self.sensor is not None:
+        #     # センサによって shape が違うので is_contact があればそれを使うのが楽
+        #     if hasattr(self.sensor.data, "is_contact"):
+        #         on_contact = self.sensor.data.is_contact[:, 0]  # [B] を想定
+        #     else:
+        #         # フォールバック: net_forces_w のノルムで判定
+        #         F = getattr(self.sensor.data, "net_forces_w", None)
+        #         if F is not None:
+        #             fmag = F[:, 0].norm(dim=-1)                       # [B]
+        #             on_contact = fmag > 1.0
+        #         else:
+        #             on_contact = torch.ones_like(inside, dtype=torch.bool)
+        #     good = inside & on_contact
+        # else:
+        #     good = inside
+
+        # --- タイマ更新＆一回払い ---
+        dt = env.step_dt
+        self.hold_t = torch.where(good, self.hold_t + dt, torch.zeros_like(self.hold_t))
+
+        # just reached
+        reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+        payout  = torch.where(reached, torch.full_like(self.hold_t, self.bonus / dt),
+                              torch.zeros_like(self.hold_t))
+
+        # 状態更新
+        self.paid  |= reached
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.hold_t[m] = 0.0
+                self.paid[m]   = False
+
+        return payout
+
+
+
+
 
 
 
@@ -859,6 +1065,48 @@ def fr_target_progress_reward2(env, d_clip=0.05, cmd_name="step_fr_to_block", bl
     dt  = env.step_dt
     r = (approach_speed * dt).clamp(min=0.0, max=d_clip) # [B]  ← 常に >=0
     return r
+
+
+
+
+def fr_target_progress_reward3(env, d_clip=0.05, cmd_name="step_fr_to_block", block_key="stone2"):
+    # --- 目標XY（world）: あなたのコードそのまま ---
+    cmd = env.command_manager.get_command(cmd_name)  # [B,2]
+    ux, uy = cmd[..., 0], cmd[..., 1]
+    c_xy = _block_pos_w(env, block_key)[..., :2]
+    yaw  = _yaw_from_quat(_block_quat_w(env, block_key))
+    cy, sy = torch.cos(yaw), torch.sin(yaw)
+    R = torch.stack([torch.stack([cy, -sy], dim=-1),
+                     torch.stack([sy,  cy], dim=-1)], dim=-2)  # [B,2,2]
+    tgt_xy = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + c_xy  # [B,2]
+
+    # --- FRの位置・速度（world） ---
+    robot = env.scene.articulations["robot"]
+    fr_id = robot.body_names.index("FR_foot")
+    fr_pos_w = robot.data.body_pos_w[:, fr_id, :3]      # [B,3]
+    fr_v_w   = robot.data.body_vel_w[:, fr_id, :3]      # [B,3]
+
+    # --- 胴体（base）の運動（world） ---
+    base_pos_w = robot.data.root_pos_w                  # [B,3]
+    base_v_w   = robot.data.root_lin_vel_w              # [B,3]
+    base_om_w  = robot.data.root_ang_vel_w              # [B,3]
+
+    r_base_to_fr = fr_pos_w - base_pos_w                # [B,3]
+    rigid_v_at_fr = base_v_w + torch.cross(base_om_w, r_base_to_fr, dim=-1)  # [B,3]
+
+    # --- 相対速度（world） ---
+    v_rel_w = fr_v_w - rigid_v_at_fr                    # [B,3]
+    v_rel_xy = v_rel_w[:, :2]                           # [B,2]
+
+    # --- 方向ベクトル（FR→目標, world） ---
+    diff = tgt_xy - fr_pos_w[:, :2]                     # [B,2]
+    dist = torch.linalg.norm(diff, dim=-1).clamp_min(1e-6)
+    dir_to_tgt = diff / dist.unsqueeze(-1)              # [B,2]
+
+    # --- 進歩（符号付き; 往復は相殺） ---
+    dt = env.step_dt
+    r = (dir_to_tgt * v_rel_xy).sum(dim=-1) * dt        # [B]
+    return r.clamp(min=-d_clip, max=d_clip)
 
 
 
@@ -1082,3 +1330,266 @@ def fr_target_distance_reward_3d3(env, cmd_name="step_fr_to_block", block_name="
     return rew_xy * rew_z
 
 
+
+
+
+
+
+
+
+
+def _get_root_pos_w(data):
+    if hasattr(data, "root_pos_w"):   return data.root_pos_w
+    if hasattr(data, "root_state"):   return data.root_state[..., :3]
+    raise AttributeError("root position not found on ArticulationData")
+
+def _get_root_quat_w(data):
+    if hasattr(data, "root_quat_w"):     return data.root_quat_w          # [B,4] wxyz
+    if hasattr(data, "root_orient_w"):   return data.root_orient_w        # [B,4] wxyz（環境による）
+    if hasattr(data, "root_state"):      return data.root_state[..., 3:7] # [B,4] wxyz
+    raise AttributeError("root quaternion not found on ArticulationData")
+
+def _rotmat_body_to_world_from_quat_wxyz(q):  # q=(w,x,y,z)
+    w,x,y,z = q.unbind(-1)
+    xx,yy,zz = x*x, y*y, z*z
+    xy,xz,yz = x*y, x*z, y*z
+    wx,wy,wz = w*x, w*y, w*z
+    r00 = 1 - 2*(yy+zz); r01 = 2*(xy - wz);  r02 = 2*(xz + wy)
+    r10 = 2*(xy + wz);   r11 = 1 - 2*(xx+zz); r12 = 2*(yz - wx)
+    r20 = 2*(xz - wy);   r21 = 2*(yz + wx);  r22 = 1 - 2*(xx+yy)
+    return torch.stack([torch.stack([r00,r01,r02],-1),
+                        torch.stack([r10,r11,r12],-1),
+                        torch.stack([r20,r21,r22],-1)], -2)
+
+def _yaw_from_quat_wxyz(q):
+    w,x,y,z = q.unbind(-1)
+    return torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+
+def fr_target_distance_reward_3d4(
+    env,
+    cmd_name="step_fr_to_block",
+    block_name="stone2",
+    top_offset=0.15,
+    far_xy_thresh=0.10,
+    z_clearance=0.05,
+    sigma_xy=0.10,
+    sigma_z =0.05,
+):
+    """
+    ベース座標で (target - FR) の 3D 誤差を取り、異方性ガウシアン核で評価。
+    RewardManager 側で *dt が掛かる実装なので、ここでは dt を掛けない。
+    返り値: [B]
+    """
+    # --- ブロック姿勢（world） ---
+    block = env.scene.rigid_objects[block_name]
+    p = block.data.root_pos_w
+    blk_pos_w = p[:, 0, :] if p.ndim == 3 else p                # [B,3]
+    q = block.data.root_quat_w
+    blk_quat_w = q[:, 0, :] if q.ndim == 3 else q               # [B,4] (wxyz)
+
+    yaw = _yaw_from_quat_wxyz(blk_quat_w)                       # [B]
+    cy, sy = torch.cos(yaw), torch.sin(yaw)
+    Rz = torch.stack([torch.stack([cy,-sy],-1),
+                      torch.stack([sy, cy],-1)], -2)            # [B,2,2] block→world
+
+    # --- ターゲット（world） ---
+    cmd = env.command_manager.get_command(cmd_name)             # [B,2] (ux,uy)
+    tgt_xy_w = (Rz @ cmd.unsqueeze(-1)).squeeze(-1) + blk_pos_w[..., :2]
+    tgt_z_w  = blk_pos_w[..., 2] + top_offset
+    tgt_w    = torch.cat([tgt_xy_w, tgt_z_w.unsqueeze(-1)], dim=-1)  # [B,3]
+
+    # --- FR足（world） ---
+    robot = env.scene.articulations["robot"]
+    fr_id = robot.body_names.index("FR_foot")
+    if hasattr(robot.data, "body_link_pose_w"):
+        fr_w = robot.data.body_link_pose_w[:, fr_id, :3]
+    else:
+        fr_w = robot.data.body_pos_w[:, fr_id, :3]             # [B,3]
+
+    # --- base 姿勢（world）→ 回転行列 & 平行移動取得（安全版） ---
+    base_p_w = _get_root_pos_w(robot.data)                     # [B,3]
+    base_q_w = _get_root_quat_w(robot.data)                    # [B,4] wxyz
+    R_bw = _rotmat_body_to_world_from_quat_wxyz(base_q_w)      # [B,3,3]
+    R_wb = R_bw.transpose(1, 2)                                # world→base
+
+    # --- world→base へ変換 ---
+    tgt_b = torch.einsum('bij,bi->bj', R_wb, tgt_w - base_p_w) # [B,3]
+    fr_b  = torch.einsum('bij,bi->bj', R_wb, fr_w  - base_p_w) # [B,3]
+
+    # 遠いときは Z にクリアランス（base で判定＆付与）
+    dist_xy_b = (tgt_b[:, :2] - fr_b[:, :2]).norm(dim=-1)      # [B]
+    tgt_b_z   = torch.where(dist_xy_b > far_xy_thresh,
+                            tgt_b[:, 2] + z_clearance,
+                            tgt_b[:, 2])
+    tgt_b = torch.stack([tgt_b[:,0], tgt_b[:,1], tgt_b_z], dim=-1)
+
+    # --- ガウシアン核（異方性） ---
+    err = tgt_b - fr_b
+    e_xy2 = (err[:,0]**2 + err[:,1]**2) / (sigma_xy**2 + 1e-12)
+    e_z2  = (err[:,2]**2)               / (sigma_z**2  + 1e-12)
+    q = 0.5 * (e_xy2 + e_z2)
+    r = torch.exp(-q)                                         # [B]
+    return r
+
+
+
+
+
+
+
+
+
+
+from isaaclab.managers import ManagerTermBase, RewardTermCfg
+from isaaclab.envs import ManagerBasedRLEnv
+
+class FRProgressToStone(ManagerTermBase):
+    """FR足の target までの3D距離の差分（prev - curr）を返す。
+       ManagerTermBase として実装し、prev_dist を内部に保持する。"""
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.block_name = P.get("block_name", "stone2")
+        self.cmd_name   = P.get("cmd_name", "step_fr_to_block")
+        self.top_offset = P.get("top_offset", 0.15)
+        self.d_clip     = P.get("d_clip", 0.05)
+
+        self.robot = env.scene.articulations["robot"]
+        self.fr_id = self.robot.body_names.index("FR_foot")
+        self.block = env.scene.rigid_objects[self.block_name]
+
+        # per-env バッファ（このクラスの“状態”）
+        self.prev_dist = torch.zeros(env.num_envs, device=env.device)
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # --- 目標 (world) ---
+        p = self.block.data.root_pos_w
+        blk_pos = p[:, 0, :] if p.ndim == 3 else p      # [B,3]
+
+        q = self.block.data.root_quat_w                 # wxyz
+        q = q[:, 0, :] if q.ndim == 3 else q
+        w,x,y,z = q.unbind(-1)
+        yaw = torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+        cy, sy = torch.cos(yaw), torch.sin(yaw)
+        R = torch.stack([torch.stack([cy,-sy],-1), torch.stack([sy,cy],-1)], -2)
+
+        cmd = env.command_manager.get_command(self.cmd_name)        # [B,2]
+        tgt_xy = (R @ cmd.unsqueeze(-1)).squeeze(-1) + blk_pos[:, :2]
+        tgt_z  = blk_pos[:, 2] + self.top_offset
+        tgt    = torch.cat([tgt_xy, tgt_z.unsqueeze(-1)], dim=-1)   # [B,3]
+
+        # --- FR足の位置 (world) ---
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            fr = self.robot.data.body_link_pose_w[:, self.fr_id, :3]
+        else:
+            fr = self.robot.data.body_pos_w[:, self.fr_id, :3]
+
+        # --- 距離と進歩 ---
+        diff    = tgt - fr
+        dist_xy = diff[:, :2].norm(dim=-1)
+        dist_z  = diff[:,  2].abs()
+        dist    = torch.sqrt(dist_xy**2 + dist_z**2)                # [B]
+
+        # エピソードリセットで prev を初期化
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.prev_dist[m] = dist[m].detach()
+
+        # 初回 or 未初期化は 0 を返して初期化
+        if not torch.isfinite(self.prev_dist).all():
+            self.prev_dist[:] = dist.detach()
+            return torch.zeros_like(dist)
+
+        delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
+        self.prev_dist = dist.detach()
+        return delta  
+
+
+
+
+
+def _rotmat_body_to_world_from_quat_wxyz(q):  # q=(w,x,y,z)
+    w,x,y,z = q.unbind(-1)
+    xx,yy,zz = x*x, y*y, z*z
+    xy,xz,yz = x*y, x*z, y*z
+    wx,wy,wz = w*x, w*y, w*z
+    r00 = 1 - 2*(yy+zz); r01 = 2*(xy - wz);  r02 = 2*(xz + wy)
+    r10 = 2*(xy + wz);   r11 = 1 - 2*(xx+zz); r12 = 2*(yz - wx)
+    r20 = 2*(xz - wy);   r21 = 2*(yz + wx);  r22 = 1 - 2*(xx+yy)
+    return torch.stack([torch.stack([r00,r01,r02],-1),
+                        torch.stack([r10,r11,r12],-1),
+                        torch.stack([r20,r21,r22],-1)], -2)
+
+class FRProgressToStoneBase(ManagerTermBase):
+    """FR足の target までの3D距離（base座標）の差分（prev - curr）を返す。"""
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.block_name = P.get("block_name", "stone2")
+        self.cmd_name   = P.get("cmd_name", "step_fr_to_block")
+        self.top_offset = P.get("top_offset", 0.15)
+        self.d_clip     = P.get("d_clip", 0.1)
+
+        self.robot = env.scene.articulations["robot"]
+        self.fr_id = self.robot.body_names.index("FR_foot")
+        self.block = env.scene.rigid_objects[self.block_name]
+
+        # per-env バッファ（base距離の前回値）
+        self.prev_dist = torch.full((env.num_envs,), float("nan"), device=env.device)
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # --- ブロック姿勢（world） ---
+        p = self.block.data.root_pos_w
+        blk_pos = p[:, 0, :] if p.ndim == 3 else p                    # [B,3]
+        q = self.block.data.root_quat_w
+        q = q[:, 0, :] if q.ndim == 3 else q                          # [B,4] (wxyz)
+        w,x,y,z = q.unbind(-1)
+        yaw = torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))           # [B]
+        cy, sy = torch.cos(yaw), torch.sin(yaw)
+        R2 = torch.stack([torch.stack([cy,-sy],-1),
+                          torch.stack([sy, cy],-1)], -2)              # [B,2,2] block→world (yaw)
+
+        # --- ターゲット（world） ---
+        cmd = env.command_manager.get_command(self.cmd_name)          # [B,2] (ux,uy)
+        tgt_xy = (R2 @ cmd.unsqueeze(-1)).squeeze(-1) + blk_pos[:, :2]
+        tgt_z  = blk_pos[:, 2] + self.top_offset
+        tgt_w  = torch.cat([tgt_xy, tgt_z.unsqueeze(-1)], dim=-1)     # [B,3]
+
+        # --- FR足（world） ---
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            fr_w = self.robot.data.body_link_pose_w[:, self.fr_id, :3]
+        else:
+            fr_w = self.robot.data.body_pos_w[:, self.fr_id, :3]      # [B,3]
+
+        # --- base姿勢（world） ---
+        base_p = self.robot.data.root_pos_w                           # [B,3]
+        if hasattr(self.robot.data, "root_quat_w"):
+            base_q = self.robot.data.root_quat_w                      # [B,4] (wxyz)
+        else:
+            base_q = self.robot.data.root_state[..., 3:7]             # [B,4] (wxyz想定)
+
+        R_bw = _rotmat_body_to_world_from_quat_wxyz(base_q)           # [B,3,3]
+        R_wb = R_bw.transpose(1, 2)                                    # world→base
+
+        # --- world→base 変換 ---
+        tgt_b = torch.einsum('bij,bi->bj', R_wb, tgt_w - base_p)      # [B,3]
+        fr_b  = torch.einsum('bij,bi->bj', R_wb, fr_w  - base_p)      # [B,3]
+
+        # --- base座標の3D距離 & 進歩 ---
+        dist = (tgt_b - fr_b).norm(dim=-1)                            # [B]
+
+        # リセット時は prev を再初期化
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.prev_dist[m] = dist[m].detach()
+
+        # 初回は0返して初期化
+        if not torch.isfinite(self.prev_dist).all():
+            self.prev_dist[:] = dist.detach()
+            return torch.zeros_like(dist)
+
+        delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
+        self.prev_dist = dist.detach()
+        return delta

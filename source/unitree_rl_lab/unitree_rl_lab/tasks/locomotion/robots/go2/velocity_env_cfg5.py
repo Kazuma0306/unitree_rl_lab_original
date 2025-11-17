@@ -488,7 +488,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(0.2, 0.2, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=3.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=0.9, dynamic_friction=0.8, restitution=0.0
@@ -506,7 +506,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(0.2, 0.2, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=3.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=0.9, dynamic_friction=0.8, restitution=0.0
@@ -733,7 +733,10 @@ class ObservationsCfg:
 
         position_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "step_fr_to_block"})
 
-        fr_target_xy_rel = ObsTerm(func=mdp.fr_target_xy_rel_single_block, clip=(-1.0, 1.0)) 
+        # fr_target_xy_rel = ObsTerm(func=mdp.fr_target_xy_rel_single_block, clip=(-1.0, 1.0)) 
+        fr_target_xy_rel = ObsTerm(func=mdp.leg_xy_err) #ベース座標系での目標誤差
+
+        leg_position = ObsTerm(func = mdp.ee_pos_base_obs)#ベース座標系での脚位置
 
 
         # position_commands = ObsTerm(
@@ -805,7 +808,15 @@ class ObservationsCfg:
 
         position_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "step_fr_to_block"})
 
-        fr_target_xy_rel = ObsTerm(func=mdp.fr_target_xy_rel_single_block, clip=(-1.0, 1.0)) 
+        # fr_target_xy_rel = ObsTerm(func=mdp.fr_target_xy_rel_single_block, clip=(-1.0, 1.0)) 
+
+        fr_target_xy_rel = ObsTerm(func=mdp.leg_xy_err) 
+
+        leg_position = ObsTerm(func = mdp.ee_pos_base_obs)
+
+        
+
+
 
 
 
@@ -920,7 +931,9 @@ class RewardsCfg:
 
 
     #指定位置へ脚を置くbonus
-    fr_on_block = RewTerm(func=mdp.fr_on_block_rect, weight=1.0, params=dict(margin=0.01))
+    # fr_on_block = RewTerm(func=mdp.fr_on_block_rect, weight=0.05, params=dict(margin=0.01)) #ブロック座標系で、脚がブロック範囲内かどうか
+    # fr_on_block_bonus = RewTerm(func=mdp.fr_on_block_bonus, weight= 0.5) #ブロック座標系、タッチ評価
+    fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 2.5) #ブロック座標系、連続タッチ評価
 
     
     # そっと置く
@@ -935,10 +948,11 @@ class RewardsCfg:
     # ブロックを動かさない
     block_angvel = RewTerm(func=mdp.ang_vel, weight=-0.35)
 
-    progress_to_stone = RewTerm(func=mdp.fr_target_progress_reward2, weight=0.8,
-    )
+    # progress_to_stone = RewTerm(func=mdp.fr_target_progress_reward3, weight=2.5,#ワールド座標系だが内積を撮っているので問題なし、FRProgressToStoneBaseと役割がかぶる
+    # )　しかも報酬内でDtをかけるようになっているので二重がけになる
 
-    # distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d3, weight = 0.1)
+    distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d4, weight = 0.5) #ベース座標系での距離
+    distance_progress = RewTerm(func= mdp.FRProgressToStoneBase, weight = 10)#ベース座標系での進捗
 
 
   
@@ -948,9 +962,9 @@ class RewardsCfg:
     # base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
     # joint_vel = RewTerm(func=mdp.joint_vel_l2, weight=-0.001)
     # joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
+    joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
     # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
     # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
     energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
@@ -1034,7 +1048,7 @@ class RewardsCfg:
         },
     )
 
-    # termination_penalty = RewTerm(func=mdp.is_terminated, weight= -10.0)
+    # termination_penalty = RewTerm(func=mdp.is_terminated, weight= -2.0)
 
     # stand_still = RewTerm(
     #     func=mdp.stand_still,
@@ -1116,8 +1130,7 @@ class TerminationsCfg:
 
     # ★ 追加：成功（保持できたら終了）
     success_hold = DoneTerm(
-        func=mdp.success_hold_fr_single_block,
-        params={"T_hold_s": 1.0}
+        func=mdp.HoldFROnBlockWithContact,
         # time_outフラグは付けない（成功エピソードとしてカウントしたい）
     )
 
