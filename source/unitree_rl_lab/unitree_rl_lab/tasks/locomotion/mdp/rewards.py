@@ -1593,3 +1593,565 @@ class FRProgressToStoneBase(ManagerTermBase):
         delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
         self.prev_dist = dist.detach()
         return delta
+
+
+
+
+
+
+
+
+
+
+LEG_ORDER = ("FL_foot","FR_foot","RL_foot","RR_foot")
+
+
+def _rotmat_body_to_world_from_quat_wxyz(q):  # 既存のあなたの関数
+    w, x, y, z = q.unbind(-1)
+    xx, yy, zz = x*x, y*y, z*z
+    xy, xz, yz = x*y, x*z, y*z
+    wx, wy, wz = w*x, w*y, w*z
+    r00 = 1 - 2*(yy + zz); r01 = 2*(xy - wz);     r02 = 2*(xz + wy)
+    r10 = 2*(xy + wz);     r11 = 1 - 2*(xx + zz); r12 = 2*(yz - wx)
+    r20 = 2*(xz - wy);     r21 = 2*(yz + wx);     r22 = 1 - 2*(xx + yy)
+    return torch.stack([torch.stack([r00, r01, r02], -1),
+                        torch.stack([r10, r11, r12], -1),
+                        torch.stack([r20, r21, r22], -1)], -2)
+
+def _rotmat_world_to_body_from_quat_wxyz(q):
+    # body->world の転置が world->body
+    R_bw = _rotmat_body_to_world_from_quat_wxyz(q)
+    return R_bw.transpose(-1, -2)  # [B,3,3]
+
+def _get_root_pos_w(data):
+    if hasattr(data, "root_pos_w"):   return data.root_pos_w          # [B,3]
+    if hasattr(data, "root_state"):   return data.root_state[..., :3] # [B,3]
+    raise AttributeError("root position not found")
+
+def _get_root_quat_w(data):
+    if hasattr(data, "root_quat_w"):     return data.root_quat_w      # [B,4] (wxyz)
+    if hasattr(data, "root_orient_w"):   return data.root_orient_w    # [B,4] (wxyz)
+    if hasattr(data, "root_state"):      return data.root_state[..., 3:7]  # [B,4] (wxyz)
+    raise AttributeError("root quaternion not found")
+
+def _get_feet_pos_w(data, robot, leg_names=LEG_ORDER):
+    idxs = [robot.body_names.index(n) for n in leg_names]
+    if hasattr(data, "body_link_pose_w"):
+        return data.body_link_pose_w[:, idxs, :3]  # [B,4,3]
+    if hasattr(data, "body_pos_w"):
+        return data.body_pos_w[:, idxs, :3]        # [B,4,3]
+    if hasattr(data, "link_pos_w"):
+        return data.link_pos_w[:, idxs, :3]        # [B,4,3]
+    raise AttributeError("foot positions not found")
+
+def feet_pos_base(env, leg_names=LEG_ORDER):
+    """全脚の足先位置をベース座標系で返す: [B, 4, 3]"""
+    robot = env.scene.articulations["robot"]
+    base_p_w = _get_root_pos_w(robot.data)                 # [B,3]
+    base_q_w = _get_root_quat_w(robot.data)                # [B,4] (wxyz)
+    R_wb3    = _rotmat_world_to_body_from_quat_wxyz(base_q_w)  # [B,3,3]
+    feet_w   = _get_feet_pos_w(robot.data, robot, leg_names)   # [B,4,3]
+    # world -> base
+    diff     = feet_w - base_p_w.unsqueeze(1)              # [B,4,3]
+    feet_b   = (R_wb3 @ diff.transpose(-1, -2)).transpose(-1, -2)  # [B,4,3]
+    return feet_b
+
+
+def targets_base_from_command(env, cmd_name="multi_leg_targets", leg_names=LEG_ORDER):
+    """
+    CommandManager から各脚の目標(ベース座標)を取得。
+    返り値: [B, 4, 3] (順序は leg_names)
+    """
+    cmd = env.command_manager.get_command(cmd_name)
+    if cmd.dim() == 2 and cmd.shape[1] == 12:
+        tgt_b = cmd.view(cmd.shape[0], 4, 3)  # [B,4,3]
+    elif cmd.dim() == 3 and cmd.shape[1:] == (4, 3):
+        tgt_b = cmd
+    else:
+        raise ValueError(f"Unexpected command shape for '{cmd_name}': {tuple(cmd.shape)}. Expect [B,12] or [B,4,3].")
+    # 並びが環境の body_names と異なる場合は leg_names に合わせて並べ替える処理をここに挟んでください。
+    return tgt_b
+
+
+
+
+
+# consider all legs
+ 
+
+# 前提: 下記の2ヘルパは既に実装済み（前回提案）。
+# feet_pos_base(env)               -> [B, 4, 3]  各脚の足先(ベース系)
+# targets_base_from_command(env, cmd_name) -> [B, 4, 3]  各脚の目標(ベース系)
+
+# def legs_reward_worst_linear(
+#     env,
+#     cmd_name: str = "step_fr_to_block",
+#     sxy: float = 0.10,     # XY の許容スケール (m) 例: 10 cm
+#     sz:  float = 0.05,     # Z  の許容スケール (m) 例: 5  cm
+#     scale: float = 2.0,    # どの距離まで 0→1 を線形に割り当てるか（大きいほど優しい）
+#     use_legs: tuple[str,...] = LEG_ORDER,  # 対象にする脚（デフォルト全脚）
+# ) -> torch.Tensor:
+#     """
+#     各脚の正規化距離 d_i を計算し、d_worst = max_i d_i を取って
+#     r = clip(1 - d_worst/scale, 0, 1) を返す。返り値 [B]。
+#     - すべてベース座標系で計算
+#     - RewardManager 側で *dt が掛かるのでここでは掛けない
+#     """
+#     # --- 目標/実測（ベース系） ---
+#     feet_b = feet_pos_base(env, leg_names=use_legs)          # [B,L,3]
+#     tgt_b  = targets_base_from_command(env, cmd_name)        # [B,4,3] 全脚
+#     # use_legs の順序に合わせて抽出
+#     name_to_idx = {n:i for i,n in enumerate(LEG_ORDER)}
+#     idxs = torch.tensor([name_to_idx[n] for n in use_legs], device=feet_b.device)
+#     tgt_b = tgt_b.index_select(dim=1, index=idxs)            # [B,L,3]
+
+#     # --- 正規化距離 d_i（異方性） ---
+#     err = tgt_b - feet_b                                     # [B,L,3]
+#     d = torch.sqrt(
+#         (err[...,0]/(sxy+1e-12))**2 +
+#         (err[...,1]/(sxy+1e-12))**2 +
+#         (err[...,2]/(sz +1e-12))**2
+#     )                                                        # [B,L]
+
+#     # --- ワースト脚だけ見る ---
+#     d_worst = d.max(dim=-1).values                           # [B]
+
+#     # --- 線形クリップ（0〜1） ---
+#     r = 1.0 - d_worst / max(scale, 1e-12)
+#     return r.clamp_(0.0, 1.0) 
+
+
+
+# def legs_reward_gaussian(
+#     env,
+#     cmd_name: str = "step_fr_to_block",
+#     sxy: float = 0.10,
+#     sz:  float = 0.05,
+#     use_legs: tuple[str,...] = LEG_ORDER,
+#     fr_name: str = "FR_foot",
+#     fr_weight: float = 3.0,         # ★ FR だけ重くする
+# ) -> torch.Tensor:
+#     """
+#     全脚の正規化誤差をガウスカーネルに入れ、その平均（または積）を取る。
+#     - 遠くても勾配が消えない,無限遠で0になるだけ
+#     - 全ての脚を同時に良くしようとする
+#     """
+#     dev = env.device 
+
+#     # 1. 誤差取得（ここは同じ）
+#     feet_b = feet_pos_base(env, leg_names=use_legs)
+#     tgt_b  = targets_base_from_command(env, cmd_name)
+#     name_to_idx = {n:i for i,n in enumerate(LEG_ORDER)}
+#     idxs = torch.tensor([name_to_idx[n] for n in use_legs], device=feet_b.device)
+#     tgt_b = tgt_b.index_select(dim=1, index=idxs)
+
+#     err = tgt_b - feet_b # [B, L, 3]
+
+#     # 2. 二乗誤差の重み付け和 (Mahalanobis distance squared)
+#     #    sum( (err/scale)^2 )
+#     dist_sq = (err[..., 0] / sxy)**2 + \
+#               (err[..., 1] / sxy)**2 + \
+#               (err[..., 2] / sz)**2  # [B, L]
+
+#     # 3. ガウスカーネル変換: exp(-dist_sq)
+#     #    これで各脚のスコアが 0.0(ダメ) ～ 1.0(完璧) になる
+#     leg_scores = torch.exp(-0.5 * dist_sq)  # [B, L]
+
+#     # 4. 全脚の平均（または最小値、積）を返す
+#     #    mean: 「全体的に良くせよ」 (推奨)
+#     #    min : 「一番ダメなやつを引き上げろ」 (Max戦略を滑らかにしたもの)
+#     #    prod: 「全部良くないと点は低い」 (厳しい)
+#     # return leg_scores.mean(dim=-1)
+
+
+#     # 4. 重み付き平均
+#     L = len(use_legs)
+#     weights = torch.ones(L, device=dev)
+
+#     # use_legs の中で FR にだけ fr_weight を掛ける
+#     if fr_name in use_legs:
+#         fr_local_idx = use_legs.index(fr_name)   # 0～L-1
+#         weights[fr_local_idx] = fr_weight
+
+#     # [B,L] * [L] → [B,L]
+#     weighted = leg_scores * weights
+#     return weighted.sum(dim=-1) / weights.sum()
+
+
+
+
+def legs_reward_gaussian(
+    env,
+    cmd_name: str = "step_fr_to_block",          # MultiLegBaseCommand など
+    use_legs: tuple[str, ...] = LEG_ORDER,     # 例: ("FL_foot","FR_foot","RL_foot","RR_foot")
+    fr_name: str = "FR_foot", # weighted leg
+    fr_weight: float = 3.0,
+    clearance_legs: tuple[str, ...] = ("FR_foot",),  # Zクリアランスを入れる脚（デフォルトFRだけ）
+    far_xy_thresh: float = 0.10,              # baseでのXY距離閾値
+    z_clearance: float = 0.05,                # 遠いときにターゲットZをどれだけ上げるか
+    sigma_xy: float = 0.10,
+    sigma_z: float = 0.05,
+) -> torch.Tensor:
+    """
+    ベース座標で (target - foot) の3D誤差を取り、
+    FR版 fr_target_distance_reward_3d4 と同じ異方性ガウスカーネルで評価。
+    XYが遠いときはターゲットZを持ち上げることで「足を上げる」動きを誘発する。
+
+    返り値: [B] FRに重みをかけた脚スコアの重み付き平均
+    """
+    dev = env.device
+
+    # 1. 各脚の foot/target (base座標) を取得
+    feet_b = feet_pos_base(env, leg_names=use_legs)          # [B, L, 3]
+
+    # targets_base_from_command は [B,4,3] を LEG_ORDER 順に返す前提
+    tgt_b_all = targets_base_from_command(env, cmd_name)     # [B, 4, 3]
+
+    # use_legs の順に並び替え
+    name_to_idx = {n: i for i, n in enumerate(LEG_ORDER)}
+    idxs = torch.tensor([name_to_idx[n] for n in use_legs], device=dev)
+    tgt_b = tgt_b_all.index_select(dim=1, index=idxs)        # [B, L, 3]
+
+    # 2. 誤差と XY 距離
+    err = tgt_b - feet_b                                     # [B, L, 3]
+    dist_xy = (err[..., :2].norm(dim=-1))                    # [B, L]
+
+    B, L, _ = err.shape
+
+    # 3. どの脚に Zクリアランスを適用するか（FRだけ / 全脚など）
+    clear_mask = torch.zeros(L, dtype=torch.bool, device=dev)
+    for leg in clearance_legs:
+        if leg in use_legs:
+            clear_mask[use_legs.index(leg)] = True
+    # [B,L] にブロードキャスト
+    clear_mask_B = clear_mask.unsqueeze(0).expand(B, L)
+
+    # 「遠く & クリアランス対象の脚」
+    far = dist_xy > far_xy_thresh             # [B,L]
+    use_clear = far & clear_mask_B           # [B,L]
+
+    # 4. Z成分だけ「ターゲットZを持ち上げたとみなす」
+    #    FR版では tgt_b_z = tgt_b_z + z_clearance なので、
+    #    err_z = tgt_z - foot_z に対して z_clearance を足すのと同じ。
+    err_z = tgt_b[..., 2] - feet_b[..., 2]   # [B,L]
+    err_z = torch.where(use_clear, err_z + z_clearance, err_z)  # [B,L]
+
+    # 5. 異方性ガウスカーネル
+    # XY は元の err をそのまま使う
+    e_xy2 = (err[..., 0] ** 2 + err[..., 1] ** 2) / (sigma_xy ** 2 + 1e-12)  # [B,L]
+    e_z2  = (err_z ** 2) / (sigma_z ** 2 + 1e-12)                            # [B,L]
+
+    q = 0.5 * (e_xy2 + e_z2)
+    leg_scores = torch.exp(-q)                                               # [B,L], 0〜1
+
+    # 6. FR に重みをかけた重み付き平均
+    weights = torch.ones(L, device=dev)
+    if fr_name in use_legs:
+        fr_local_idx = use_legs.index(fr_name)
+        weights[fr_local_idx] = fr_weight
+
+    weighted = leg_scores * weights               # [B,L]
+    return weighted.sum(dim=-1) / weights.sum()   # [B]
+
+
+
+
+
+
+class LegsProgressToTargetsBase(ManagerTermBase):
+    """
+    各脚の target(ベース座標) までの3D距離の差分 (prev - curr) を計算し、
+    脚ごとにクリップして“weighted和”または“平均”で集約する報酬。
+    返り値: [B]
+    """
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.cmd_name   = P.get("cmd_name", "step_fr_to_block")  # ベース系の各脚ターゲットを出すコマンド
+        self.leg_names  = tuple(P.get("leg_names", LEG_ORDER))
+        self.d_clip     = float(P.get("d_clip", 0.10))            # 脚ごとの進歩クリップ幅
+        self.reduction  = P.get("reduction", "sum")               # "sum" or "mean"
+        self.per_leg_weight = P.get("per_leg_weight", {"FL_foot":1, "FR_foot":3, "RL_foot":1, "RR_foot":1})       # 例 {"FR_foot": 1.5}
+
+        self.robot = env.scene.articulations["robot"]
+        self.L = len(self.leg_names)
+
+        # per-env・per-leg の前回距離バッファ（NaNで未初期化を表す）
+        self.prev_dist = torch.full((env.num_envs, self.L), float("nan"), device=env.device)
+
+        # name->index（targetsが [B,4,3] で固定順のときに並び替え用）
+        self.name_to_idx_all = {n: i for i, n in enumerate(LEG_ORDER)}
+        self.sel_indices = torch.tensor(
+            [self.name_to_idx_all.get(n, None) for n in self.leg_names],
+            device=env.device, dtype=torch.long
+        )
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # --- 実測(ベース) foot 位置 [B,L,3] ---
+        feet_b = feet_pos_base(env, leg_names=self.leg_names)   # [B,L,3]
+
+        # --- ターゲット(ベース) [B,L,3] に揃える ---
+        tgt_b_all = targets_base_from_command(env, self.cmd_name)   # [B,4,3] or [B,L,3]
+        if tgt_b_all.shape[1] != self.L:
+            # 例えば [B,4,3] → 選択順に並べ替え
+            tgt_b = tgt_b_all.index_select(dim=1, index=self.sel_indices)  # [B,L,3]
+        else:
+            tgt_b = tgt_b_all
+
+        # --- 距離（ベース） ---
+        dist = (tgt_b - feet_b).norm(dim=-1)  # [B,L]
+
+        # リセット時に prev を再初期化
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.prev_dist[m] = dist[m].detach()
+
+        # 初回は0を返して prev を初期化
+        if not torch.isfinite(self.prev_dist).all():
+            self.prev_dist[:] = dist.detach()
+            return torch.zeros(dist.shape[0], device=dist.device)
+
+        # --- 進歩（前回 − 現在）を脚ごとにクリップ ---
+        delta_leg = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)  # [B,L]
+        self.prev_dist = dist.detach()
+
+        # --- 脚重み & 集約 ---
+        if self.per_leg_weight is None:
+            # sum/mean の違いだけ（meanは脚数で割る）
+            r = delta_leg.sum(dim=-1) if self.reduction == "sum" else delta_leg.mean(dim=-1)
+        else:
+            w = torch.tensor([self.per_leg_weight.get(n, 1.0) for n in self.leg_names],
+                             device=dist.device, dtype=dist.dtype)  # [L]
+            if self.reduction == "mean":
+                w = w / (w.sum() + 1e-12)
+            r = (delta_leg * w.view(1, self.L)).sum(dim=-1)  # [B]
+
+        return r  # RewardManager側で * dt が掛かる
+    
+
+
+
+    
+
+
+
+
+
+
+
+
+def _rot3_from_quat_wxyz(q): # [B,3,3]
+    w,x,y,z = q.unbind(-1)
+    xx,yy,zz = x*x, y*y, z*z
+    xy,xz,yz = x*y, x*z, y*z
+    wx,wy,wz = w*x, w*y, w*z
+    r00 = 1 - 2*(yy+zz); r01 = 2*(xy-wz);   r02 = 2*(xz+wy)
+    r10 = 2*(xy+wz);     r11 = 1 - 2*(xx+zz); r12 = 2*(yz-wx)
+    r20 = 2*(xz-wy);     r21 = 2*(yz+wx);   r22 = 1 - 2*(xx+yy)
+    return torch.stack([torch.stack([r00,r01,r02], -1),
+                        torch.stack([r10,r11,r12], -1),
+                        torch.stack([r20,r21,r22], -1)], -2)
+
+
+class MultiLegHoldBonusOnce(ManagerTermBase):
+    """
+    FR がブロック上面矩形内(+接触)にあり、
+    かつ FL / RL / RR が MultiLegBaseCommand で指定された
+    ベース座標系の目標位置「周辺」で接触を保っている状態が
+    T_hold_s 続いた瞬間に一度だけボーナスを支払う。
+
+    ※ RewardManager 側で *dt を掛ける前提なので、
+      支払いステップのみ bonus/dt を返す。
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.env = env
+
+        # --- ブロック関連 ---
+        self.block_name = P.get("block_name", "stone2")
+        self.half_x     = P.get("half_x", 0.10)
+        self.half_y     = P.get("half_y", 0.10)
+        self.margin     = P.get("margin", 0.02)
+
+        # --- 時間・ボーナス ---
+        self.T_hold_s   = P.get("T_hold_s", 0.50)
+        self.bonus      = P.get("bonus", 0.5)
+
+        # --- 接触判定 ---
+        self.require_contact    = P.get("require_contact", True)
+        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+        self.contact_threshold  = P.get("contact_threshold", 1.0)  # [N] |Fz| > これで接触
+
+        # --- MultiLegBaseCommand から取るコマンド名 ---
+        # Hydra 側で command_manager に登録した名前をここに渡す
+        self.cmd_name = P.get("cmd_name", "step_fr_to_block")
+
+        # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と同じにする）---
+        self.leg_order = P.get(
+            "leg_order",
+            ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+        )
+        self.num_legs = len(self.leg_order)
+
+        # FR の名前
+        self.fr_leg_name = P.get("fr_leg_name", "FR_foot")
+
+        # FL/RL/RR が「コマンド目標周辺」にいるとみなす XY 距離 [m]
+        self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
+
+        # --- シーン参照 ---
+        scene = env.scene
+        self.robot = scene.articulations["robot"]
+        self.block = scene.rigid_objects[self.block_name]
+
+        # leg_name -> index, body_names -> index
+        self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
+        self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
+
+        assert self.fr_leg_name in self.leg_to_idx, \
+            f"fr_leg_name {self.fr_leg_name} が leg_order にありません"
+        self.fr_idx = self.leg_to_idx[self.fr_leg_name]
+
+        # --- 状態 ---
+        self.hold_t = torch.zeros(env.num_envs, device=env.device)
+        self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+        # 接触センサ（あれば）
+        self.sensor = scene.sensors.get(self.contact_sensor_name, None)
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        device = env.device
+        B = env.num_envs
+        dt = env.step_dt
+        scene = env.scene
+
+        # ==============================
+        # 1. ブロック姿勢（yaw, 中心）
+        # ==============================
+        p = self.block.data.root_pos_w
+        blk_pos = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
+
+        q = self.block.data.root_quat_w
+        blk_q = q[:, 0, :] if q.ndim == 3 else q    # [B,4]
+
+        yaw = _yaw_from_quat_wxyz(blk_q)            # [B]
+        Rz = _rot2d(yaw)                            # [B,2,2]
+        R_wb2 = Rz.transpose(-1, -2)                # [B,2,2] world -> block (XY)
+
+        # ==============================
+        # 2. 足先位置（world） [B, num_legs, 3]
+        # ==============================
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+        else:
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+        feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
+
+        # FR の world 座標
+        fr_xy_w = feet_xy_w[:, self.fr_idx, :]  # [B,2]
+
+        # ==============================
+        # 3. FR がブロック上面矩形内か？
+        # ==============================
+        d_xy_blk = (R_wb2 @ (fr_xy_w - blk_pos[..., :2]).unsqueeze(-1)).squeeze(-1)  # [B,2]
+        hx = self.half_x - self.margin
+        hy = self.half_y - self.margin
+        inside = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)     # [B]
+
+        # ==============================
+        # 4. 接触判定（各足）
+        # ==============================
+        if self.require_contact and (self.sensor is not None):
+            F = getattr(self.sensor.data, "net_forces_w", None)  # [B, num_bodies, 3] を想定
+            if F is not None:
+                # 各脚の Z 方向力 [B, num_legs]
+                Fz_list = [F[:, body_id, 2] for body_id in self.foot_ids]
+                Fz = torch.stack(Fz_list, dim=-1)                # [B, num_legs]
+                contacts = (Fz.abs() > self.contact_threshold)   # [B, num_legs] bool
+            
+
+        fr_contact = contacts[:, self.fr_idx]                    # [B]
+        fr_good = inside & fr_contact                            # [B]
+
+        # ==============================
+        # 5. 現在の足位置を base 座標に変換
+        #    （MultiLegBaseCommand の出力と同じ座標系にそろえる）
+        # ==============================
+        base_p = self.robot.data.root_pos_w      # [B,3]
+        base_q = self.robot.data.root_quat_w     # [B,4] wxyz
+
+        R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world->base
+
+        # feet_w: [B, num_legs, 3]
+        diff_w = feet_w - base_p.unsqueeze(1)                    # [B,num_legs,3]
+        # -> [B,num_legs,3]: R_wb3 * diff
+        feet_b = torch.matmul(
+            R_wb3.unsqueeze(1),      # [B,1,3,3]
+            diff_w.unsqueeze(-1),    # [B,num_legs,3,1]
+        ).squeeze(-1)                # [B,num_legs,3]
+
+        feet_xy_b = feet_b[..., :2]  # [B,num_legs,2]
+
+        # ==============================
+        # 6. MultiLegBaseCommand からターゲット取得（base座標）
+        # ==============================
+        cmd = env.command_manager.get_command(self.cmd_name)     # [B, 3*num_legs]
+        # [B,num_legs,3] に並び替え（LEG_ORDER と対応）
+        tgt_b = cmd.reshape(B, self.num_legs, 3)
+        tgt_xy_b = tgt_b[..., :2]                               # [B,num_legs,2]
+
+        # ==============================
+        # 7. FL/RL/RR が「コマンド目標周辺 & 接触」
+        # ==============================
+        near_all_others = torch.ones(B, dtype=torch.bool, device=device)
+
+        for leg_name, j in self.leg_to_idx.items():
+            if leg_name == self.fr_leg_name:
+                # FR はブロック上判定のみでよい
+                continue
+
+            # XY距離
+            dist = (feet_xy_b[:, j, :] - tgt_xy_b[:, j, :]).norm(dim=-1)  # [B]
+            near = dist <= self.near_radius_cmd                           # [B]
+
+            # 接触も要求
+            near &= contacts[:, j]
+
+            near_all_others &= near
+
+        # ==============================
+        # 8. 全体条件：FR がブロック上 & 他脚は目標周辺
+        # ==============================
+        good_all = fr_good & near_all_others   # [B]
+
+        # hold_t 更新
+        self.hold_t = torch.where(
+            good_all,
+            self.hold_t + dt,
+            torch.zeros_like(self.hold_t),
+        )
+
+        # just reached
+        reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+        payout  = torch.where(
+            reached,
+            torch.full_like(self.hold_t, self.bonus / dt),
+            torch.zeros_like(self.hold_t),
+        )
+
+        # 一度払ったら二度と払わない
+        self.paid |= reached
+
+        # ==============================
+        # 9. env リセット時の状態クリア
+        # ==============================
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.hold_t[m] = 0.0
+                self.paid[m]   = False
+
+        return payout

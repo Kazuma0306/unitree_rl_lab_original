@@ -215,3 +215,227 @@ def block_overtilt_single(env, limit_angle=0.30):  # 例: 0.30rad ≈ 17°
 # （任意）ブロックの角速度が高すぎたら失敗
 def block_high_angvel_single(env, limit_w=2.0):    # rad/s
     return (_block_wmag(env) > limit_w)
+
+
+
+
+
+
+
+
+def _rot3_from_quat_wxyz(q): # [B,3,3]
+    w,x,y,z = q.unbind(-1)
+    xx,yy,zz = x*x, y*y, z*z
+    xy,xz,yz = x*y, x*z, y*z
+    wx,wy,wz = w*x, w*y, w*z
+    r00 = 1 - 2*(yy+zz); r01 = 2*(xy-wz);   r02 = 2*(xz+wy)
+    r10 = 2*(xy+wz);     r11 = 1 - 2*(xx+zz); r12 = 2*(yz-wx)
+    r20 = 2*(xz-wy);     r21 = 2*(yz+wx);   r22 = 1 - 2*(xx+yy)
+    return torch.stack([torch.stack([r00,r01,r02], -1),
+                        torch.stack([r10,r11,r12], -1),
+                        torch.stack([r20,r21,r22], -1)], -2)
+
+class HoldAllFeetWithContact(ManagerTermBase):
+    """
+    終了条件:
+      - FR がブロック上面矩形内にあり、
+      - かつ 4 脚すべてが contact sensor の current_contact_time >= T_hold_s
+      - かつ FL/RL/RR は MultiLegBaseCommand で出したベース座標目標の周辺にいる
+    を満たしたときに done=True を返す。
+
+    ※ cmd_name を None にすると「コマンド目標の周辺」は見ず、
+      4 脚の contact_time + FR ブロック上だけで判定する。
+    """
+
+    def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.env = env
+
+        # --- ブロック関連 ---
+        self.block_name = P.get("block_name", "stone2")
+        self.T_hold_s   = P.get("T_hold_s", 1.2)
+        self.half_x     = P.get("half_x", 0.10)
+        self.half_y     = P.get("half_y", 0.10)
+        self.margin     = P.get("margin", 0.02)
+
+        # --- 接触＆コマンド関連 ---
+        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+        self.contact_threshold   = P.get("contact_threshold", 1.0)  # |Fz| > これで接触とみなす
+        self.cmd_name            = P.get("cmd_name", "step_fr_to_block")  # MultiLegBaseCommand の名前
+        self.near_radius_cmd     = P.get("near_radius_cmd", 0.05)       # ベースXY距離の許容
+
+        # --- 足順序と FR 名 ---
+        self.leg_names = P.get("leg_names", ["FL_foot", "FR_foot", "RL_foot", "RR_foot"])
+        self.fr_leg_name = P.get("fr_leg_name", "FR_foot")
+
+        # --- シーン参照 ---
+        scene = env.scene
+        self.robot = scene.articulations["robot"]
+        self.block = scene.rigid_objects[self.block_name]
+        self.sensor = scene.sensors[self.contact_sensor_name]
+
+        self.num_legs = len(self.leg_names)
+        self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_names]
+        self.name_to_idx = {n: i for i, n in enumerate(self.leg_names)}
+        assert self.fr_leg_name in self.name_to_idx, \
+            f"fr_leg_name {self.fr_leg_name} が leg_names にありません"
+        self.fr_idx = self.name_to_idx[self.fr_leg_name]
+
+        # --- ContactSensor 中の各足の列を特定 ---
+        self.leg_cols = []
+        body_ids = getattr(self.sensor.data, "body_ids", None)
+        sensor_names = getattr(self.sensor, "body_names", None)
+        for leg in self.leg_names:
+            col = None
+            # 1) body_ids から探す
+            if body_ids is not None:
+                ids0 = body_ids[0] if body_ids.ndim >= 2 else body_ids  # [M]
+                body_id = self.robot.body_names.index(leg)
+                hits = (ids0 == body_id).nonzero(as_tuple=True)[0]
+                if hits.numel() >= 1:
+                    col = int(hits[0].item())
+            # 2) センサ側の body_names から探す
+            if col is None and sensor_names is not None and leg in sensor_names:
+                col = sensor_names.index(leg)
+            if col is None:
+                raise RuntimeError(
+                    f"ContactSensor から {leg} の列を特定できません。"
+                    "センサcfgで bodies=[...] を適切に設定するか、"
+                    "body_ids/body_names を expose してください。"
+                )
+            self.leg_cols.append(col)
+
+        # --- contact_time 自前積算用（current_contact_time が無い環境向け） ---
+        self._ct_accum = None
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        device = env.device
+        B = env.num_envs
+        dt = env.step_dt
+        scene = env.scene
+
+        # ==============================
+        # 1. ブロック姿勢（yaw, 中心）
+        # ==============================
+        p = self.block.data.root_pos_w
+        blk_pos_w = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
+
+        q = self.block.data.root_quat_w
+        blk_quat_w = q[:, 0, :] if q.ndim == 3 else q # [B,4] (wxyz)
+
+        yaw = _yaw_from_quat_wxyz(blk_quat_w)         # [B]
+        Rz = _rot2d(yaw)                              # [B,2,2] block→world
+        R_wb2 = Rz.transpose(-1, -2)                  # [B,2,2] world→block
+
+        # ==============================
+        # 2. 足先位置（world） [B, num_legs, 3]
+        # ==============================
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+        else:
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+        feet_xy_w = feet_w[..., :2]                  # [B,num_legs,2]
+
+        # FR の world 座標
+        fr_xy_w = feet_xy_w[:, self.fr_idx, :]       # [B,2]
+
+        # --- FR がブロック矩形内か？ ---
+        d_xy_w   = fr_xy_w - blk_pos_w[..., :2]      # [B,2]
+        d_xy_blk = (R_wb2 @ d_xy_w.unsqueeze(-1)).squeeze(-1)  # [B,2]
+
+        hx = self.half_x - self.margin
+        hy = self.half_y - self.margin
+        inside_fr = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)  # [B]
+
+        # ==============================
+        # 3. 接触判定（net_forces_w）
+        # ==============================
+        F = getattr(self.sensor.data, "net_forces_w", None)  # [B, num_bodies, 3] 想定
+        if F is not None:
+            Fz = torch.stack([F[:, bid, 2] for bid in self.foot_ids], dim=-1)  # [B,num_legs]
+            contacts = (Fz.abs() > self.contact_threshold)                     # [B,num_legs] bool
+     
+        # ==============================
+        # 4. contact_time の取得（current_contact_time or 自前積算）
+        # ==============================
+        ctime_all = getattr(self.sensor.data, "current_contact_time", None)
+        if ctime_all is not None:
+            # [B,M] 想定（[B,S,M] の場合も最後の次元が列）
+            ctimes = torch.stack(
+                [ctime_all[..., col] for col in self.leg_cols],
+                dim=-1,
+            )  # [B,num_legs]
+        else:
+            # 自前で is_contact から積算
+            is_contact_all = getattr(self.sensor.data, "is_contact", None)
+            if is_contact_all is None:
+                # 最悪 0 にしておく
+                ctimes = torch.zeros(B, self.num_legs, device=device)
+            else:
+                if (self._ct_accum is None) or (self._ct_accum.shape != (B, self.num_legs)):
+                    self._ct_accum = torch.zeros(B, self.num_legs, device=device)
+                new_cols = []
+                for j, col in enumerate(self.leg_cols):
+                    is_c = is_contact_all[..., col]        # [B]
+                    acc_j = self._ct_accum[:, j]           # [B]
+                    acc_j = torch.where(is_c, acc_j + dt, torch.zeros_like(acc_j))
+                    new_cols.append(acc_j)
+                self._ct_accum = torch.stack(new_cols, dim=-1)  # [B,num_legs]
+                ctimes = self._ct_accum
+
+        # FR の contact_time
+        ctime_fr = ctimes[:, self.fr_idx]                   # [B]
+
+        # ==============================
+        # 5. コマンド目標（ベース座標）との距離
+        # ==============================
+        if self.cmd_name is not None:
+            # base 姿勢
+            base_p = self.robot.data.root_pos_w            # [B,3]
+            base_q = self.robot.data.root_quat_w           # [B,4]
+            R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world→base
+
+            # feet_w を base 座標へ
+            diff_w = feet_w - base_p.unsqueeze(1)          # [B,num_legs,3]
+            feet_b = torch.matmul(
+                R_wb3.unsqueeze(1),                         # [B,1,3,3]
+                diff_w.unsqueeze(-1),                       # [B,num_legs,3,1]
+            ).squeeze(-1)                                   # [B,num_legs,3]
+            feet_xy_b = feet_b[..., :2]                     # [B,num_legs,2]
+
+            # コマンド（MultiLegBaseCommand 出力）[B,3*num_legs]
+            cmd = env.command_manager.get_command(self.cmd_name)
+            tgt_b = cmd.view(B, self.num_legs, 3)           # [B,num_legs,3]
+            tgt_xy_b = tgt_b[..., :2]                       # [B,num_legs,2]
+
+            diff_xy = feet_xy_b - tgt_xy_b
+            dist_xy = diff_xy.norm(dim=-1)                  # [B,num_legs]
+            near_cmd = (dist_xy <= self.near_radius_cmd)    # [B,num_legs] bool
+        else:
+            near_cmd = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+
+        # ==============================
+        # 6. 各脚の条件 & 全体の done 判定
+        # ==============================
+        # FR: ブロック矩形内 & contact_time >= T_hold_s
+        cond_fr = inside_fr & (ctime_fr >= self.T_hold_s)
+
+        # 他脚: contact_time >= T_hold_s & near_cmd & 接触
+        cond_others = torch.ones(B, dtype=torch.bool, device=device)
+        for j, name in enumerate(self.leg_names):
+            if name == self.fr_leg_name:
+                continue
+            cond_j = (ctimes[:, j] >= self.T_hold_s)
+            cond_j &= near_cmd[:, j]
+            cond_j &= contacts[:, j]
+            cond_others &= cond_j
+
+        done = cond_fr & cond_others  # [B]
+
+        # デバッグ用
+        # env.extras["all_feet_hold_mask"]  = done
+        # env.extras["all_feet_hold_count"] = int(done.sum().item())
+        # env.extras["all_feet_contact_times"] = ctimes
+
+        return done

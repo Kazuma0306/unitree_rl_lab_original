@@ -267,34 +267,120 @@ def leg_xy_err(
 
 
 
-def leg_xy_err2(env, leg_name="FR_foot",
-                         cmd_name="step_fr_to_block", block_key="stone2",
-                         ):
-    """
-    返り値: [B,3] = 目標位置(world) - 指定脚末端位置(world)
-    """
-    # --- ブロック座標(ux,uy) → world のターゲット ---
-    cmd = env.command_manager.get_command(cmd_name)            # [B,2]
-    ux, uy = cmd[..., 0], cmd[..., 1]
+# def leg_xy_err2(env, leg_name="FR_foot",
+#                          cmd_name="step_fr_to_block", block_key="stone2",
+#                          ):
+#     """
+#     返り値: [B,3] = 目標位置(world) - 指定脚末端位置(world)
+#     """
+#     # --- ブロック座標(ux,uy) → world のターゲット ---
+#     cmd = env.command_manager.get_command(cmd_name)            # [B,2]
+#     ux, uy = cmd[..., 0], cmd[..., 1]
 
-    blk_pos_w  = _block_pos_w(env, key=block_key)              # [B,3]
-    yaw_blk    = _yaw_from_quat(_block_quat_w(env, key=block_key))  # [B]
-    cy, sy = torch.cos(yaw_blk), torch.sin(yaw_blk)
-    R = torch.stack([torch.stack([cy, -sy], dim=-1),
-                     torch.stack([sy,  cy], dim=-1)], dim=-2)  # [B,2,2]
+#     blk_pos_w  = _block_pos_w(env, key=block_key)              # [B,3]
+#     yaw_blk    = _yaw_from_quat(_block_quat_w(env, key=block_key))  # [B]
+#     cy, sy = torch.cos(yaw_blk), torch.sin(yaw_blk)
+#     R = torch.stack([torch.stack([cy, -sy], dim=-1),
+#                      torch.stack([sy,  cy], dim=-1)], dim=-2)  # [B,2,2]
 
-    tgt_xy_w = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + blk_pos_w[..., :2]
-    tgt_z_w  = blk_pos_w[..., 2] + 0.15
-    tgt_w    = torch.cat([tgt_xy_w, tgt_z_w.unsqueeze(-1)], dim=-1)  # [B,3]
+#     tgt_xy_w = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + blk_pos_w[..., :2]
+#     tgt_z_w  = blk_pos_w[..., 2] + 0.15
+#     tgt_w    = torch.cat([tgt_xy_w, tgt_z_w.unsqueeze(-1)], dim=-1)  # [B,3]
 
-    # --- 指定脚の world 位置 ---
+#     # --- 指定脚の world 位置 ---
+#     robot = env.scene.articulations["robot"]
+#     i = robot.body_names.index(leg_name)
+#     if hasattr(robot.data, "body_link_pose_w"):
+#         foot_w = robot.data.body_link_pose_w[:, i, :3]
+#     else:
+#         foot_w = robot.data.body_pos_w[:, i, :3]
+
+#     # --- 誤差（目標 - 脚） in world ---
+#     err_w = tgt_w - foot_w                                     # [B,3]
+#     return err_w
+
+
+
+LEG_ORDER = ("FL_foot", "FR_foot", "RL_foot", "RR_foot")
+
+def _rotmat_body_to_world_from_quat_wxyz(q):  # 既存のあなたの関数
+    w, x, y, z = q.unbind(-1)
+    xx, yy, zz = x*x, y*y, z*z
+    xy, xz, yz = x*y, x*z, y*z
+    wx, wy, wz = w*x, w*y, w*z
+    r00 = 1 - 2*(yy + zz); r01 = 2*(xy - wz);     r02 = 2*(xz + wy)
+    r10 = 2*(xy + wz);     r11 = 1 - 2*(xx + zz); r12 = 2*(yz - wx)
+    r20 = 2*(xz - wy);     r21 = 2*(yz + wx);     r22 = 1 - 2*(xx + yy)
+    return torch.stack([torch.stack([r00, r01, r02], -1),
+                        torch.stack([r10, r11, r12], -1),
+                        torch.stack([r20, r21, r22], -1)], -2)
+
+def _rotmat_world_to_body_from_quat_wxyz(q):
+    # body->world の転置が world->body
+    R_bw = _rotmat_body_to_world_from_quat_wxyz(q)
+    return R_bw.transpose(-1, -2)  # [B,3,3]
+
+def _get_root_pos_w(data):
+    if hasattr(data, "root_pos_w"):   return data.root_pos_w          # [B,3]
+    if hasattr(data, "root_state"):   return data.root_state[..., :3] # [B,3]
+    raise AttributeError("root position not found")
+
+def _get_root_quat_w(data):
+    if hasattr(data, "root_quat_w"):     return data.root_quat_w      # [B,4] (wxyz)
+    if hasattr(data, "root_orient_w"):   return data.root_orient_w    # [B,4] (wxyz)
+    if hasattr(data, "root_state"):      return data.root_state[..., 3:7]  # [B,4] (wxyz)
+    raise AttributeError("root quaternion not found")
+
+def _get_feet_pos_w(data, robot, leg_names=LEG_ORDER):
+    idxs = [robot.body_names.index(n) for n in leg_names]
+    if hasattr(data, "body_link_pose_w"):
+        return data.body_link_pose_w[:, idxs, :3]  # [B,4,3]
+    if hasattr(data, "body_pos_w"):
+        return data.body_pos_w[:, idxs, :3]        # [B,4,3]
+    if hasattr(data, "link_pos_w"):
+        return data.link_pos_w[:, idxs, :3]        # [B,4,3]
+    raise AttributeError("foot positions not found")
+
+def feet_pos_base(env, leg_names=LEG_ORDER):
+    """全脚の足先位置をベース座標系で返す: [B, 4, 3]"""
     robot = env.scene.articulations["robot"]
-    i = robot.body_names.index(leg_name)
-    if hasattr(robot.data, "body_link_pose_w"):
-        foot_w = robot.data.body_link_pose_w[:, i, :3]
-    else:
-        foot_w = robot.data.body_pos_w[:, i, :3]
+    base_p_w = _get_root_pos_w(robot.data)                 # [B,3]
+    base_q_w = _get_root_quat_w(robot.data)                # [B,4] (wxyz)
+    R_wb3    = _rotmat_world_to_body_from_quat_wxyz(base_q_w)  # [B,3,3]
+    feet_w   = _get_feet_pos_w(robot.data, robot, leg_names)   # [B,4,3]
+    # world -> base
+    diff     = feet_w - base_p_w.unsqueeze(1)              # [B,4,3]
+    feet_b   = (R_wb3 @ diff.transpose(-1, -2)).transpose(-1, -2)  # [B,4,3]
+    return feet_b
 
-    # --- 誤差（目標 - 脚） in world ---
-    err_w = tgt_w - foot_w                                     # [B,3]
-    return err_w
+
+def targets_base_from_command(env, cmd_name="step_fr_to_block", leg_names=LEG_ORDER):
+    """
+    CommandManager から各脚の目標(ベース座標)を取得。
+    返り値: [B, 4, 3] (順序は leg_names)
+    """
+    cmd = env.command_manager.get_command(cmd_name)
+    if cmd.dim() == 2 and cmd.shape[1] == 12:
+        tgt_b = cmd.view(cmd.shape[0], 4, 3)  # [B,4,3]
+    elif cmd.dim() == 3 and cmd.shape[1:] == (4, 3):
+        tgt_b = cmd
+    else:
+        raise ValueError(f"Unexpected command shape for '{cmd_name}': {tuple(cmd.shape)}. Expect [B,12] or [B,4,3].")
+    # 並びが環境の body_names と異なる場合は leg_names に合わせて並べ替える処理をここに挟んでください。
+    return tgt_b
+
+
+def legs_err_base_all(env, cmd_name="step_fr_to_block", use_xyz=True, leg_names=LEG_ORDER):
+    """
+    返り値:
+      use_xyz=True  -> [B, 4, 3]（各脚の [dx,dy,dz]_base
+      use_xyz=False -> [B, 4, 2]（各脚の [dx,dy]_base
+    """
+    feet_b = feet_pos_base(env, leg_names)           # [B,4,3]
+    tgt_b  = targets_base_from_command(env, cmd_name)  # [B,4,3]
+    err_b  = tgt_b - feet_b                           # [B,4,3]
+    if use_xyz:
+        B = err_b.shape[0]
+        return err_b.reshape(B, -1) 
+    else:
+        return err_b[..., :2]
