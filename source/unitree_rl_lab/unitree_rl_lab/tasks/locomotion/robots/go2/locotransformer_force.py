@@ -480,12 +480,17 @@ class MlpHFP(ActorCritic):
             nn.Conv1d(64, ft_feat_dim, 3, padding=2, dilation=2), act,
             nn.AdaptiveAvgPool1d(self.num_ft_time_tokens),     # -> [B*L, ft_feat_dim, T]
         )
+        # self.ft_encoder = nn.Sequential( # [B*4, 3,  12]
+        #     # Kernel=3, Padding=1 なら、入力12 -> 出力12 
+        #     nn.Conv1d(self.ft_in_dim, ft_feat_dim, kernel_size=3, padding=1),
+        #     act # お好みで活性化関数
+        # )
         self.ft_feat_dim = ft_feat_dim
         # 時間平均（必要なら注意に差し替え可）
         self.ft_out_norm = nn.LayerNorm(self.num_legs * self.ft_feat_dim) if use_layernorm else nn.Identity()
 
         # ===== Projection head / Actor-Critic =====
-        fused_feature_dim = self.prop_out_dim #+ self.num_legs * self.ft_feat_dim
+        fused_feature_dim = self.prop_out_dim + self.num_legs * self.ft_feat_dim
         proj, in_dim = [], fused_feature_dim
         for dim in projection_head_dims:
             proj += [nn.Linear(in_dim, dim), act]
@@ -523,9 +528,9 @@ class MlpHFP(ActorCritic):
         x = x.view(B, L * self.ft_feat_dim)                # 脚を連結 → [B, L*F]
         x = self.ft_out_norm(x)
 
-        # feat = torch.cat([prop_feat, x], dim=-1)           # [B, fused_feature_dim]
+        feat = torch.cat([prop_feat, x], dim=-1)           # [B, fused_feature_dim]
 
-        feat = prop_feat
+        # feat = prop_feat
         return self.projection_head(feat)                  # [B, hidden]
 
     def get_critic_obs(self, obs):

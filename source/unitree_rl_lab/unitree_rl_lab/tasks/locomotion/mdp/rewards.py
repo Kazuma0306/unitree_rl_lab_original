@@ -901,7 +901,7 @@ class FROnBlockBonusOnce(ManagerTermBase):
         self.half_y     = P.get("half_y", 0.10)
         self.margin     = P.get("margin", 0.02)
         self.T_hold_s   = P.get("T_hold_s", 0.50)
-        self.bonus      = P.get("bonus", 0.03)
+        self.bonus      = P.get("bonus", 0.3)
         self.require_contact = P.get("require_contact", True)
         self.contact_sensor  = P.get("contact_sensor_name", "contact_forces")
 
