@@ -306,3 +306,62 @@ class schedule_reward_weight(ManagerTermBase):
             env.reward_manager.set_term_cfg(term_name, self._term_cfg)
 
         return self._term_cfg.weight
+
+
+
+
+
+
+import isaaclab.envs.mdp as mdp
+from types import SimpleNamespace
+
+
+
+
+def mass_curriculum(
+    env, env_ids, old_range, *,
+    stages,
+    up_successes=64,  min_eps=100,  up_rate=0.7,
+    down_rate=0.25,   down_min_eps=100,
+    cooldown_steps=0,
+):
+    ctx = getattr(env, "_curr", None)
+    if ctx is None:
+        ctx = env._curr = SimpleNamespace(stage=0, succ=0, eps=0, last=-10**9)
+
+    # ✅ extras から今ステップの成功数を回収（なければ0）
+    n_succ_step = int(env.extras.get("fr_hold_ok_count", 0))
+    if n_succ_step:
+        ctx.succ += n_succ_step
+        # 取り込み後に 0 へ戻す（連続加算防止）
+        env.extras["fr_hold_ok_count"] = 0
+
+    # エピソード終了数の更新
+    if hasattr(env, "reset_buf"):
+        ctx.eps += int(env.reset_buf.sum().item())
+
+    # クールダウン
+    if env.common_step_counter - ctx.last < cooldown_steps:
+        return mdp.modify_term_cfg.NO_CHANGE
+
+    # 判定
+    eps = max(1, ctx.eps)
+    rate = ctx.succ / eps
+    changed = False
+    if (ctx.eps >= min_eps and ctx.succ >= up_successes and rate >= up_rate
+        and ctx.stage < len(stages)-1):
+        ctx.stage += 1; changed = True
+    elif (ctx.eps >= down_min_eps and rate <= down_rate and ctx.stage > 0):
+        ctx.stage -= 1; changed = True
+
+    print(changed)
+    if not changed:
+        return mdp.modify_term_cfg.NO_CHANGE
+
+    # ステージ更新
+    ctx.last = env.common_step_counter
+    ctx.succ = 0
+    ctx.eps  = 0
+    lo, hi = stages[ctx.stage]
+    
+    return (float(lo), float(hi))

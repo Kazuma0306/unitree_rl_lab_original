@@ -593,6 +593,32 @@ class EventCfg:
         mode = "reset",
     )
 
+    stone_1 = EventTerm(
+
+        func = mdp.randomize_rigid_body_mass,
+        mode = "reset",
+        params={
+            "asset_cfg": SceneEntityCfg("stone1"),
+            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
+            "operation": "abs",
+            "distribution": "uniform",
+            "recompute_inertia": True,
+        },
+    )
+
+    stone_2 = EventTerm(
+
+        func = mdp.randomize_rigid_body_mass,
+        mode = "reset",
+        params={
+            "asset_cfg": SceneEntityCfg("stone2"),
+            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
+            "operation": "abs",
+            "distribution": "uniform",
+            "recompute_inertia": True,
+        },
+    )
+
     #proposed
 
     # reset_objects = EventTerm(
@@ -1210,9 +1236,42 @@ class CurriculumCfg:
     #         "term_name" : "track_lin_vel_xy",
     #         "weight": 0.8,
     #         "num_steps": 3000
-
     #     }
     # )
+
+
+
+    stone1_mass = CurrTerm(
+
+        func=mdp.modify_term_cfg,
+        params=dict(
+            address="events.stone_1.params.mass_distribution_params",
+            modify_fn=mdp.mass_curriculum,
+            modify_params=dict(
+                stages=[(12.0,12.0),(8.0,8.0),(5.0,5.0),(3.0,3.0),(1.0,1.0)],
+                up_successes=64,  min_eps=100,  up_rate=0.7,
+                down_rate=0.25,   down_min_eps=100,
+                cooldown_steps=0,
+            ),
+        ),
+    )
+
+    stone2_mass = CurrTerm(
+
+        func=mdp.modify_term_cfg,
+        params=dict(
+            address="events.stone_2.params.mass_distribution_params",
+            modify_fn=mdp.mass_curriculum,
+            modify_params=dict(
+                stages=[(12.0,12.0),(8.0,8.0),(5.0,5.0),(3.0,3.0),(1.0,1.0)],
+                up_successes=64,  min_eps=100,  up_rate=0.7,
+                down_rate=0.25,   down_min_eps=100,
+                cooldown_steps=0,
+            ),
+        ),
+    )
+
+    
 
    
 
@@ -1233,7 +1292,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
-    # curriculum: CurriculumCfg = CurriculumCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self):
         """Post initialization."""

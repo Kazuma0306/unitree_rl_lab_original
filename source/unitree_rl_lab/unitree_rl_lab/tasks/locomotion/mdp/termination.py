@@ -154,6 +154,8 @@ class HoldFROnBlockWithContact(ManagerTermBase):
             )
         self.fr_col = fr_col
 
+
+
     def __call__(self, env):
         # 矩形内判（省略可）
 
@@ -195,6 +197,10 @@ class HoldFROnBlockWithContact(ManagerTermBase):
             ctime_fr = self._ct_accum
 
         done = (ctime_fr >= self.T_hold_s) & inside
+
+
+        env.extras["fr_hold_ok_mask"]  = done
+        env.extras["fr_hold_ok_count"] = int(done.sum().item())
         return done
 
 
