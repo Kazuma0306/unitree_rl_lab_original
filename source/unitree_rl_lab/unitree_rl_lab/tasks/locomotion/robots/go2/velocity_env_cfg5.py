@@ -933,7 +933,7 @@ class RewardsCfg:
     #指定位置へ脚を置くbonus
     # fr_on_block = RewTerm(func=mdp.fr_on_block_rect, weight=0.05, params=dict(margin=0.01)) #ブロック座標系で、脚がブロック範囲内かどうか
     # fr_on_block_bonus = RewTerm(func=mdp.fr_on_block_bonus, weight= 0.5) #ブロック座標系、タッチ評価
-    fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 2.5) #ブロック座標系、連続タッチ評価
+    fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 1.0) #ブロック座標系、連続タッチ評価
 
     
     # そっと置く
