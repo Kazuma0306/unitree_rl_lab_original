@@ -632,6 +632,10 @@ class HoldAllFeetWithContact(ManagerTermBase):
 
         done = cond_fr & cond_others  # [B]
 
+
+        env.extras["fr_hold_ok_mask"]  = done
+        env.extras["fr_hold_ok_count"] = int(done.sum().item())
+
         # デバッグ用に見たければここをコメントアウト解除
         # env.extras["all_feet_hold_mask"]       = done
         # env.extras["all_feet_contact_times"]   = ctimes

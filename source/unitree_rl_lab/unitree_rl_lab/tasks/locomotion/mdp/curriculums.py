@@ -318,50 +318,115 @@ from types import SimpleNamespace
 
 
 
-def mass_curriculum(
+# def mass_curriculum(
+#     env, env_ids, old_range, *,
+#     stages,
+#     up_successes=64,  min_eps=100,  up_rate=0.7,
+#     down_rate=0.25,   down_min_eps=100,
+#     cooldown_steps=0,
+# ):
+#     ctx = getattr(env, "_curr", None)
+#     if ctx is None:
+#         ctx = env._curr = SimpleNamespace(stage=0, succ=0, eps=0, last=-10**9)
+
+#     # ✅ extras から今ステップの成功数を回収（なければ0）
+#     n_succ_step = int(env.extras.get("fr_hold_ok_count", 0))
+#     if n_succ_step:
+#         ctx.succ += n_succ_step
+#         # 取り込み後に 0 へ戻す（連続加算防止）
+#         env.extras["fr_hold_ok_count"] = 0
+
+#     # エピソード終了数の更新
+#     if hasattr(env, "reset_buf"):
+#         ctx.eps += int(env.reset_buf.sum().item())
+
+#     # クールダウン
+#     if env.common_step_counter - ctx.last < cooldown_steps:
+#         return mdp.modify_term_cfg.NO_CHANGE
+
+#     # 判定
+#     eps = max(1, ctx.eps)
+#     rate = ctx.succ / eps
+#     changed = False
+#     if (ctx.eps >= min_eps and ctx.succ >= up_successes and rate >= up_rate
+#         and ctx.stage < len(stages)-1):
+#         ctx.stage += 1; changed = True
+#     elif (ctx.eps >= down_min_eps and rate <= down_rate and ctx.stage > 0):
+#         ctx.stage -= 1; changed = True
+
+#     print(changed)
+#     if not changed:
+#         return mdp.modify_term_cfg.NO_CHANGE
+
+#     # ステージ更新
+#     ctx.last = env.common_step_counter
+#     ctx.succ = 0
+#     ctx.eps  = 0
+#     lo, hi = stages[ctx.stage]
+    
+#     return (float(lo), float(hi))
+
+
+def shared_mass_curriculum(
     env, env_ids, old_range, *,
     stages,
+    master=False,
     up_successes=64,  min_eps=100,  up_rate=0.7,
     down_rate=0.25,   down_min_eps=100,
     cooldown_steps=0,
+    alpha=1.0,
 ):
-    ctx = getattr(env, "_curr", None)
-    if ctx is None:
-        ctx = env._curr = SimpleNamespace(stage=0, succ=0, eps=0, last=-10**9)
+    # --- 初回だけコンテキストを作成 ---
+    # hasattr を使えば「既にあるのに作り直す」ことはありえない
+    if not hasattr(env, "_stone_mass_curr"):
+        # ★ ここを stages[0] ではなく old_range から取る
+        lo0, hi0 = old_range
+        env._stone_mass_curr = SimpleNamespace(
+            stage=0,
+            succ=0,
+            eps=0,
+            last=-10**9,
+            lo=float(lo0),
+            hi=float(hi0),
+        )
 
-    # ✅ extras から今ステップの成功数を回収（なければ0）
-    n_succ_step = int(env.extras.get("fr_hold_ok_count", 0))
-    if n_succ_step:
-        ctx.succ += n_succ_step
-        # 取り込み後に 0 へ戻す（連続加算防止）
-        env.extras["fr_hold_ok_count"] = 0
+    ctx = env._stone_mass_curr
 
-    # エピソード終了数の更新
-    if hasattr(env, "reset_buf"):
-        ctx.eps += int(env.reset_buf.sum().item())
+    # ----- master 側だけが stage/統計を更新 -----
+    if master:
+        n_succ_step = int(env.extras.get("fr_hold_ok_count", 0))
+        if n_succ_step:
+            ctx.succ += n_succ_step
+            env.extras["fr_hold_ok_count"] = 0
 
-    # クールダウン
-    if env.common_step_counter - ctx.last < cooldown_steps:
-        return mdp.modify_term_cfg.NO_CHANGE
+        if hasattr(env, "reset_buf"):
+            ctx.eps += int(env.reset_buf.sum().item())
 
-    # 判定
-    eps = max(1, ctx.eps)
-    rate = ctx.succ / eps
-    changed = False
-    if (ctx.eps >= min_eps and ctx.succ >= up_successes and rate >= up_rate
-        and ctx.stage < len(stages)-1):
-        ctx.stage += 1; changed = True
-    elif (ctx.eps >= down_min_eps and rate <= down_rate and ctx.stage > 0):
-        ctx.stage -= 1; changed = True
+        if env.common_step_counter - ctx.last >= cooldown_steps:
+            eps  = max(1, ctx.eps)
+            rate = ctx.succ / eps
 
-    print(changed)
-    if not changed:
-        return mdp.modify_term_cfg.NO_CHANGE
+            changed = False
+            if (ctx.eps >= min_eps and
+                ctx.succ >= up_successes and
+                rate >= up_rate and
+                ctx.stage < len(stages) - 1):
+                ctx.stage += 1
+                changed = True
+            elif (ctx.eps >= down_min_eps and
+                  rate <= down_rate and
+                  ctx.stage > 0):
+                ctx.stage -= 1
+                changed = True
 
-    # ステージ更新
-    ctx.last = env.common_step_counter
-    ctx.succ = 0
-    ctx.eps  = 0
-    lo, hi = stages[ctx.stage]
-    
-    return (float(lo), float(hi))
+            if changed:
+                ctx.last = env.common_step_counter
+                ctx.succ = 0
+                ctx.eps  = 0
+
+        tgt_lo, tgt_hi = stages[ctx.stage]
+        ctx.lo = (1 - alpha) * ctx.lo + alpha * float(tgt_lo)
+        ctx.hi = (1 - alpha) * ctx.hi + alpha * float(tgt_hi)
+
+    # master でも slave でも、共有レンジをそのまま返す
+    return (float(ctx.lo), float(ctx.hi))
