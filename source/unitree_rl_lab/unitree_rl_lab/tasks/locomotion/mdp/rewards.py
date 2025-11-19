@@ -1954,6 +1954,215 @@ def _rot3_from_quat_wxyz(q): # [B,3,3]
                         torch.stack([r20,r21,r22], -1)], -2)
 
 
+# class MultiLegHoldBonusOnce(ManagerTermBase):
+#     """
+#     FR がブロック上面矩形内(+接触)にあり、
+#     かつ FL / RL / RR が MultiLegBaseCommand で指定された
+#     ベース座標系の目標位置「周辺」で接触を保っている状態が
+#     T_hold_s 続いた瞬間に一度だけボーナスを支払う。
+
+#     ※ RewardManager 側で *dt を掛ける前提なので、
+#       支払いステップのみ bonus/dt を返す。
+#     """
+
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.env = env
+
+#         # --- ブロック関連 ---
+#         self.block_name = P.get("block_name", "stone2")
+#         self.half_x     = P.get("half_x", 0.10)
+#         self.half_y     = P.get("half_y", 0.10)
+#         self.margin     = P.get("margin", 0.02)
+
+#         # --- 時間・ボーナス ---
+#         self.T_hold_s   = P.get("T_hold_s", 0.30)
+#         self.bonus      = P.get("bonus", 5)
+
+#         # --- 接触判定 ---
+#         self.require_contact    = P.get("require_contact", True)
+#         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+#         self.contact_threshold  = P.get("contact_threshold", 0)  # [N] |Fz| > これで接触
+
+#         # --- MultiLegBaseCommand から取るコマンド名 ---
+#         # Hydra 側で command_manager に登録した名前をここに渡す
+#         self.cmd_name = P.get("cmd_name", "step_fr_to_block")
+
+#         # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と同じにする）---
+#         self.leg_order = P.get(
+#             "leg_order",
+#             ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+#         )
+#         self.num_legs = len(self.leg_order)
+
+#         # FR の名前
+#         self.fr_leg_name = P.get("fr_leg_name", "FR_foot")
+
+#         # FL/RL/RR が「コマンド目標周辺」にいるとみなす XY 距離 [m]
+#         self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
+
+#         # --- シーン参照 ---
+#         scene = env.scene
+#         self.robot = scene.articulations["robot"]
+#         self.block = scene.rigid_objects[self.block_name]
+
+#         # leg_name -> index, body_names -> index
+#         self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
+#         self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
+
+#         assert self.fr_leg_name in self.leg_to_idx, \
+#             f"fr_leg_name {self.fr_leg_name} が leg_order にありません"
+#         self.fr_idx = self.leg_to_idx[self.fr_leg_name]
+
+#         # --- 状態 ---
+#         self.hold_t = torch.zeros(env.num_envs, device=env.device)
+#         self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+#         # 接触センサ（あれば）
+#         self.sensor = env.scene.sensors["contact_forces"]
+
+
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         device = env.device
+#         B = env.num_envs
+#         dt = env.step_dt
+#         scene = env.scene
+
+#         # ==============================
+#         # 1. ブロック姿勢（yaw, 中心）
+#         # ==============================
+#         p = self.block.data.root_pos_w
+#         blk_pos = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
+
+#         q = self.block.data.root_quat_w
+#         blk_q = q[:, 0, :] if q.ndim == 3 else q    # [B,4]
+
+#         yaw = _yaw_from_quat_wxyz(blk_q)            # [B]
+#         Rz = _rot2d(yaw)                            # [B,2,2]
+#         R_wb2 = Rz.transpose(-1, -2)                # [B,2,2] world -> block (XY)
+
+#         # ==============================
+#         # 2. 足先位置（world） [B, num_legs, 3]
+#         # ==============================
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+#         else:
+#             feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+#         feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
+
+#         # FR の world 座標
+#         fr_xy_w = feet_xy_w[:, self.fr_idx, :]  # [B,2]
+
+#         # ==============================
+#         # 3. FR がブロック上面矩形内か？
+#         # ==============================
+#         d_xy_blk = (R_wb2 @ (fr_xy_w - blk_pos[..., :2]).unsqueeze(-1)).squeeze(-1)  # [B,2]
+#         hx = self.half_x - self.margin
+#         hy = self.half_y - self.margin
+#         inside = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)     # [B]
+
+#         # ==============================
+#         # 4. 接触判定（各足）
+#         # ==============================
+#         if self.require_contact :
+#             ft = self.env.scene.sensors["contact_forces"].data.net_forces_w
+#             robot = self.env.scene.articulations["robot"]
+#             # leg_index = {"FL": 0, "FR": 1, "RL": 2, "RR": 3}[leg]
+#             # fr_id = robot.body_names.index("FR_foot")
+#             # fz = ft[:, fr_id, 2]
+#             Fz_list = [ft[:, body_id, 2] for body_id in self.foot_ids]
+#             Fz = torch.stack(Fz_list, dim=-1)                # [B, num_legs]
+#             contacts = (Fz.abs() > self.contact_threshold)   # [B, num_legs] bool
+
+            
+
+#         fr_contact = contacts[:, self.fr_idx]                    # [B]
+#         fr_good = inside & fr_contact                            # [B]
+
+#         # ==============================
+#         # 5. 現在の足位置を base 座標に変換
+#         #    （MultiLegBaseCommand の出力と同じ座標系にそろえる）
+#         # ==============================
+#         base_p = self.robot.data.root_pos_w      # [B,3]
+#         base_q = self.robot.data.root_quat_w     # [B,4] wxyz
+
+#         R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world->base
+
+#         # feet_w: [B, num_legs, 3]
+#         diff_w = feet_w - base_p.unsqueeze(1)                    # [B,num_legs,3]
+#         # -> [B,num_legs,3]: R_wb3 * diff
+#         feet_b = torch.matmul(
+#             R_wb3.unsqueeze(1),      # [B,1,3,3]
+#             diff_w.unsqueeze(-1),    # [B,num_legs,3,1]
+#         ).squeeze(-1)                # [B,num_legs,3]
+
+#         feet_xy_b = feet_b[..., :2]  # [B,num_legs,2]
+
+#         # ==============================
+#         # 6. MultiLegBaseCommand からターゲット取得（base座標）
+#         # ==============================
+#         cmd = env.command_manager.get_command(self.cmd_name)     # [B, 3*num_legs]
+#         # [B,num_legs,3] に並び替え（LEG_ORDER と対応）
+#         tgt_b = cmd.reshape(B, self.num_legs, 3)
+#         tgt_xy_b = tgt_b[..., :2]                               # [B,num_legs,2]
+
+#         # ==============================
+#         # 7. FL/RL/RR が「コマンド目標周辺 & 接触」
+#         # ==============================
+#         near_all_others = torch.ones(B, dtype=torch.bool, device=device)
+
+#         for leg_name, j in self.leg_to_idx.items():
+#             if leg_name == self.fr_leg_name:
+#                 # FR はブロック上判定のみでよい
+#                 continue
+
+#             # XY距離
+#             dist = (feet_xy_b[:, j, :] - tgt_xy_b[:, j, :]).norm(dim=-1)  # [B]
+#             near = dist <= self.near_radius_cmd                           # [B]
+
+#             # 接触も要求
+#             near &= contacts[:, j]
+
+#             near_all_others &= near
+
+#         # ==============================
+#         # 8. 全体条件：FR がブロック上 & 他脚は目標周辺
+#         # ==============================
+#         good_all = fr_good & near_all_others   # [B]
+
+#         # hold_t 更新
+#         self.hold_t = torch.where(
+#             good_all,
+#             self.hold_t + dt,
+#             torch.zeros_like(self.hold_t),
+#         )
+
+#         # just reached
+#         reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+#         payout  = torch.where(
+#             reached,
+#             torch.full_like(self.hold_t, self.bonus / dt),
+#             torch.zeros_like(self.hold_t),
+#         )
+
+#         # 一度払ったら二度と払わない
+#         self.paid |= reached
+
+#         # ==============================
+#         # 9. env リセット時の状態クリア
+#         # ==============================
+#         if hasattr(env, "reset_buf"):
+#             m = env.reset_buf > 0
+#             if m.any():
+#                 self.hold_t[m] = 0.0
+#                 self.paid[m]   = False
+
+#         return payout
+
+
+
+
 class MultiLegHoldBonusOnce(ManagerTermBase):
     """
     FR がブロック上面矩形内(+接触)にあり、
@@ -1977,16 +2186,15 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
         self.margin     = P.get("margin", 0.02)
 
         # --- 時間・ボーナス ---
-        self.T_hold_s   = P.get("T_hold_s", 0.50)
-        self.bonus      = P.get("bonus", 0.5)
+        self.T_hold_s   = P.get("T_hold_s", 0.30)
+        self.bonus      = P.get("bonus", 5.0)
 
         # --- 接触判定 ---
-        self.require_contact    = P.get("require_contact", True)
+        self.require_contact     = P.get("require_contact", True)
         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
-        self.contact_threshold  = P.get("contact_threshold", 1.0)  # [N] |Fz| > これで接触
+        self.contact_threshold   = P.get("contact_threshold", 0.0)  # [N] |Fz| > これで接触
 
         # --- MultiLegBaseCommand から取るコマンド名 ---
-        # Hydra 側で command_manager に登録した名前をここに渡す
         self.cmd_name = P.get("cmd_name", "step_fr_to_block")
 
         # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と同じにする）---
@@ -2007,20 +2215,38 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
         self.robot = scene.articulations["robot"]
         self.block = scene.rigid_objects[self.block_name]
 
-        # leg_name -> index, body_names -> index
+        # ロボット側の body index（位置取得用）
         self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
         self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
 
-        assert self.fr_leg_name in self.leg_to_idx, \
-            f"fr_leg_name {self.fr_leg_name} が leg_order にありません"
+        if self.fr_leg_name not in self.leg_to_idx:
+            raise RuntimeError(
+                f"fr_leg_name '{self.fr_leg_name}' が leg_order {self.leg_order} に含まれていません。"
+            )
         self.fr_idx = self.leg_to_idx[self.fr_leg_name]
+
+        # --- ContactSensor 本体 ---
+        if self.contact_sensor_name not in scene.sensors:
+            raise RuntimeError(
+                f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
+            )
+        self.sensor = scene.sensors[self.contact_sensor_name]
+
+        # ContactSensor 内の body_names から「脚ごとの列」を引く
+        sensor_body_names = self.sensor.body_names  # [B_sensor]
+        self.sensor_cols: list[int] = []
+        for leg in self.leg_order:
+            if leg not in sensor_body_names:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' が含まれていません。\n"
+                    f"  sensor.body_names = {sensor_body_names}\n"
+                    "ContactSensorCfg.prim_path が各足リンクをちゃんと拾うようになっているか確認してください。"
+                )
+            self.sensor_cols.append(sensor_body_names.index(leg))
 
         # --- 状態 ---
         self.hold_t = torch.zeros(env.num_envs, device=env.device)
         self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-
-        # 接触センサ（あれば）
-        self.sensor = scene.sensors.get(self.contact_sensor_name, None)
 
     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
         device = env.device
@@ -2064,30 +2290,32 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
         # ==============================
         # 4. 接触判定（各足）
         # ==============================
-        if self.require_contact and (self.sensor is not None):
-            F = getattr(self.sensor.data, "net_forces_w", None)  # [B, num_bodies, 3] を想定
-            if F is not None:
-                # 各脚の Z 方向力 [B, num_legs]
-                Fz_list = [F[:, body_id, 2] for body_id in self.foot_ids]
-                Fz = torch.stack(Fz_list, dim=-1)                # [B, num_legs]
-                contacts = (Fz.abs() > self.contact_threshold)   # [B, num_legs] bool
-            
+        if self.require_contact:
+            F = self.sensor.data.net_forces_w   # 期待形状: [B, B_sensor, 3]
+            if F is None:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の data.net_forces_w が None です。"
+                    " ContactSensorCfg.update_period や asset の activate_contact_sensors を確認してください。"
+                )
+            # sensor.body_names の順番に対応する列から、脚に対応する col だけ抜く
+            Fz_list = [F[:, col, 2] for col in self.sensor_cols]  # list of [B]
+            Fz = torch.stack(Fz_list, dim=-1)                     # [B, num_legs]
+            contacts = (Fz.abs() > self.contact_threshold)        # [B, num_legs] bool
+        # else:
+        #     contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
 
-        fr_contact = contacts[:, self.fr_idx]                    # [B]
-        fr_good = inside & fr_contact                            # [B]
+        fr_contact = contacts[:, self.fr_idx]                     # [B]
+        fr_good = inside & fr_contact                             # [B]
 
         # ==============================
         # 5. 現在の足位置を base 座標に変換
-        #    （MultiLegBaseCommand の出力と同じ座標系にそろえる）
         # ==============================
         base_p = self.robot.data.root_pos_w      # [B,3]
         base_q = self.robot.data.root_quat_w     # [B,4] wxyz
 
         R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world->base
 
-        # feet_w: [B, num_legs, 3]
         diff_w = feet_w - base_p.unsqueeze(1)                    # [B,num_legs,3]
-        # -> [B,num_legs,3]: R_wb3 * diff
         feet_b = torch.matmul(
             R_wb3.unsqueeze(1),      # [B,1,3,3]
             diff_w.unsqueeze(-1),    # [B,num_legs,3,1]
@@ -2099,8 +2327,7 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
         # 6. MultiLegBaseCommand からターゲット取得（base座標）
         # ==============================
         cmd = env.command_manager.get_command(self.cmd_name)     # [B, 3*num_legs]
-        # [B,num_legs,3] に並び替え（LEG_ORDER と対応）
-        tgt_b = cmd.reshape(B, self.num_legs, 3)
+        tgt_b = cmd.reshape(B, self.num_legs, 3)                 # [B,num_legs,3]
         tgt_xy_b = tgt_b[..., :2]                               # [B,num_legs,2]
 
         # ==============================
@@ -2118,9 +2345,9 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
             near = dist <= self.near_radius_cmd                           # [B]
 
             # 接触も要求
-            near &= contacts[:, j]
+            near = near & contacts[:, j]
 
-            near_all_others &= near
+            near_all_others = near_all_others & near
 
         # ==============================
         # 8. 全体条件：FR がブロック上 & 他脚は目標周辺

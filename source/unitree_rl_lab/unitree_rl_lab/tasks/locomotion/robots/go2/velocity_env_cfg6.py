@@ -993,8 +993,8 @@ class RewardsCfg:
     # )　しかも報酬内でDtをかけるようになっているので二重がけになる
 
     # distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d4, weight = 0.5) #ベース座標系での距離
-    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.2) #ベース座標系での距離 , all legs
-    distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 10)#ベース座標系での進捗, all legs weighted sum
+    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 1.0) #ベース座標系での距離 , all legs
+    distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
 
 
   
