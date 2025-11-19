@@ -459,16 +459,16 @@ class HoldAllFeetWithContact(ManagerTermBase):
 
         # --- ブロック関連 ---
         self.block_name = P.get("block_name", "stone2")
-        self.T_hold_s   = P.get("T_hold_s", 1.2)
+        self.T_hold_s   = P.get("T_hold_s", 0.12)
         self.half_x     = P.get("half_x", 0.10)
         self.half_y     = P.get("half_y", 0.10)
-        self.margin     = P.get("margin", 0.02)
+        self.margin     = P.get("margin", 0.01)
 
         # --- 接触＆コマンド関連 ---
         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
         self.contact_threshold   = P.get("contact_threshold", 0.0)  # |Fz| > これで接触とみなす
         self.cmd_name            = P.get("cmd_name", "step_fr_to_block")
-        self.near_radius_cmd     = P.get("near_radius_cmd", 0.05)
+        self.near_radius_cmd     = P.get("near_radius_cmd", 0.1)
 
         # --- 足順序と FR 名 ---
         self.leg_names   = P.get("leg_names", ["FL_foot", "FR_foot", "RL_foot", "RR_foot"])

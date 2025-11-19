@@ -2183,10 +2183,10 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
         self.block_name = P.get("block_name", "stone2")
         self.half_x     = P.get("half_x", 0.10)
         self.half_y     = P.get("half_y", 0.10)
-        self.margin     = P.get("margin", 0.02)
+        self.margin     = P.get("margin", 0.01)
 
         # --- 時間・ボーナス ---
-        self.T_hold_s   = P.get("T_hold_s", 0.30)
+        self.T_hold_s   = P.get("T_hold_s", 0.10)
         self.bonus      = P.get("bonus", 5.0)
 
         # --- 接触判定 ---
@@ -2208,7 +2208,7 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
         self.fr_leg_name = P.get("fr_leg_name", "FR_foot")
 
         # FL/RL/RR が「コマンド目標周辺」にいるとみなす XY 距離 [m]
-        self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
+        self.near_radius_cmd = P.get("near_radius_cmd", 0.1)
 
         # --- シーン参照 ---
         scene = env.scene
