@@ -367,19 +367,91 @@ from types import SimpleNamespace
 #     return (float(lo), float(hi))
 
 
+# def shared_mass_curriculum(
+#     env, env_ids, old_range, *,
+#     stages,
+#     master=False,
+#     up_successes=64,  min_eps=100,  up_rate=0.7,
+#     down_rate=0.25,   down_min_eps=100,
+#     cooldown_steps=0,
+#     alpha=1.0,
+# ):
+#     # --- 初回だけコンテキストを作成 ---
+#     # hasattr を使えば「既にあるのに作り直す」ことはありえない
+#     if not hasattr(env, "_stone_mass_curr"):
+#         # ★ ここを stages[0] ではなく old_range から取る
+#         lo0, hi0 = old_range
+#         env._stone_mass_curr = SimpleNamespace(
+#             stage=0,
+#             succ=0,
+#             eps=0,
+#             last=-10**9,
+#             lo=float(lo0),
+#             hi=float(hi0),
+#         )
+
+#     ctx = env._stone_mass_curr
+
+#     # ----- master 側だけが stage/統計を更新 -----
+#     if master:
+#         n_succ_step = int(env.extras.get("fr_hold_ok_count", 0))
+#         if n_succ_step:
+#             ctx.succ += n_succ_step
+#             env.extras["fr_hold_ok_count"] = 0
+
+#         if hasattr(env, "reset_buf"):
+#             ctx.eps += int(env.reset_buf.sum().item())
+
+#         if env.common_step_counter - ctx.last >= cooldown_steps:
+#             eps  = max(1, ctx.eps)
+#             rate = ctx.succ / eps
+
+#             changed = False
+#             if (ctx.eps >= min_eps and
+#                 ctx.succ >= up_successes and
+#                 rate >= up_rate and
+#                 ctx.stage < len(stages) - 1):
+#                 ctx.stage += 1
+#                 changed = True
+#             elif (ctx.eps >= down_min_eps and
+#                   rate <= down_rate and
+#                   ctx.stage > 0):
+#                 ctx.stage -= 1
+#                 changed = True
+
+#             if changed:
+#                 ctx.last = env.common_step_counter
+#                 ctx.succ = 0
+#                 ctx.eps  = 0
+
+#         tgt_lo, tgt_hi = stages[ctx.stage]
+#         ctx.lo = (1 - alpha) * ctx.lo + alpha * float(tgt_lo)
+#         ctx.hi = (1 - alpha) * ctx.hi + alpha * float(tgt_hi)
+
+    
+#     # if env.common_step_counter % 1000 == 0:
+#         print(
+#             f"[mass_curriculum] step={env.common_step_counter} "
+#             f"stage={ctx.stage} lo={ctx.lo:.3f} hi={ctx.hi:.3f} "
+#             f"(succ={ctx.succ}, eps={ctx.eps})"
+#         )
+
+#     # master でも slave でも、共有レンジをそのまま返す
+#     return (float(ctx.lo), float(ctx.hi))
+
+
+
+
 def shared_mass_curriculum(
     env, env_ids, old_range, *,
     stages,
     master=False,
-    up_successes=64,  min_eps=100,  up_rate=0.7,
+    up_successes=64,  min_eps=3000,  up_rate=0.7,
     down_rate=0.25,   down_min_eps=100,
     cooldown_steps=0,
-    alpha=1.0,
+    alpha=0.2,
 ):
-    # --- 初回だけコンテキストを作成 ---
-    # hasattr を使えば「既にあるのに作り直す」ことはありえない
     if not hasattr(env, "_stone_mass_curr"):
-        # ★ ここを stages[0] ではなく old_range から取る
         lo0, hi0 = old_range
         env._stone_mass_curr = SimpleNamespace(
             stage=0,
@@ -388,11 +460,11 @@ def shared_mass_curriculum(
             last=-10**9,
             lo=float(lo0),
             hi=float(hi0),
+            tgt_lo=float(lo0),
+            tgt_hi=float(hi0),
         )
-
     ctx = env._stone_mass_curr
 
-    # ----- master 側だけが stage/統計を更新 -----
     if master:
         n_succ_step = int(env.extras.get("fr_hold_ok_count", 0))
         if n_succ_step:
@@ -423,10 +495,181 @@ def shared_mass_curriculum(
                 ctx.last = env.common_step_counter
                 ctx.succ = 0
                 ctx.eps  = 0
+                # ★ ステージが変わったときだけ target を更新
+                ctx.tgt_lo, ctx.tgt_hi = stages[ctx.stage]
 
-        tgt_lo, tgt_hi = stages[ctx.stage]
-        ctx.lo = (1 - alpha) * ctx.lo + alpha * float(tgt_lo)
-        ctx.hi = (1 - alpha) * ctx.hi + alpha * float(tgt_hi)
+    robj = env.scene.rigid_objects["stone3"]
+    masses = robj.root_physx_view.get_masses().view(env.num_envs, -1)
+    print(
+        f"[mass_curriculum] step={env.common_step_counter} "
+        f"stage {ctx.stage}, "
+        f"rate={ctx.succ/max(1,ctx.eps):.3f}, "
+        f"stone5 mass env0-3={masses[:4,0].cpu().numpy()}"
 
-    # master でも slave でも、共有レンジをそのまま返す
-    return (float(ctx.lo), float(ctx.hi))
+    )
+
+    # ★ 毎回、現在値 lo/hi を target に近づける
+    ctx.lo = (1 - alpha) * ctx.lo + alpha * ctx.tgt_lo
+    ctx.hi = (1 - alpha) * ctx.hi + alpha * ctx.tgt_hi
+
+    # デバッグログ
+    # if master:#and env.common_step_counter % 1000 == 0:
+    #     print(
+    #         f"[mass_curriculum] step={env.common_step_counter} "
+    #         f"stage={ctx.stage} lo={ctx.lo:.3f} hi={ctx.hi:.3f} "
+    #         f"(tgt_lo={ctx.tgt_lo:.3f}, tgt_hi={ctx.tgt_hi:.3f}, "
+    #         f"succ={ctx.succ}, eps={ctx.eps})"
+    #     )
+
+    return float(ctx.lo), float(ctx.hi)
+
+
+
+
+# def apply_mass_curriculum(env, env_ids, asset_cfg: SceneEntityCfg):
+#     """
+#     リセットされた環境に対して、現在のカリキュラム難易度に応じた質量を適用するイベント。
+#     """
+#     # 1. カリキュラム状態の取得
+#     # shared_mass_curriculum で作成した ctx を参照
+#     if not hasattr(env, "_stone_mass_curr"):
+#         # まだカリキュラムが初期化されていない場合（初回ステップなど）はスキップ
+#         # またはデフォルト値を適用
+#         return
+
+#     ctx = env._stone_mass_curr
+    
+#     # 現在の目標範囲 (lo ~ hi)
+#     current_lo = float(ctx.lo)
+#     current_hi = float(ctx.hi)
+
+#     # 2. 対象オブジェクトの取得
+#     asset = env.scene[asset_cfg.name]
+
+#     # 3. 新しい質量の生成 [len(env_ids)]
+#     # uniform(lo, hi) でサンプリング
+#     new_masses = torch.empty(len(env_ids), device=env.device).uniform_(current_lo, current_hi)
+
+#     # 4. 物理エンジンへの適用 (ここが重要！)
+#     # RigidObject の場合、root_physx_view.set_masses を呼ぶ必要があります
+    
+#     # 現在の質量を取得して、形状を合わせる（場合によっては複数リンクあるため）
+#     # ここでは「単一剛体(RigidObject)」を想定し、ルートの質量を上書きします
+    
+#     # 注意: set_masses は [count, 1] などを期待する場合があるので確認
+#     # RigidObject.root_physx_view.set_masses(masses, env_ids)
+    
+#     # データ整形: [N] -> [N, 1]
+#     mass_data = new_masses.unsqueeze(-1)
+
+#     env_ids_32 = env_ids.to(dtype=torch.int32)
+    
+#     asset.root_physx_view.set_masses(mass_data, indices=env_ids)
+
+#     # ログ出力（デバッグ用：本当に変わったか確認）
+#     if 0 in env_ids:  # env 0 がリセットされたときだけ表示
+#         print(f"[Mass Event] Applied mass {new_masses[0].item():.2f} kg (Range: {current_lo:.1f}-{current_hi:.1f})")
+
+
+
+# def apply_mass_curriculum(env, env_ids, asset_cfg: SceneEntityCfg):
+#     """
+#     リセットされた環境に対して、現在のカリキュラム難易度に応じた質量を適用するイベント。
+#     """
+#     # 1. カリキュラム状態の取得
+#     if not hasattr(env, "_stone_mass_curr"):
+#         # まだカリキュラムが初期化されていない場合は何もしない
+#         return
+
+#     ctx = env._stone_mass_curr
+
+#     current_lo = float(ctx.lo)
+#     current_hi = float(ctx.hi)
+
+#     # 2. 対象オブジェクトの取得（RigidObject を明示）
+#     asset = env.scene.rigid_objects[asset_cfg.name]
+
+#     # 3. 新しい質量の生成 [len(env_ids)]
+#     #    ★★ ここが重要: PhysX は CPU tensor を期待するので device="cpu" ★★
+#     new_masses = torch.empty(len(env_ids), device="cpu").uniform_(current_lo, current_hi)
+
+#     # [N] -> [N, 1]
+#     mass_data = new_masses.unsqueeze(-1)  # (N, 1)
+
+#     # env_ids も CPU にしておく
+#     indices = env_ids.to(device="cpu", dtype=torch.int64)
+
+#     # 4. 物理エンジンへの適用
+#     asset.root_physx_view.set_masses(mass_data, indices=indices)
+
+#     # 5. ログ出力（env 0 が含まれているときだけ）
+#     if (indices == 0).any():
+#         masses_sim = asset.root_physx_view.get_masses()  # CPU tensor
+#         print(
+#             f"[Mass Event] step={env.common_step_counter} "
+#             f"range=({current_lo:.2f}, {current_hi:.2f}) "
+#             f"sampled={new_masses[indices==0][0].item():.2f} "
+#             f"in_sim={masses_sim[0].item():.2f}"
+#         )
+
+
+def apply_mass_curriculum(env: ManagerBasedEnv, env_ids: torch.Tensor, asset_cfg: SceneEntityCfg):
+    """
+    カリキュラムで決まった現在の質量レンジ(ctx.lo/hi)から、
+    reset された env だけ質量をサンプリングして PhysX に書き込む。
+    """
+    # 1. カリキュラム状態の取得
+    if not hasattr(env, "_stone_mass_curr"):
+        # まだカリキュラム側が初期化されていないなら何もしない
+        return
+
+    ctx = env._stone_mass_curr
+    current_lo = float(ctx.lo)
+    current_hi = float(ctx.hi)
+
+    # 2. 対象アセットを取得（RigidObject or Articulation）
+    asset = env.scene[asset_cfg.name]
+
+    # 3. env_ids / body_ids を IsaacLab 標準と同じ形で解決
+    if env_ids is None:
+        env_ids_cpu = torch.arange(env.scene.num_envs, device="cpu")
+    else:
+        env_ids_cpu = env_ids.cpu()
+
+    if asset_cfg.body_ids == slice(None):
+        body_ids = torch.arange(asset.num_bodies, dtype=torch.int, device="cpu")
+    else:
+        body_ids = torch.tensor(asset_cfg.body_ids, dtype=torch.int, device="cpu")
+
+    # 4. 現在の全 mass テーブルを取得 (num_envs, num_bodies) on CPU
+    masses = asset.root_physx_view.get_masses()  # 既に CPU tensor のはず
+
+    # 5. 対象 env × body だけ、新しい値をサンプルして上書き
+    #    ここでは「各 env・各 body」を一様分布で独立サンプル
+    new_masses = torch.empty(
+        (len(env_ids_cpu), len(body_ids)),
+        device="cpu",
+    ).uniform_(current_lo, current_hi)
+
+
+    # new_masses = torch.full(
+    #     (len(env_ids_cpu), len(body_ids)),
+    #     10.0,
+    #     device="cpu",
+    # )
+
+    masses[env_ids_cpu[:, None], body_ids] = new_masses
+
+    # 6. PhysX へ反映（公式と同じ呼び方）
+    asset.root_physx_view.set_masses(masses, env_ids_cpu)
+
+    # 7. デバッグログ（env 0 が含まれているときだけ）
+    # if (env_ids_cpu == 0).any():
+    #     # env0, 最初の body を確認してみる
+    #     sim_mass = masses[0, body_ids[0]].item()
+    #     sampled_mass = new_masses[env_ids_cpu.tolist().index(0), 0].item()
+    #     print(
+    #         f"[Mass Event] step={env.common_step_counter} "
+    #         f"stage={ctx.stage} range=({current_lo:.2f},{current_hi:.2f}) "
+    #         f"sampled={sampled_mass:.2f} in_sim={sim_mass:.2f}"
+        # )

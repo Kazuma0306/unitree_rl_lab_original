@@ -211,8 +211,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         num_learning_epochs=3,
         # num_mini_batches=4,
         num_mini_batches = 32, # for transformer
-        learning_rate=1.0e-3,
-        # learning_rate=1.0e-4, # for transformer
+        # learning_rate=1.0e-3,
+        learning_rate=1.0e-4, # for transformer
         # learning_rate=1.0e-5, # for finetune
         schedule="adaptive",
         # schedule="constant",

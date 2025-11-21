@@ -32,15 +32,7 @@ def _block_center_xy(env, key="stone2"):
 def _block_yaw_w(env, key="stone2"):
     return _yaw_from_quat(_block_quat_w(env, key))      # [B]
 
-def _block_theta(env, key="stone2"):
-    q = _block_quat_w(env, key)                         # [B,4]
-    w,x,y,z = q.unbind(-1)
-    zc = 1.0 - 2.0*(x*x + y*y)
-    return torch.arccos(torch.clamp(zc, -1.0, 1.0))     # [B]
 
-def _block_wmag(env, key="stone2"):
-    w = _block_ang_vel_w(env, key)                      # [B,3]
-    return torch.linalg.norm(w, dim=-1)
 
 
     
@@ -206,6 +198,16 @@ class HoldFROnBlockWithContact(ManagerTermBase):
 
 
 
+
+def _block_theta(env, key="stone2"):
+    q = _block_quat_w(env, key)                         # [B,4]
+    w,x,y,z = q.unbind(-1)
+    zc = 1.0 - 2.0*(x*x + y*y)
+    return torch.arccos(torch.clamp(zc, -1.0, 1.0))     # [B]
+
+def _block_wmag(env, key="stone2"):
+    w = _block_ang_vel_w(env, key)                      # [B,3]
+    return torch.linalg.norm(w, dim=-1)
 
 # 失敗：ブロックが大きく傾いたら True（学習を切り上げ）
 def block_overtilt_single(env, limit_angle=0.30):  # 例: 0.30rad ≈ 17°
@@ -459,7 +461,7 @@ class HoldAllFeetWithContact(ManagerTermBase):
 
         # --- ブロック関連 ---
         self.block_name = P.get("block_name", "stone2")
-        self.T_hold_s   = P.get("T_hold_s", 0.12)
+        self.T_hold_s   = P.get("T_hold_s", 0.1)
         self.half_x     = P.get("half_x", 0.10)
         self.half_y     = P.get("half_y", 0.10)
         self.margin     = P.get("margin", 0.01)
@@ -468,7 +470,7 @@ class HoldAllFeetWithContact(ManagerTermBase):
         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
         self.contact_threshold   = P.get("contact_threshold", 0.0)  # |Fz| > これで接触とみなす
         self.cmd_name            = P.get("cmd_name", "step_fr_to_block")
-        self.near_radius_cmd     = P.get("near_radius_cmd", 0.1)
+        self.near_radius_cmd     = P.get("near_radius_cmd", 0.05)
 
         # --- 足順序と FR 名 ---
         self.leg_names   = P.get("leg_names", ["FL_foot", "FR_foot", "RL_foot", "RR_foot"])
@@ -643,3 +645,86 @@ class HoldAllFeetWithContact(ManagerTermBase):
         # env.extras["all_feet_near_cmd_bool"]   = near_cmd
 
         return done
+
+
+
+
+class AllBlocksMovedTermination(ManagerTermBase):
+    """
+    指定した複数のブロックについて、エピソード開始時の「位置」または「姿勢」から
+    閾値以上変化したら終了（失敗）とする。
+    """
+    def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        
+        # 対象ブロック
+        default_blocks = [f"stone{i}" for i in range(1, 7)]
+        self.block_names = P.get("block_names", default_blocks)
+        
+        # 閾値
+        self.pos_limit = P.get("pos_limit", 0.20)  # 20cm動いたらアウト
+        self.ori_limit = P.get("ori_limit", 0.50)  # 0.5rad(約28度)回転したらアウト
+                                                   # (傾きだけでなくYaw回転も含む)
+
+        # シーンからオブジェクト取得
+        self.blocks = []
+        for name in self.block_names:
+            if name in env.scene.rigid_objects:
+                self.blocks.append(env.scene.rigid_objects[name])
+
+        num_envs = env.num_envs
+        num_blocks = len(self.blocks)
+        
+        # 初期状態保存用 [B, N, 3] / [B, N, 4]
+        self.init_pos = torch.zeros(num_envs, num_blocks, 3, device=env.device)
+        self.init_quat = torch.zeros(num_envs, num_blocks, 4, device=env.device)
+        self.is_first = True
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # 1. 現在の状態取得
+        curr_pos_list = []
+        curr_quat_list = []
+        for b in self.blocks:
+            # pos
+            p = b.data.root_pos_w
+            if p.ndim == 3: p = p[:, 0, :]
+            curr_pos_list.append(p)
+            # quat
+            q = b.data.root_quat_w
+            if q.ndim == 3: q = q[:, 0, :]
+            curr_quat_list.append(q)
+
+        curr_pos = torch.stack(curr_pos_list, dim=1)   # [B, N, 3]
+        curr_quat = torch.stack(curr_quat_list, dim=1) # [B, N, 4]
+
+        # 2. リセット時の初期状態保存
+        # episode_length_buf == 0 (リセット直後) の環境を特定
+        reset_ids = (env.episode_length_buf == 0).nonzero(as_tuple=False).flatten()
+        
+        if len(reset_ids) > 0:
+            self.init_pos[reset_ids] = curr_pos[reset_ids]
+            self.init_quat[reset_ids] = curr_quat[reset_ids]
+        
+        if self.is_first:
+            self.init_pos[:] = curr_pos
+            self.init_quat[:] = curr_quat
+            self.is_first = False
+
+        # 3. 判定A: 位置のズレ (Euclidean Distance)
+        dist = torch.norm(curr_pos - self.init_pos, dim=-1) # [B, N]
+        fail_pos = (dist > self.pos_limit).any(dim=1)
+
+        # 4. 判定B: 姿勢のズレ (Quaternion Angle)
+        # 2つのクォータニオン q1, q2 の間の角度 theta は
+        # theta = 2 * acos( |dot(q1, q2)| )
+        # dot積の絶対値をとるのは、qと-qが同じ回転を表すため
+        dot = torch.sum(curr_quat * self.init_quat, dim=-1).abs() # [B, N]
+        # 誤差で1.0を超えることがあるのでclamp
+        dot = torch.clamp(dot, min=0.0, max=1.0)
+        angle = 2.0 * torch.acos(dot) # [B, N] (rad)
+        
+        fail_ori = (angle > self.ori_limit).any(dim=1)
+
+        # 5. どちらかでもアウトならTrue
+        return fail_pos | fail_ori

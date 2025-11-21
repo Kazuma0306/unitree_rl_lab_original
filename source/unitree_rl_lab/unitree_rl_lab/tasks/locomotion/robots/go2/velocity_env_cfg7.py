@@ -509,9 +509,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
     stone1 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_1",
         spawn=sim_utils.CuboidCfg(
-            size=(0.3, 0.3, 0.3),  # 天板サイズ
+            size=(0.35, 0.35, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -527,9 +527,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
     stone2 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_2",
         spawn=sim_utils.CuboidCfg(
-            size=(0.3, 0.3, 0.3),  # 天板サイズ
+            size=(0.35, 0.35, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -547,7 +547,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Stone_3",
         spawn=sim_utils.CuboidCfg(
             size=(0.35, 0.35, 0.3),  # 天板サイズ
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False,),
             mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -557,7 +557,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.2, 0.18, -0.14)
+            pos=(0.2, 0.2, -0.14)
         )
     )
 
@@ -577,7 +577,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(-0.2, 0.18, -0.14)
+            pos=(-0.2, 0.2, -0.14)
         )
     )
 
@@ -596,7 +596,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(-0.2, -0.18, -0.14)
+            pos=(-0.2, -0.2, -0.14)
         )
     )
 
@@ -616,7 +616,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.2, -0.18, -0.14)
+            pos=(0.2, -0.2, -0.14)
         )
     )
 
@@ -694,83 +694,134 @@ class EventCfg:
         mode = "reset",
     )
 
-    stone_1 = EventTerm(
 
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
+    update_stone1_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
         params={
-            "asset_cfg": SceneEntityCfg("stone1"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
+            "asset_cfg": SceneEntityCfg("stone1"),  # 対象のアセット名
+        }
     )
 
-    stone_2 = EventTerm(
-
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
+    update_stone2_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
         params={
-            "asset_cfg": SceneEntityCfg("stone2"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
+            "asset_cfg": SceneEntityCfg("stone2"),  # 対象のアセット名
+        }
     )
 
-    stone_3 = EventTerm(
 
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
+    update_stone3_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
         params={
-            "asset_cfg": SceneEntityCfg("stone3"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
+            "asset_cfg": SceneEntityCfg("stone3"),  # 対象のアセット名
+        }
     )
 
-    stone_4 = EventTerm(
-
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
+    update_stone4_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
         params={
-            "asset_cfg": SceneEntityCfg("stone4"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
+            "asset_cfg": SceneEntityCfg("stone4"),  # 対象のアセット名
+        }
     )
 
-    stone_5 = EventTerm(
-
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
+    update_stone5_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
         params={
-            "asset_cfg": SceneEntityCfg("stone5"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
+            "asset_cfg": SceneEntityCfg("stone5"),  # 対象のアセット名
+        }
     )
 
-    stone_6 = EventTerm(
 
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
+    update_stone6_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
         params={
-            "asset_cfg": SceneEntityCfg("stone6"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
+            "asset_cfg": SceneEntityCfg("stone6"),  # 対象のアセット名
+        }
     )
+
+    # stone_1 = EventTerm(
+
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone1"),
+    #         "mass_distribution_params": (30.0, 30.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
+
+    # stone_2 = EventTerm(
+
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone2"),
+    #         "mass_distribution_params": (30.0, 30.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
+
+    # stone_3 = EventTerm(
+
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone3"),
+    #         "mass_distribution_params": (30.0, 30.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
+
+    # stone_4 = EventTerm(
+
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone4"),
+    #         "mass_distribution_params": (30.0, 30.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
+
+    # stone_5 = EventTerm(
+
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone5"),
+    #         "mass_distribution_params": (30.0, 30.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
+
+    # stone_6 = EventTerm(
+
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone6"),
+    #         "mass_distribution_params": (30.0, 30.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
 
 
     #proposed
@@ -1124,7 +1175,6 @@ class RewardsCfg:
 
     #指定位置へ脚を置くbonus
     # fr_on_block = RewTerm(func=mdp.fr_on_block_rect, weight=0.05, params=dict(margin=0.01)) #ブロック座標系で、脚がブロック範囲内かどうか
-    # fr_on_block_bonus = RewTerm(func=mdp.fr_on_block_bonus, weight= 0.5) #ブロック座標系、タッチ評価
     # fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 1.0) #ブロック座標系、連続タッチ評価
 
     # bonus for all legs contact
@@ -1140,20 +1190,27 @@ class RewardsCfg:
     # )
 
     # ブロックを動かさない
-    block_angvel = RewTerm(func=mdp.ang_vel, weight=-0.35)
+    # block_angvel = RewTerm(func=mdp.ang_vel, weight=-0.35)
+
+    block_stability_penalty = RewTerm(
+    func=mdp.BlocksMovementPenalty,
+    weight=-1.0,  # ペナルティなのでマイナス
+)
 
     # progress_to_stone = RewTerm(func=mdp.fr_target_progress_reward3, weight=2.5,#ワールド座標系だが内積を撮っているので問題なし、FRProgressToStoneBaseと役割がかぶる
     # )　しかも報酬内でDtをかけるようになっているので二重がけになる
 
     # distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d4, weight = 0.5) #ベース座標系での距離
     distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.7) #ベース座標系での距離 , all legs
-    distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
+
+
+    # distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
 
 
   
 
     # -- base
-    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.5)
+    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.8)
     # base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
     # joint_vel = RewTerm(func=mdp.joint_vel_l2, weight=-0.001)
     # joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
@@ -1307,6 +1364,11 @@ class RewardsCfg:
     #     },
     # )
 
+#     mass_logger = RewTerm(
+#     func=mdp.LogObjectMass, # 上で作ったクラス
+#     weight=0.0,         # 学習には影響させない
+# )
+
 
 
 
@@ -1335,16 +1397,35 @@ class TerminationsCfg:
         # time_outフラグは付けない（成功エピソードとしてカウントしたい）
     )
 
-    # ★ 追加：失敗（ブロックを動かし過ぎた）
-    block_overtilt = DoneTerm(
-        func=mdp.block_overtilt_single,
-        params={"limit_angle": 0.30}
+    # # ★ 追加：失敗（ブロックを動かし過ぎた）
+    # block_overtilt = DoneTerm(
+    #     func=mdp.block_overtilt_single,
+    #     params={"limit_angle": 0.30}
+    # )
+    # # 任意：角速度による失敗
+    # block_high_angvel = DoneTerm(
+    #     func=mdp.block_high_angvel_single,
+    #     params={"limit_w": 2.0}
+    # )
+
+    block_moved = DoneTerm(
+    func=mdp.AllBlocksMovedTermination,
+    # params={
+    #     "block_names": ["stone1", "stone2", "stone3", "stone4", "stone5", "stone6"],
+    #     "pos_limit": 0.20,  # 20cm動いたらアウト
+    #     "ori_limit": 0.52,  # 30度(約0.52rad)以上回転したらアウト（傾きor回転）
+    # },
+
     )
-    # 任意：角速度による失敗
-    block_high_angvel = DoneTerm(
-        func=mdp.block_high_angvel_single,
-        params={"limit_w": 2.0}
-    )
+
+
+MIN_EPS=2000
+UP=0.7
+DOWN=0.25
+D_MIN_EPS=2000
+COOL_DOWN=1000
+ALPHA=0.001
+
 
 
 @configclass
@@ -1405,67 +1486,211 @@ class CurriculumCfg:
     # )
 
 
-    schedule_lin = CurrTerm(
-        func = mdp.schedule_reward_weight,
-        params = {
-            "term_name" : "distance_progress",
-            "weight": 0,
-            "num_steps": 20000
-        }
+    # schedule_lin = CurrTerm(
+    #     func = mdp.schedule_reward_weight,
+    #     params = {
+    #         "term_name" : "distance_progress",
+    #         "weight": 0,
+    #         "num_steps": 20000
+    #     }
+    # )
+
+
+
+
+    stone1_difficulty_update = CurrTerm(
+    # 直接計算関数を指定する
+    func=mdp.shared_mass_curriculum,
+    params=dict(
+        # ここに必要なパラメータを全部書く
+        old_range=(30.0, 30.0),
+        stages=[(30.0, 30.0),
+                    (28.0, 28.0),
+                    (26.0, 26.0),
+                    (24.0, 24.0),
+                    (22.0, 22.0),
+                    (20.0, 20.0)],
+        master=False, # ★ 1つだけ登録すればいいので True にする
+        min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,      
+    ),
+)
+
+
+
+    stone2_difficulty_update = CurrTerm(
+    # 直接計算関数を指定する
+    func=mdp.shared_mass_curriculum,
+    params=dict(
+        # ここに必要なパラメータを全部書く
+        old_range=(30.0, 30.0),
+        stages=[(30.0, 30.0),
+                    (28.0, 28.0),
+                    (26.0, 26.0),
+                    (24.0, 24.0),
+                    (22.0, 22.0),
+                    (20.0, 20.0)],
+        master=False, # ★ 1つだけ登録すればいいので True にする
+        min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,      
+    ),
+)
+
+
+
+
+
+    stone3_difficulty_update = CurrTerm(
+    # 直接計算関数を指定する
+    func=mdp.shared_mass_curriculum,
+    params=dict(
+        # ここに必要なパラメータを全部書く
+        old_range=(30.0, 30.0),
+        stages=[(30.0, 30.0),
+                    (28.0, 28.0),
+                    (26.0, 26.0),
+                    (24.0, 24.0),
+                    (22.0, 22.0),
+                    (20.0, 20.0)],
+        master=True, # ★ 1つだけ登録すればいいので True にする
+        min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,      
+    ),
+)
+
+
+    stone4_difficulty_update = CurrTerm(
+        # 直接計算関数を指定する
+        func=mdp.shared_mass_curriculum,
+        params=dict(
+            # ここに必要なパラメータを全部書く
+            old_range=(30.0, 30.0),
+            stages=[(30.0, 30.0),
+                        (28.0, 28.0),
+                        (26.0, 26.0),
+                        (24.0, 24.0),
+                        (22.0, 22.0),
+                        (20.0, 20.0)],
+            master=False, # ★ 1つだけ登録すればいいので True にする
+            min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,       
+        ),
+
+
+    )
+
+    stone5_difficulty_update = CurrTerm(
+        # 直接計算関数を指定する
+        func=mdp.shared_mass_curriculum,
+        params=dict(
+            # ここに必要なパラメータを全部書く
+            old_range=(30.0, 30.0),
+            stages=[(30.0, 30.0),
+                        (28.0, 28.0),
+                        (26.0, 26.0),
+                        (24.0, 24.0),
+                        (22.0, 22.0),
+                        (20.0, 20.0)],
+            master=False, # ★ 1つだけ登録すればいいので True にする
+            min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,      
+        ),
+    )
+
+    stone6_difficulty_update = CurrTerm(
+        # 直接計算関数を指定する
+        func=mdp.shared_mass_curriculum,
+        params=dict(
+            # ここに必要なパラメータを全部書く
+            old_range=(30.0, 30.0),
+            stages=[(30.0, 30.0),
+                        (28.0, 28.0),
+                        (26.0, 26.0),
+                        (24.0, 24.0),
+                        (22.0, 22.0),
+                        (20.0, 20.0)],
+            master=False, # ★ 1つだけ登録すればいいので True にする
+            min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,      
+        ),
     )
 
 
 
 
-    stone1_mass_curriculum = CurrTerm(
-    func=mdp.modify_term_cfg,
-    params=dict(
-        address="events.stone_1.params.mass_distribution_params",
-        modify_fn=mdp.shared_mass_curriculum,
-        modify_params=dict(
-            stages=[(12.0, 12.0),
-                    (10.0, 10.0),
-                    (8.0, 8.0),
-                    (6.0, 6.0),
-                    (4.0, 4.0),
-                    (2.0, 2.0)],
-            master=True,        # ★ ここだけ True
-            up_successes=64,
-            min_eps=100,
-            up_rate=0.7,
-            down_rate=0.25,
-            down_min_eps=100,
-            cooldown_steps=0,
-            alpha=0.2,         # 連続的な変化にしたければ調整
-        ),
-    ),
-)
+#     stone1_mass_curriculum = CurrTerm(
+#     func=mdp.modify_term_cfg,
+#     params=dict(
+#         address="events.stone_1.params.mass_distribution_params",
+#         modify_fn=mdp.shared_mass_curriculum,
+#         modify_params=dict(
+#             stages=[(30.0, 30.0),
+#                     (28.0, 28.0),
+#                     (26.0, 26.0),
+#                     (24.0, 24.0),
+#                     (22.0, 22.0),
+#                     (20.0, 20.0)],
+#             master=True,        # ★ ここだけ True
+#             up_successes=64,
+#             min_eps=1000,
+#             up_rate=0.7,
+#             down_rate=0.25,
+#             down_min_eps=1000,
+#             cooldown_steps=10,
+#             alpha=0.2,         # 連続的な変化にしたければ調整
+#         ),
+#     ),
+# )
 
 # Stone2 用（master=False）
-stone2_mass_curriculum = CurrTerm(
-    func=mdp.modify_term_cfg,
-    params=dict(
-        address="events.stone_2.params.mass_distribution_params",
-        modify_fn=mdp.shared_mass_curriculum,
-        modify_params=dict(
-            stages=[(12.0, 12.0),
-                    (10.0, 10.0),
-                    (8.0, 8.0),
-                    (6.0, 6.0),
-                    (4.0, 4.0),
-                    (2.0, 2.0)],
-            master=False,       # ★ こちらは False
-            # 他のパラメータは master 側と同じで OK
-            up_successes=64,
-            min_eps=100,
-            up_rate=0.7,
-            down_rate=0.25,
-            down_min_eps=100,
-            cooldown_steps=0,
-            alpha=0.2,
-        ),
-    ),
-)
+# stone2_mass_curriculum = CurrTerm(
+#     func=mdp.modify_term_cfg,
+#     params=dict(
+#         address="events.stone_2.params.mass_distribution_params",
+#         modify_fn=mdp.shared_mass_curriculum,
+#         modify_params=dict(
+#             stages=[(30.0, 30.0),
+#                     (28.0, 28.0),
+#                     (26.0, 26.0),
+#                     (24.0, 24.0),
+#                     (22.0, 22.0),
+#                     (20.0, 20.0)],
+#             master=False,       # ★ こちらは False
+#             # 他のパラメータは master 側と同じで OK
+#             up_successes=64,
+#             min_eps=100,
+#             up_rate=0.7,
+#             down_rate=0.25,
+#             down_min_eps=100,
+#             cooldown_steps=0,
+#             alpha=0.2,
+#         ),
+#     ),
+# )
 
 # stone3_mass_curriculum = CurrTerm(
 #     func=mdp.modify_term_cfg,
@@ -1473,12 +1698,12 @@ stone2_mass_curriculum = CurrTerm(
 #         address="events.stone_3.params.mass_distribution_params",
 #         modify_fn=mdp.shared_mass_curriculum,
 #         modify_params=dict(
-#             stages=[(12.0, 12.0),
-#                     (10.0, 10.0),
-#                     (8.0, 8.0),
-#                     (6.0, 6.0),
-#                     (4.0, 4.0),
-#                     (2.0, 2.0)],
+#             stages=[(30.0, 30.0),
+#                     (28.0, 28.0),
+#                     (26.0, 26.0),
+#                     (24.0, 24.0),
+#                     (22.0, 22.0),
+#                     (20.0, 20.0)],
 #             master=False,       # ★ こちらは False
 #             # 他のパラメータは master 側と同じで OK
 #             up_successes=64,
@@ -1498,12 +1723,12 @@ stone2_mass_curriculum = CurrTerm(
 #         address="events.stone_4.params.mass_distribution_params",
 #         modify_fn=mdp.shared_mass_curriculum,
 #         modify_params=dict(
-#             stages=[(12.0, 12.0),
-#                     (10.0, 10.0),
-#                     (8.0, 8.0),
-#                     (6.0, 6.0),
-#                     (4.0, 4.0),
-#                     (2.0, 2.0)],
+#             stages=[(30.0, 30.0),
+#                     (28.0, 28.0),
+#                     (26.0, 26.0),
+#                     (24.0, 24.0),
+#                     (22.0, 22.0),
+#                     (20.0, 20.0)],
 #             master=False,       # ★ こちらは False
 #             # 他のパラメータは master 側と同じで OK
 #             up_successes=64,
@@ -1523,12 +1748,12 @@ stone2_mass_curriculum = CurrTerm(
 #         address="events.stone_5.params.mass_distribution_params",
 #         modify_fn=mdp.shared_mass_curriculum,
 #         modify_params=dict(
-#             stages=[(12.0, 12.0),
-#                     (10.0, 10.0),
-#                     (8.0, 8.0),
-#                     (6.0, 6.0),
-#                     (4.0, 4.0),
-#                     (2.0, 2.0)],
+#             stages=[(30.0, 30.0),
+#                     (28.0, 28.0),
+#                     (26.0, 26.0),
+#                     (24.0, 24.0),
+#                     (22.0, 22.0),
+#                     (20.0, 20.0)],
 #             master=False,       # ★ こちらは False
 #             # 他のパラメータは master 側と同じで OK
 #             up_successes=64,
@@ -1548,12 +1773,12 @@ stone2_mass_curriculum = CurrTerm(
 #         address="events.stone_6.params.mass_distribution_params",
 #         modify_fn=mdp.shared_mass_curriculum,
 #         modify_params=dict(
-#             stages=[(12.0, 12.0),
-#                     (10.0, 10.0),
-#                     (8.0, 8.0),
-#                     (6.0, 6.0),
-#                     (4.0, 4.0),
-#                     (2.0, 2.0)],
+#             stages=[(30.0, 30.0),
+#                     (28.0, 28.0),
+#                     (26.0, 26.0),
+#                     (24.0, 24.0),
+#                     (22.0, 22.0),
+#                     (20.0, 20.0)],
 #             master=False,       # ★ こちらは False
 #             # 他のパラメータは master 側と同じで OK
 #             up_successes=64,

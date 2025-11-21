@@ -1018,6 +1018,51 @@ def block_tilt_margin(env):
     return (torch.clamp(_block_theta(env)/0.20, 0, 1.0)**2.5)
 
 
+
+
+def blocks_motion_penalty(env, block_keys=None):
+    """
+    6個のブロック（石）すべての動き（角速度、進速度）をペナルティにする。
+    戻り値: [num_envs]  (値が大きいほどブロックがよく動いている)
+
+    使い方:
+        rew_blocks = -w_blocks * blocks_motion_penalty(env, ["stone1", ..., "stone6"])
+    """
+    if block_keys is None:
+        # デフォルト: rigid_objects の key のうち "stone" で始まるもの全部
+        block_keys = [k for k in env.scene.rigid_objects.keys() if k.startswith("stone")]
+        # 明示的に 6 個指定したいなら、呼び出し側で block_keys=["stone1", ...] と渡す
+
+    device = env.device
+    num_envs = env.num_envs
+
+    # 各 env について「6個のブロックの動きの総量」を入れる
+    penalty = torch.zeros((num_envs,), device=device)
+
+    for key in block_keys:
+        robj = env.scene.rigid_objects[key]
+
+        # --- 並進速度 [B,3] ---
+        lin_v = robj.data.root_lin_vel_w  # [B,1,3] or [B,3]
+        if lin_v.ndim == 3:
+            lin_v = lin_v[:, 0, :]        # [B,3] に潰す
+
+        # --- 角速度 [B,3] ---
+        ang_v = robj.data.root_ang_vel_w  # [B,1,3] or [B,3]
+        if ang_v.ndim == 3:
+            ang_v = ang_v[:, 0, :]
+
+        # ノルムの2乗（= 二乗和）
+        lin_mag2 = torch.sum(lin_v ** 2, dim=-1)   # [B]
+        ang_mag2 = torch.sum(ang_v ** 2, dim=-1)   # [B]
+
+        penalty += lin_mag2 + ang_mag2
+
+    return penalty
+
+
+
+
 # def support_force_band_reward(env: ManagerBasedRLEnv, sensor_cfg,
 #                               fz_min=0.03, fz_max=0.20,
 #                               leg="FR", mass_kg=15.0, normalize=True):
@@ -2208,7 +2253,7 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
         self.fr_leg_name = P.get("fr_leg_name", "FR_foot")
 
         # FL/RL/RR が「コマンド目標周辺」にいるとみなす XY 距離 [m]
-        self.near_radius_cmd = P.get("near_radius_cmd", 0.1)
+        self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
 
         # --- シーン参照 ---
         scene = env.scene
@@ -2382,3 +2427,109 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
                 self.paid[m]   = False
 
         return payout
+
+
+
+
+
+
+
+class BlocksMovementPenalty(ManagerTermBase):
+    """
+    指定された複数の剛体ブロックの「位置の動き(線形速度)」と「回転の動き(角速度)」
+    の二乗和を計算し、ペナルティとして返す。
+    
+    r = sum_i ( weight_lin * ||v_i||^2 + weight_ang * ||w_i||^2 )
+    """
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        
+        # パラメータ取得
+        # デフォルトで stone1 ~ stone6 を対象にする例
+        default_blocks = [f"stone{i}" for i in range(1, 7)]
+        self.block_names = cfg.params.get("block_names", default_blocks)
+        
+        # 線形速度と角速度の重みバランス（単位が違うため調整可能に）
+        self.lin_weight = cfg.params.get("lin_weight", 1.0)
+        self.ang_weight = cfg.params.get("ang_weight", 0.05) # 角速度は数値が大きくなりがちなので少し下げる等
+
+        # シーンからオブジェクトを取得
+        self.blocks = []
+        missing = []
+        for name in self.block_names:
+            if name in env.scene.rigid_objects:
+                self.blocks.append(env.scene.rigid_objects[name])
+            else:
+                missing.append(name)
+        
+        if missing:
+            print(f"[Warning] BlocksMovementPenalty: Could not find objects {missing} in scene.")
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # バッチサイズ分のゼロテンソル
+        total_penalty = torch.zeros(env.num_envs, device=env.device)
+
+        for block in self.blocks:
+            # --- 1. 線形速度 (Linear Velocity) [B, 1, 3] or [B, 3] ---
+            # "位置の動き" に相当
+            lin_vel = block.data.root_lin_vel_w
+            if lin_vel.ndim == 3:
+                lin_vel = lin_vel[:, 0, :] # インスタンス次元削除
+            
+            # --- 2. 角速度 (Angular Velocity) [B, 1, 3] or [B, 3] ---
+            # "回転の動き" に相当
+            ang_vel = block.data.root_ang_vel_w
+            if ang_vel.ndim == 3:
+                ang_vel = ang_vel[:, 0, :]
+
+            # --- 3. 二乗ノルムの計算 ---
+            # v^2
+            l2_lin = torch.sum(torch.square(lin_vel), dim=-1)
+            # w^2
+            l2_ang = torch.sum(torch.square(ang_vel), dim=-1)
+
+            # 加算 (重み付き)
+            total_penalty += (self.lin_weight * l2_lin) + (self.ang_weight * l2_ang)
+
+        # 報酬関数として呼び出す際は、configの weight をマイナスに設定してください (-1.0など)
+        return total_penalty
+
+
+
+
+class LogObjectMass(ManagerTermBase):
+    def __init__(self, cfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        self.obj_name = cfg.params.get("asset_name", "stone3")
+        
+        # オブジェクト取得
+        # 存在チェック
+        if self.obj_name not in env.scene.rigid_objects:
+            raise ValueError(f"LogObjectMassDebug: '{self.obj_name}' not found in scene!")
+            
+        self.obj = env.scene.rigid_objects[self.obj_name]
+        self.log_key_root = f"Info/Mass_Root_{self.obj_name}"
+        self.log_key_link = f"Info/Mass_LinkSum_{self.obj_name}"
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # 1. ルート（剛体全体）の質量を取得してみる [num_envs, 1]
+        root_masses = self.obj.root_physx_view.get_masses()
+        
+        # 2. 全リンク（構成パーツ）の質量を取得して合計してみる
+        # get_masses() -> [num_envs, num_links]
+        link_masses = self.obj.body_physx_view.get_masses()
+        link_sum = link_masses.sum(dim=-1)
+
+        # --- デバッグ出力 (最初の1回だけ、または毎秒など) ---
+        # 毎回だとログが流れるので、env 0 の値だけチェック
+        if env.common_step_counter % 50 == 0:
+            print(f"DEBUG MASS [{self.obj_name}]:")
+            print(f"  - Root Mass (Env0): {root_masses[0].item():.4f}")
+            print(f"  - Link Sum  (Env0): {link_sum[0].item():.4f}")
+            # もし両方0なら、USDの設定かPhysics設定がおかしい
+
+        # Tensorboardへの記録 (平均値)
+        env.extras[self.log_key_root] = root_masses.mean()
+        env.extras[self.log_key_link] = link_sum.mean()
+
+        return root_masses
