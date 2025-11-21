@@ -505,7 +505,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-
+    #左前
     stone1 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_1",
         spawn=sim_utils.CuboidCfg(
@@ -524,6 +524,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         )
     )
 
+    #右前
     stone2 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_2",
         spawn=sim_utils.CuboidCfg(
@@ -542,7 +543,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         )
     )
 
-
+    #FL
     stone3 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_3",
         spawn=sim_utils.CuboidCfg(
@@ -562,7 +563,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     )
 
 
-
+    #RL
     stone4 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_4",
         spawn=sim_utils.CuboidCfg(
@@ -582,6 +583,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     )
 
 
+    #RR
     stone5 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_5",
         spawn=sim_utils.CuboidCfg(
@@ -601,7 +603,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     )
 
 
-
+    #FR
     stone6 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_6",
         spawn=sim_utils.CuboidCfg(
@@ -935,7 +937,7 @@ class CommandsCfg:
     # )
 
 
-    step_fr_to_block = mdp.MultiLegBaseCommandCfg(
+    step_fr_to_block = mdp.MultiLegBaseCommand2Cfg(
         resampling_time_range=(2.0, 3.0),
         debug_vis=True,
     )
@@ -1178,7 +1180,7 @@ class RewardsCfg:
     # fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 1.0) #ブロック座標系、連続タッチ評価
 
     # bonus for all legs contact
-    fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusOnce, weight= 2.0)
+    fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusOnce2, weight= 2.0)
     
     # そっと置く
     # impact_spike_fr = RewTerm(func=mdp.impact_spike_penalty_fr, weight=-0.3, params=dict(dfz_thresh=0.15))
@@ -1201,16 +1203,16 @@ class RewardsCfg:
     # )　しかも報酬内でDtをかけるようになっているので二重がけになる
 
     # distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d4, weight = 0.5) #ベース座標系での距離
-    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.7) #ベース座標系での距離 , all legs
+    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.8) #ベース座標系での距離 , all legs
 
 
-    # distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
+    distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
 
 
   
 
     # -- base
-    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.8)
+    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.5)
     # base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
     # joint_vel = RewTerm(func=mdp.joint_vel_l2, weight=-0.001)
     # joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
@@ -1393,7 +1395,7 @@ class TerminationsCfg:
 
 
     success_hold = DoneTerm(
-        func=mdp.HoldAllFeetWithContact,
+        func=mdp.HoldAllFeetWithContact2,
         # time_outフラグは付けない（成功エピソードとしてカウントしたい）
     )
 
@@ -1813,7 +1815,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
-    curriculum: CurriculumCfg = CurriculumCfg()
+    # curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self):
         """Post initialization."""

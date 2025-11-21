@@ -125,15 +125,15 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
         #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # ),
 
-        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.2, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (1.0, 1.5), stone_distance_range = (0.05, 0.08),  holes_depth = -5.0, platform_width = 1.5,
+        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+        #      proportion=0.2, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (1.0, 1.5), stone_distance_range = (0.05, 0.08),  holes_depth = -5.0, platform_width = 1.5,
 
-        ),
+        # ),
 
-        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.7, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (0.7, 1.5), stone_distance_range = (0.05, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+        #      proportion=0.7, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (0.7, 1.5), stone_distance_range = (0.05, 0.09),  holes_depth = -5.0, platform_width = 1.5,
 
-        ),
+        # ),
 
 
         #difficult version

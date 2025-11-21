@@ -728,3 +728,193 @@ class AllBlocksMovedTermination(ManagerTermBase):
 
         # 5. どちらかでもアウトならTrue
         return fail_pos | fail_ori
+
+
+
+class HoldAllFeetWithContact2(ManagerTermBase):
+    """
+    終了条件:
+      - 各脚が「対応するブロック」の上面矩形内にあり、
+      - かつ 4 脚すべての contact_time >= T_hold_s で接触している
+    を満たしたときに done=True を返す。
+    """
+
+    def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.env = env
+
+        # --- ブロック矩形パラメータ（全脚共通） ---
+        self.T_hold_s   = P.get("T_hold_s", 0.1)
+        self.half_x     = P.get("half_x", 0.10)
+        self.half_y     = P.get("half_y", 0.10)
+        self.margin     = P.get("margin", 0.01)
+
+        # --- 接触関連 ---
+        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+        self.contact_threshold   = P.get("contact_threshold", 0.0)  # |Fz| > これで接触とみなす
+
+        # --- 足順序 ---
+        self.leg_names = P.get(
+            "leg_names",
+            ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+        )
+        self.num_legs = len(self.leg_names)
+
+        # ★ 各脚 → 対応ブロック名
+        #   MultiLegBaseCommand 側と揃えておくこと
+        self.leg_block_keys: Dict[str, str] = P.get(
+            "leg_block_keys",
+            {
+                "FL_foot": "stone3",
+                "FR_foot": "stone6",
+                "RL_foot": "stone4",
+                "RR_foot": "stone5",
+            },
+        )
+
+        scene = env.scene
+        self.robot = scene.articulations["robot"]
+
+        # --- 各脚の RigidObject（ブロック） ---
+        self.blocks: Dict[str, omni.isaac.lab.assets.RigidObject] = {}
+        for leg in self.leg_names:
+            blk_name = self.leg_block_keys.get(leg, None)
+            if blk_name is None:
+                raise RuntimeError(
+                    f"leg_block_keys に脚 '{leg}' 用のブロック名がありません。"
+                )
+            if blk_name not in scene.rigid_objects:
+                raise RuntimeError(
+                    f"scene.rigid_objects にブロック '{blk_name}' が存在しません。"
+                )
+            self.blocks[leg] = scene.rigid_objects[blk_name]
+
+        # ContactSensor 本体
+        if self.contact_sensor_name not in scene.sensors:
+            raise RuntimeError(
+                f"scene.sensors に '{self.contact_sensor_name}' が見つかりません。"
+            )
+        self.sensor = scene.sensors[self.contact_sensor_name]
+
+        # contact_time を使うので track_air_time 必須
+        if not self.sensor.cfg.track_air_time:
+            raise RuntimeError(
+                f"ContactSensor '{self.contact_sensor_name}' の cfg.track_air_time が False です。"
+                " current_contact_time を使うには True にしてください。"
+            )
+
+        # --- ロボット側 foot ID（位置取得用） ---
+        self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_names]
+
+        # --- ContactSensor 内の列 index を名前から引く ---
+        sensor_body_names = self.sensor.body_names  # 1env分の body 名リスト
+        self.leg_cols: list[int] = []
+        for leg in self.leg_names:
+            if leg not in sensor_body_names:
+                raise RuntimeError(
+                    "ContactSensor の body_names に "
+                    f"'{leg}' が含まれていません。\n"
+                    f"  sensor.body_names = {sensor_body_names}\n"
+                    "ContactSensorCfg.prim_path が足リンクにマッチしているか確認してください。"
+                )
+            self.leg_cols.append(sensor_body_names.index(leg))
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        device = env.device
+        B = env.num_envs
+
+        # ==============================
+        # 1. 足先位置（world） [B, num_legs, 3]
+        # ==============================
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+        else:
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]  # [B,num_legs,3]
+        feet_xy_w = feet_w[..., :2]                                   # [B,num_legs,2]
+
+        # ==============================
+        # 2. 接触判定（net_forces_w）
+        # ==============================
+        F = self.sensor.data.net_forces_w              # 期待形状: [B, num_sensor_bodies, 3]
+        if F is None:
+            raise RuntimeError(
+                f"ContactSensor '{self.contact_sensor_name}' の data.net_forces_w が None です。"
+                " update_period や asset の activate_contact_sensors を確認してください。"
+            )
+
+        # 各脚の Fz を sensor.body_names の順に抜き出す
+        Fz = torch.stack(
+            [F[:, col, 2] for col in self.leg_cols], dim=-1
+        )  # [B, num_legs]
+        contacts = (Fz.abs() > self.contact_threshold)  # [B,num_legs] bool
+
+        # ==============================
+        # 3. contact_time の取得（current_contact_time）
+        # ==============================
+        ctime_all = self.sensor.data.current_contact_time  # [B, num_sensor_bodies]
+        if ctime_all is None:
+            raise RuntimeError(
+                f"ContactSensor '{self.contact_sensor_name}' の current_contact_time が None です。"
+                " cfg.track_air_time=True になっているか確認してください。"
+            )
+
+        ctimes = torch.stack(
+            [ctime_all[:, col] for col in self.leg_cols], dim=-1
+        )  # [B,num_legs]
+
+        # ==============================
+        # 4. 各脚が「自分のブロック矩形内か？」を判定
+        # ==============================
+        hx = self.half_x - self.margin
+        hy = self.half_y - self.margin
+
+        inside_list = []  # list of [B]
+        for j, leg_name in enumerate(self.leg_names):
+            block = self.blocks[leg_name]
+
+            # ブロック姿勢
+            p = block.data.root_pos_w
+            blk_pos_w = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
+
+            q = block.data.root_quat_w
+            blk_quat_w = q[:, 0, :] if q.ndim == 3 else q  # [B,4]
+
+            yaw = _yaw_from_quat_wxyz(blk_quat_w)         # [B]
+            Rz = _rot2d(yaw)                              # [B,2,2] block→world
+            R_wb2 = Rz.transpose(-1, -2)                  # [B,2,2] world→block
+
+            # 対応する脚の world XY
+            leg_xy_w = feet_xy_w[:, j, :]                 # [B,2]
+
+            # block座標系に変換して矩形内判定
+            d_xy_w   = leg_xy_w - blk_pos_w[..., :2]                     # [B,2]
+            d_xy_blk = (R_wb2 @ d_xy_w.unsqueeze(-1)).squeeze(-1)        # [B,2]
+
+            inside_j = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)  # [B]
+            inside_list.append(inside_j)
+
+        inside = torch.stack(inside_list, dim=-1)   # [B,num_legs]
+
+        # ==============================
+        # 5. 各脚の条件 & 全体の done 判定
+        # ==============================
+        # 各脚:
+        #   - ブロック矩形内
+        #   - contact_time >= T_hold_s
+        #   - 接触 (|Fz| > threshold)
+        cond_legs = inside & (ctimes >= self.T_hold_s) & contacts   # [B,num_legs]
+
+        # 全脚が満たしたら done
+        done = cond_legs.all(dim=-1)    # [B]
+
+        env.extras["fr_hold_ok_mask"]  = done
+        env.extras["fr_hold_ok_count"] = int(done.sum().item())
+
+        # デバッグ用に extras に入れておく
+        # env.extras["all_feet_hold_mask"]       = done
+        # env.extras["all_feet_inside_block"]    = inside
+        # env.extras["all_feet_contact_times"]   = ctimes
+        # env.extras["all_feet_contacts_bool"]   = contacts
+
+        return done

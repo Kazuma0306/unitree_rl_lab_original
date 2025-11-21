@@ -1830,8 +1830,8 @@ def legs_reward_gaussian(
     cmd_name: str = "step_fr_to_block",          # MultiLegBaseCommand など
     use_legs: tuple[str, ...] = LEG_ORDER,     # 例: ("FL_foot","FR_foot","RL_foot","RR_foot")
     fr_name: str = "FR_foot", # weighted leg
-    fr_weight: float = 3.0,
-    clearance_legs: tuple[str, ...] = ("FR_foot",),  # Zクリアランスを入れる脚（デフォルトFRだけ）
+    fr_weight: float = 1.0,
+    clearance_legs: tuple[str, ...] = ("FL_foot","FR_foot","RL_foot","RR_foot"),  # Zクリアランスを入れる脚（デフォルトFRだけ）
     far_xy_thresh: float = 0.10,              # baseでのXY距離閾値
     z_clearance: float = 0.05,                # 遠いときにターゲットZをどれだけ上げるか
     sigma_xy: float = 0.10,
@@ -1916,7 +1916,7 @@ class LegsProgressToTargetsBase(ManagerTermBase):
         self.leg_names  = tuple(P.get("leg_names", LEG_ORDER))
         self.d_clip     = float(P.get("d_clip", 0.10))            # 脚ごとの進歩クリップ幅
         self.reduction  = P.get("reduction", "sum")               # "sum" or "mean"
-        self.per_leg_weight = P.get("per_leg_weight", {"FL_foot":1, "FR_foot":3, "RL_foot":1, "RR_foot":1})       # 例 {"FR_foot": 1.5}
+        self.per_leg_weight = P.get("per_leg_weight", {"FL_foot":1, "FR_foot":1, "RL_foot":1, "RR_foot":1})       # 例 {"FR_foot": 1.5}
 
         self.robot = env.scene.articulations["robot"]
         self.L = len(self.leg_names)
@@ -2451,7 +2451,7 @@ class BlocksMovementPenalty(ManagerTermBase):
         
         # 線形速度と角速度の重みバランス（単位が違うため調整可能に）
         self.lin_weight = cfg.params.get("lin_weight", 1.0)
-        self.ang_weight = cfg.params.get("ang_weight", 0.05) # 角速度は数値が大きくなりがちなので少し下げる等
+        self.ang_weight = cfg.params.get("ang_weight", 0.02) # 角速度は数値が大きくなりがちなので少し下げる等
 
         # シーンからオブジェクトを取得
         self.blocks = []
@@ -2497,39 +2497,234 @@ class BlocksMovementPenalty(ManagerTermBase):
 
 
 
-class LogObjectMass(ManagerTermBase):
-    def __init__(self, cfg, env: ManagerBasedRLEnv):
-        super().__init__(cfg, env)
-        self.obj_name = cfg.params.get("asset_name", "stone3")
+# class LogObjectMass(ManagerTermBase):
+#     def __init__(self, cfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         self.obj_name = cfg.params.get("asset_name", "stone3")
         
-        # オブジェクト取得
-        # 存在チェック
-        if self.obj_name not in env.scene.rigid_objects:
-            raise ValueError(f"LogObjectMassDebug: '{self.obj_name}' not found in scene!")
+#         # オブジェクト取得
+#         # 存在チェック
+#         if self.obj_name not in env.scene.rigid_objects:
+#             raise ValueError(f"LogObjectMassDebug: '{self.obj_name}' not found in scene!")
             
-        self.obj = env.scene.rigid_objects[self.obj_name]
-        self.log_key_root = f"Info/Mass_Root_{self.obj_name}"
-        self.log_key_link = f"Info/Mass_LinkSum_{self.obj_name}"
+#         self.obj = env.scene.rigid_objects[self.obj_name]
+#         self.log_key_root = f"Info/Mass_Root_{self.obj_name}"
+#         self.log_key_link = f"Info/Mass_LinkSum_{self.obj_name}"
+
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         # 1. ルート（剛体全体）の質量を取得してみる [num_envs, 1]
+#         root_masses = self.obj.root_physx_view.get_masses()
+        
+#         # 2. 全リンク（構成パーツ）の質量を取得して合計してみる
+#         # get_masses() -> [num_envs, num_links]
+#         link_masses = self.obj.body_physx_view.get_masses()
+#         link_sum = link_masses.sum(dim=-1)
+
+#         # --- デバッグ出力 (最初の1回だけ、または毎秒など) ---
+#         # 毎回だとログが流れるので、env 0 の値だけチェック
+#         if env.common_step_counter % 50 == 0:
+#             print(f"DEBUG MASS [{self.obj_name}]:")
+#             print(f"  - Root Mass (Env0): {root_masses[0].item():.4f}")
+#             print(f"  - Link Sum  (Env0): {link_sum[0].item():.4f}")
+#             # もし両方0なら、USDの設定かPhysics設定がおかしい
+
+#         # Tensorboardへの記録 (平均値)
+#         env.extras[self.log_key_root] = root_masses.mean()
+#         env.extras[self.log_key_link] = link_sum.mean()
+
+#         return root_masses
+
+
+
+class MultiLegHoldBonusOnce2(ManagerTermBase):
+    """
+    各脚が「対応するブロック」の上面矩形内(+接触)にあり、
+    その状態が T_hold_s 続いた瞬間に一度だけボーナスを支払う。
+
+    ※ RewardManager 側で *dt を掛ける前提なので、
+      支払いステップのみ bonus/dt を返す。
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.env = env
+
+        # --- ブロック矩形パラメータ（全脚共通） ---
+        self.half_x     = P.get("half_x", 0.10)
+        self.half_y     = P.get("half_y", 0.10)
+        self.margin     = P.get("margin", 0.01)
+
+        # --- 時間・ボーナス ---
+        self.T_hold_s   = P.get("T_hold_s", 0.10)
+        self.bonus      = P.get("bonus", 5.0)
+
+        # --- 接触判定 ---
+        self.require_contact     = P.get("require_contact", True)
+        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+        self.contact_threshold   = P.get("contact_threshold", 0.0)  # [N] |Fz| > これで接触
+
+        # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と揃える）---
+        self.leg_order = P.get(
+            "leg_order",
+            ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+        )
+        self.num_legs = len(self.leg_order)
+
+        # ★ 各脚 → 対応ブロック名
+        #   MultiLegBaseCommand 側と同じ対応にしておくこと
+        self.leg_block_keys: Dict[str, str] = P.get(
+            "leg_block_keys",
+            {
+                "FL_foot": "stone3",
+                "FR_foot": "stone6",
+                "RL_foot": "stone4",
+                "RR_foot": "stone5",
+            },
+        )
+
+        # --- シーン参照 ---
+        scene = env.scene
+        self.robot = scene.articulations["robot"]
+
+        # ロボット側の body index（位置取得用）
+        self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
+        self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
+
+        # ★ 各脚ごとに RigidObject を持つ
+        self.blocks: Dict[str, omni.isaac.lab.assets.RigidObject] = {}
+        for leg in self.leg_order:
+            blk_name = self.leg_block_keys.get(leg, None)
+            if blk_name is None:
+                raise RuntimeError(
+                    f"leg_block_keys に脚 '{leg}' 用のブロック名がありません。"
+                )
+            if blk_name not in scene.rigid_objects:
+                raise RuntimeError(
+                    f"scene.rigid_objects にブロック '{blk_name}' が存在しません。"
+                )
+            self.blocks[leg] = scene.rigid_objects[blk_name]
+
+        # --- ContactSensor 本体 ---
+        if self.contact_sensor_name not in scene.sensors:
+            raise RuntimeError(
+                f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
+            )
+        self.sensor = scene.sensors[self.contact_sensor_name]
+
+        # ContactSensor 内の body_names から「脚ごとの列」を引く
+        sensor_body_names = self.sensor.body_names  # [B_sensor]
+        self.sensor_cols: list[int] = []
+        for leg in self.leg_order:
+            if leg not in sensor_body_names:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' が含まれていません。\n"
+                    f"  sensor.body_names = {sensor_body_names}\n"
+                    "ContactSensorCfg.prim_path が各足リンクをちゃんと拾うようになっているか確認してください。"
+                )
+            self.sensor_cols.append(sensor_body_names.index(leg))
+
+        # --- 状態 ---
+        self.hold_t = torch.zeros(env.num_envs, device=env.device)
+        self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
 
     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
-        # 1. ルート（剛体全体）の質量を取得してみる [num_envs, 1]
-        root_masses = self.obj.root_physx_view.get_masses()
-        
-        # 2. 全リンク（構成パーツ）の質量を取得して合計してみる
-        # get_masses() -> [num_envs, num_links]
-        link_masses = self.obj.body_physx_view.get_masses()
-        link_sum = link_masses.sum(dim=-1)
+        device = env.device
+        B = env.num_envs
+        dt = env.step_dt
 
-        # --- デバッグ出力 (最初の1回だけ、または毎秒など) ---
-        # 毎回だとログが流れるので、env 0 の値だけチェック
-        if env.common_step_counter % 50 == 0:
-            print(f"DEBUG MASS [{self.obj_name}]:")
-            print(f"  - Root Mass (Env0): {root_masses[0].item():.4f}")
-            print(f"  - Link Sum  (Env0): {link_sum[0].item():.4f}")
-            # もし両方0なら、USDの設定かPhysics設定がおかしい
+        # ==============================
+        # 1. 足先位置（world） [B, num_legs, 3]
+        # ==============================
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+        else:
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+        feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
 
-        # Tensorboardへの記録 (平均値)
-        env.extras[self.log_key_root] = root_masses.mean()
-        env.extras[self.log_key_link] = link_sum.mean()
+        # ==============================
+        # 2. 接触判定（各足）
+        # ==============================
+        if self.require_contact:
+            F = self.sensor.data.net_forces_w   # 期待形状: [B, B_sensor, 3]
+            if F is None:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の data.net_forces_w が None です。"
+                    " ContactSensorCfg.update_period や asset の activate_contact_sensors を確認してください。"
+                )
+            # sensor.body_names の順番に対応する列から、脚に対応する col だけ抜く
+            Fz_list = [F[:, col, 2] for col in self.sensor_cols]  # list of [B]
+            Fz = torch.stack(Fz_list, dim=-1)                     # [B, num_legs]
+            contacts = (Fz.abs() > self.contact_threshold)        # [B, num_legs] bool
+        else:
+            contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
 
-        return root_masses
+        # ==============================
+        # 3. 各脚が「自分のブロック上面矩形内か？」
+        # ==============================
+        hx = self.half_x - self.margin
+        hy = self.half_y - self.margin
+
+        inside_list = []  # list of [B] (脚ごと)
+        for leg_name, j in self.leg_to_idx.items():
+            block = self.blocks[leg_name]
+
+            # ブロック姿勢
+            p = block.data.root_pos_w
+            blk_pos = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
+
+            q = block.data.root_quat_w
+            blk_q = q[:, 0, :] if q.ndim == 3 else q    # [B,4]
+
+            yaw = _yaw_from_quat_wxyz(blk_q)            # [B]
+            Rz = _rot2d(yaw)                            # [B,2,2]
+            R_wb2 = Rz.transpose(-1, -2)                # [B,2,2] world -> block (XY)
+
+            # 対応する脚の world XY
+            leg_xy_w = feet_xy_w[:, j, :]               # [B,2]
+
+            # block座標系に変換して矩形内判定
+            d_xy_blk = (R_wb2 @ (leg_xy_w - blk_pos[..., :2]).unsqueeze(-1)).squeeze(-1)  # [B,2]
+            inside_j = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)     # [B]
+            inside_list.append(inside_j)
+
+        inside = torch.stack(inside_list, dim=-1)   # [B, num_legs]
+
+        # ==============================
+        # 4. 各脚ごとの条件: ブロック上 & 接触
+        # ==============================
+        good_legs = inside & contacts        # [B, num_legs]
+
+        # ==============================
+        # 5. 全体条件：全脚がブロック上 & 接触
+        # ==============================
+        good_all = good_legs.all(dim=-1)     # [B]
+
+        # hold_t 更新
+        self.hold_t = torch.where(
+            good_all,
+            self.hold_t + dt,
+            torch.zeros_like(self.hold_t),
+        )
+
+        # just reached
+        reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+        payout  = torch.where(
+            reached,
+            torch.full_like(self.hold_t, self.bonus / dt),
+            torch.zeros_like(self.hold_t),
+        )
+
+        # 一度払ったら二度と払わない
+        self.paid |= reached
+
+        # ==============================
+        # 6. env リセット時の状態クリア
+        # ==============================
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.hold_t[m] = 0.0
+                self.paid[m]   = False
+
+        return payout
