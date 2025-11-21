@@ -2718,6 +2718,13 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
         # 一度払ったら二度と払わない
         self.paid |= reached
 
+
+        # command update
+        if reached.any():
+            env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+            # 例: phase=1 へ
+            self.cmd_term.set_phase(env_ids, phase=1)
+
         # ==============================
         # 6. env リセット時の状態クリア
         # ==============================
