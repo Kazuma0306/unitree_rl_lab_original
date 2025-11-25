@@ -2628,6 +2628,9 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
         self.hold_t = torch.zeros(env.num_envs, device=env.device)
         self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
 
+        self.cmd_term = env.command_manager._terms["step_fr_to_block"]
+
+
     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
         device = env.device
         B = env.num_envs

@@ -745,7 +745,7 @@ class HoldAllFeetWithContact2(ManagerTermBase):
         self.env = env
 
         # --- ブロック矩形パラメータ（全脚共通） ---
-        self.T_hold_s   = P.get("T_hold_s", 0.1)
+        self.T_hold_s   = P.get("T_hold_s", 0.3)
         self.half_x     = P.get("half_x", 0.10)
         self.half_y     = P.get("half_y", 0.10)
         self.margin     = P.get("margin", 0.01)
