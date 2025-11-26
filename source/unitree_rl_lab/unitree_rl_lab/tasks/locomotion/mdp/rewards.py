@@ -900,8 +900,8 @@ class FROnBlockBonusOnce(ManagerTermBase):
         self.half_x     = P.get("half_x", 0.10)
         self.half_y     = P.get("half_y", 0.10)
         self.margin     = P.get("margin", 0.02)
-        self.T_hold_s   = P.get("T_hold_s", 0.50)
-        self.bonus      = P.get("bonus", 0.3)
+        self.T_hold_s   = P.get("T_hold_s", 0.30)
+        self.bonus      = P.get("bonus", 3)
         self.require_contact = P.get("require_contact", True)
         self.contact_sensor  = P.get("contact_sensor_name", "contact_forces")
 
@@ -971,6 +971,12 @@ class FROnBlockBonusOnce(ManagerTermBase):
         reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
         payout  = torch.where(reached, torch.full_like(self.hold_t, self.bonus / dt),
                               torch.zeros_like(self.hold_t))
+
+        # command update
+        if reached.any():
+            env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+            # 例: phase=1 へ
+            self.cmd_term.set_phase(env_ids, phase=1)
 
         # 状態更新
         self.paid  |= reached
@@ -1890,13 +1896,19 @@ def legs_reward_gaussian(
     leg_scores = torch.exp(-q)                                               # [B,L], 0〜1
 
     # 6. FR に重みをかけた重み付き平均
-    weights = torch.ones(L, device=dev)
-    if fr_name in use_legs:
-        fr_local_idx = use_legs.index(fr_name)
-        weights[fr_local_idx] = fr_weight
+    # weights = torch.ones(L, device=dev)
+    # if fr_name in use_legs:
+    #     fr_local_idx = use_legs.index(fr_name)
+    #     weights[fr_local_idx] = fr_weight
 
-    weighted = leg_scores * weights               # [B,L]
-    return weighted.sum(dim=-1) / weights.sum()   # [B]
+    # weighted = leg_scores * weights               # [B,L]
+
+    mean_s = leg_scores.mean(dim=-1)              # [B]
+    min_s  = leg_scores.min(dim=-1).values        # [B]
+    reward = mean_s * min_s        
+
+    # return weighted.sum(dim=-1) / weights.sum()   # [B]
+    return reward
 
 
 
@@ -2446,7 +2458,7 @@ class BlocksMovementPenalty(ManagerTermBase):
         
         # パラメータ取得
         # デフォルトで stone1 ~ stone6 を対象にする例
-        default_blocks = [f"stone{i}" for i in range(1, 7)]
+        default_blocks = [f"stone{i}" for i in range(1, 9)]
         self.block_names = cfg.params.get("block_names", default_blocks)
         
         # 線形速度と角速度の重みバランス（単位が違うため調整可能に）
@@ -2536,13 +2548,222 @@ class BlocksMovementPenalty(ManagerTermBase):
 
 
 
-class MultiLegHoldBonusOnce2(ManagerTermBase):
+# class MultiLegHoldBonusOnce2(ManagerTermBase):
+#     """
+#     各脚が「対応するブロック」の上面矩形内(+接触)にあり、
+#     その状態が T_hold_s 続いた瞬間に一度だけボーナスを支払う。
+
+#     ※ RewardManager 側で *dt を掛ける前提なので、
+#       支払いステップのみ bonus/dt を返す。
+#     """
+
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.env = env
+
+#         # --- ブロック矩形パラメータ（全脚共通） ---
+#         self.half_x     = P.get("half_x", 0.10)
+#         self.half_y     = P.get("half_y", 0.10)
+#         self.margin     = P.get("margin", 0.01)
+
+#         # --- 時間・ボーナス ---
+#         self.T_hold_s   = P.get("T_hold_s", 0.05)
+#         self.bonus      = P.get("bonus", 5.0)
+
+#         # --- 接触判定 ---
+#         self.require_contact     = P.get("require_contact", True)
+#         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+#         self.contact_threshold   = P.get("contact_threshold", 0.0)  # [N] |Fz| > これで接触
+
+#         # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と揃える）---
+#         self.leg_order = P.get(
+#             "leg_order",
+#             ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+#         )
+#         self.num_legs = len(self.leg_order)
+
+#         # ★ 各脚 → 対応ブロック名
+#         #   MultiLegBaseCommand 側と同じ対応にしておくこと
+#         self.leg_block_keys: Dict[str, str] = P.get(
+#             "leg_block_keys",
+#             {
+#                 "FL_foot": "stone3",
+#                 "FR_foot": "stone6",
+#                 "RL_foot": "stone4",
+#                 "RR_foot": "stone5",
+#             },
+#         )
+
+#         # --- シーン参照 ---
+#         scene = env.scene
+#         self.robot = scene.articulations["robot"]
+
+#         # ロボット側の body index（位置取得用）
+#         self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
+#         self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
+
+#         # ★ 各脚ごとに RigidObject を持つ
+#         self.blocks: Dict[str, omni.isaac.lab.assets.RigidObject] = {}
+#         for leg in self.leg_order:
+#             blk_name = self.leg_block_keys.get(leg, None)
+#             if blk_name is None:
+#                 raise RuntimeError(
+#                     f"leg_block_keys に脚 '{leg}' 用のブロック名がありません。"
+#                 )
+#             if blk_name not in scene.rigid_objects:
+#                 raise RuntimeError(
+#                     f"scene.rigid_objects にブロック '{blk_name}' が存在しません。"
+#                 )
+#             self.blocks[leg] = scene.rigid_objects[blk_name]
+
+#         # --- ContactSensor 本体 ---
+#         if self.contact_sensor_name not in scene.sensors:
+#             raise RuntimeError(
+#                 f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
+#             )
+#         self.sensor = scene.sensors[self.contact_sensor_name]
+
+#         # ContactSensor 内の body_names から「脚ごとの列」を引く
+#         sensor_body_names = self.sensor.body_names  # [B_sensor]
+#         self.sensor_cols: list[int] = []
+#         for leg in self.leg_order:
+#             if leg not in sensor_body_names:
+#                 raise RuntimeError(
+#                     f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' が含まれていません。\n"
+#                     f"  sensor.body_names = {sensor_body_names}\n"
+#                     "ContactSensorCfg.prim_path が各足リンクをちゃんと拾うようになっているか確認してください。"
+#                 )
+#             self.sensor_cols.append(sensor_body_names.index(leg))
+
+#         # --- 状態 ---
+#         self.hold_t = torch.zeros(env.num_envs, device=env.device)
+#         self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+#         self.cmd_term = env.command_manager._terms["step_fr_to_block"]
+
+
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         device = env.device
+#         B = env.num_envs
+#         dt = env.step_dt
+
+#         # ==============================
+#         # 1. 足先位置（world） [B, num_legs, 3]
+#         # ==============================
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+#         else:
+#             feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+#         feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
+
+#         # ==============================
+#         # 2. 接触判定（各足）
+#         # ==============================
+#         if self.require_contact:
+#             F = self.sensor.data.net_forces_w   # 期待形状: [B, B_sensor, 3]
+#             if F is None:
+#                 raise RuntimeError(
+#                     f"ContactSensor '{self.contact_sensor_name}' の data.net_forces_w が None です。"
+#                     " ContactSensorCfg.update_period や asset の activate_contact_sensors を確認してください。"
+#                 )
+#             # sensor.body_names の順番に対応する列から、脚に対応する col だけ抜く
+#             Fz_list = [F[:, col, 2] for col in self.sensor_cols]  # list of [B]
+#             Fz = torch.stack(Fz_list, dim=-1)                     # [B, num_legs]
+#             contacts = (Fz.abs() > self.contact_threshold)        # [B, num_legs] bool
+#         else:
+#             contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+
+#         # ==============================
+#         # 3. 各脚が「自分のブロック上面矩形内か？」
+#         # ==============================
+#         hx = self.half_x - self.margin
+#         hy = self.half_y - self.margin
+
+#         inside_list = []  # list of [B] (脚ごと)
+#         for leg_name, j in self.leg_to_idx.items():
+#             block = self.blocks[leg_name]
+
+#             # ブロック姿勢
+#             p = block.data.root_pos_w
+#             blk_pos = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
+
+#             q = block.data.root_quat_w
+#             blk_q = q[:, 0, :] if q.ndim == 3 else q    # [B,4]
+
+#             yaw = _yaw_from_quat_wxyz(blk_q)            # [B]
+#             Rz = _rot2d(yaw)                            # [B,2,2]
+#             R_wb2 = Rz.transpose(-1, -2)                # [B,2,2] world -> block (XY)
+
+#             # 対応する脚の world XY
+#             leg_xy_w = feet_xy_w[:, j, :]               # [B,2]
+
+#             # block座標系に変換して矩形内判定
+#             d_xy_blk = (R_wb2 @ (leg_xy_w - blk_pos[..., :2]).unsqueeze(-1)).squeeze(-1)  # [B,2]
+#             inside_j = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)     # [B]
+#             inside_list.append(inside_j)
+
+#         inside = torch.stack(inside_list, dim=-1)   # [B, num_legs]
+
+#         # ==============================
+#         # 4. 各脚ごとの条件: ブロック上 & 接触
+#         # ==============================
+#         good_legs = inside & contacts        # [B, num_legs]
+
+#         # ==============================
+#         # 5. 全体条件：全脚がブロック上 & 接触
+#         # ==============================
+#         good_all = good_legs.all(dim=-1)     # [B]
+
+#         # hold_t 更新
+#         self.hold_t = torch.where(
+#             good_all,
+#             self.hold_t + dt,
+#             torch.zeros_like(self.hold_t),
+#         )
+
+#         # just reached
+#         reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+#         payout  = torch.where(
+#             reached,
+#             torch.full_like(self.hold_t, self.bonus / dt),
+#             torch.zeros_like(self.hold_t),
+#         )
+
+#         # 一度払ったら二度と払わない
+#         self.paid |= reached
+
+
+#         # command update
+#         if reached.any():
+#             env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+#             # 例: phase=1 へ
+#             self.cmd_term.set_phase(env_ids, phase=1)
+
+#         # ==============================
+#         # 6. env リセット時の状態クリア
+#         # ==============================
+#         if hasattr(env, "reset_buf"):
+#             m = env.reset_buf > 0
+#             if m.any():
+#                 self.hold_t[m] = 0.0
+#                 self.paid[m]   = False
+
+#         return payout
+
+
+
+
+class MultiLegHoldBonusOnce3(ManagerTermBase):
     """
-    各脚が「対応するブロック」の上面矩形内(+接触)にあり、
+    各脚が「コマンドターゲット（ベース座標）」の近くで接触しており、
     その状態が T_hold_s 続いた瞬間に一度だけボーナスを支払う。
 
     ※ RewardManager 側で *dt を掛ける前提なので、
       支払いステップのみ bonus/dt を返す。
+
+    ここではブロック名は一切見ず、
+    常に「いまの MultiLegBaseCommand のターゲット」に対する達成度で判定する。
     """
 
     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
@@ -2550,19 +2771,26 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
         P = cfg.params
         self.env = env
 
-        # --- ブロック矩形パラメータ（全脚共通） ---
-        self.half_x     = P.get("half_x", 0.10)
-        self.half_y     = P.get("half_y", 0.10)
-        self.margin     = P.get("margin", 0.01)
-
         # --- 時間・ボーナス ---
-        self.T_hold_s   = P.get("T_hold_s", 0.10)
+        self.T_hold_s   = P.get("T_hold_s", 0.05)
         self.bonus      = P.get("bonus", 5.0)
 
         # --- 接触判定 ---
         self.require_contact     = P.get("require_contact", True)
         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
         self.contact_threshold   = P.get("contact_threshold", 0.0)  # [N] |Fz| > これで接触
+
+        # --- MultiLegBaseCommand から取るコマンド名 ---
+        # env.command_manager.get_command(cmd_name) が [B, 3*num_legs] を返す想定
+        self.cmd_name       = P.get("cmd_name", "step_fr_to_block")
+        # フェーズを進めたい CommandTerm の名前（上と同じでOK）
+        self.cmd_term_name  = P.get("cmd_term_name", self.cmd_name)
+        self.auto_advance_phase = P.get("auto_advance_phase", True)
+
+        # どの程度ターゲットに近づいたら「OK」とみなすか [m]
+        self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
+        # XYZ で距離を見るか / XY のみを見るか
+        self.use_xyz = P.get("use_xyz", False)
 
         # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と揃える）---
         self.leg_order = P.get(
@@ -2571,41 +2799,14 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
         )
         self.num_legs = len(self.leg_order)
 
-        # ★ 各脚 → 対応ブロック名
-        #   MultiLegBaseCommand 側と同じ対応にしておくこと
-        self.leg_block_keys: Dict[str, str] = P.get(
-            "leg_block_keys",
-            {
-                "FL_foot": "stone3",
-                "FR_foot": "stone6",
-                "RL_foot": "stone4",
-                "RR_foot": "stone5",
-            },
-        )
-
         # --- シーン参照 ---
         scene = env.scene
         self.robot = scene.articulations["robot"]
 
         # ロボット側の body index（位置取得用）
-        self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
-        self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
+        self.foot_ids = [self.robot.body_names.index(name) for name in self.leg_order]
 
-        # ★ 各脚ごとに RigidObject を持つ
-        self.blocks: Dict[str, omni.isaac.lab.assets.RigidObject] = {}
-        for leg in self.leg_order:
-            blk_name = self.leg_block_keys.get(leg, None)
-            if blk_name is None:
-                raise RuntimeError(
-                    f"leg_block_keys に脚 '{leg}' 用のブロック名がありません。"
-                )
-            if blk_name not in scene.rigid_objects:
-                raise RuntimeError(
-                    f"scene.rigid_objects にブロック '{blk_name}' が存在しません。"
-                )
-            self.blocks[leg] = scene.rigid_objects[blk_name]
-
-        # --- ContactSensor 本体 ---
+        # ContactSensor 本体
         if self.contact_sensor_name not in scene.sensors:
             raise RuntimeError(
                 f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
@@ -2624,12 +2825,16 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
                 )
             self.sensor_cols.append(sensor_body_names.index(leg))
 
+        # --- コマンド Term 参照（フェーズを進める用） ---
+        if self.cmd_term_name not in env.command_manager._terms:
+            raise RuntimeError(
+                f"command_manager._terms に '{self.cmd_term_name}' が見つかりません。"
+            )
+        self.cmd_term = env.command_manager._terms[self.cmd_term_name]
+
         # --- 状態 ---
         self.hold_t = torch.zeros(env.num_envs, device=env.device)
         self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-
-        self.cmd_term = env.command_manager._terms["step_fr_to_block"]
-
 
     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
         device = env.device
@@ -2642,8 +2847,7 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
         if hasattr(self.robot.data, "body_link_pose_w"):
             feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
         else:
-            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
-        feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]  # [B,num_legs,3]
 
         # ==============================
         # 2. 接触判定（各足）
@@ -2663,45 +2867,41 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
             contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
 
         # ==============================
-        # 3. 各脚が「自分のブロック上面矩形内か？」
+        # 3. 足先位置を「ベース座標」に変換
         # ==============================
-        hx = self.half_x - self.margin
-        hy = self.half_y - self.margin
+        base_p = self.robot.data.root_pos_w      # [B,3]
+        base_q = self.robot.data.root_quat_w     # [B,4] wxyz
+        R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world->base
 
-        inside_list = []  # list of [B] (脚ごと)
-        for leg_name, j in self.leg_to_idx.items():
-            block = self.blocks[leg_name]
-
-            # ブロック姿勢
-            p = block.data.root_pos_w
-            blk_pos = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
-
-            q = block.data.root_quat_w
-            blk_q = q[:, 0, :] if q.ndim == 3 else q    # [B,4]
-
-            yaw = _yaw_from_quat_wxyz(blk_q)            # [B]
-            Rz = _rot2d(yaw)                            # [B,2,2]
-            R_wb2 = Rz.transpose(-1, -2)                # [B,2,2] world -> block (XY)
-
-            # 対応する脚の world XY
-            leg_xy_w = feet_xy_w[:, j, :]               # [B,2]
-
-            # block座標系に変換して矩形内判定
-            d_xy_blk = (R_wb2 @ (leg_xy_w - blk_pos[..., :2]).unsqueeze(-1)).squeeze(-1)  # [B,2]
-            inside_j = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)     # [B]
-            inside_list.append(inside_j)
-
-        inside = torch.stack(inside_list, dim=-1)   # [B, num_legs]
+        diff_w = feet_w - base_p.unsqueeze(1)            # [B,num_legs,3]
+        feet_b = torch.matmul(
+            R_wb3.unsqueeze(1),                          # [B,1,3,3]
+            diff_w.unsqueeze(-1),                        # [B,num_legs,3,1]
+        ).squeeze(-1)                                    # [B,num_legs,3]
 
         # ==============================
-        # 4. 各脚ごとの条件: ブロック上 & 接触
+        # 4. コマンドターゲット（ベース座標）取得
         # ==============================
-        good_legs = inside & contacts        # [B, num_legs]
+        cmd = env.command_manager.get_command(self.cmd_name)  # [B, 3*num_legs]
+        tgt_b = cmd.view(B, self.num_legs, 3)                 # [B,num_legs,3]
 
         # ==============================
-        # 5. 全体条件：全脚がブロック上 & 接触
+        # 5. ターゲットとの距離 + 接触 で「良い足」を判定
         # ==============================
-        good_all = good_legs.all(dim=-1)     # [B]
+        if self.use_xyz:
+            diff = feet_b - tgt_b                  # [B,num_legs,3]
+            dist = diff.norm(dim=-1)               # [B,num_legs]
+        else:
+            diff_xy = feet_b[..., :2] - tgt_b[..., :2]
+            dist = diff_xy.norm(dim=-1)            # [B,num_legs]
+
+        near_cmd = dist <= self.near_radius_cmd    # [B,num_legs]
+        good_legs = near_cmd & contacts           # [B,num_legs]
+
+        # ==============================
+        # 6. 全体条件：全脚が「ターゲット近傍 & 接触」
+        # ==============================
+        good_all = good_legs.all(dim=-1)          # [B]
 
         # hold_t 更新
         self.hold_t = torch.where(
@@ -2710,26 +2910,29 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
             torch.zeros_like(self.hold_t),
         )
 
-        # just reached
+        # しきい値を初めて超えた env
         reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+
         payout  = torch.where(
             reached,
             torch.full_like(self.hold_t, self.bonus / dt),
             torch.zeros_like(self.hold_t),
         )
 
-        # 一度払ったら二度と払わない
+        # 一度達成した env では二度とこの term からは払わない
         self.paid |= reached
 
-
-        # command update
-        if reached.any():
+        # ==============================
+        # 7. フェーズ進行（必要な場合）
+        # ==============================
+        if self.auto_advance_phase and reached.any():
             env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
-            # 例: phase=1 へ
+            # ★ 今は「とりあえず phase=1 に固定で飛ばす」形のまま
+            #    より一般的にしたいなら cmd_term に advance_phase(env_ids) を実装する。
             self.cmd_term.set_phase(env_ids, phase=1)
 
         # ==============================
-        # 6. env リセット時の状態クリア
+        # 8. env リセット時の状態クリア
         # ==============================
         if hasattr(env, "reset_buf"):
             m = env.reset_buf > 0
@@ -2738,3 +2941,219 @@ class MultiLegHoldBonusOnce2(ManagerTermBase):
                 self.paid[m]   = False
 
         return payout
+
+
+
+
+class MultiLegHoldBonusPhase(ManagerTermBase):
+    """
+    各脚が「コマンドターゲット（ベース座標）」の近傍 & 接触を
+    T_hold_s 秒維持したときに「そのフェーズで一度だけ」ボーナスを支払い、
+    かつ CommandTerm のフェーズを 1 つ進める (0→1→2→...)。
+
+    - ブロック名は一切見ない。
+    - 判定は常に env.command_manager.get_command(cmd_name) のターゲットに対して行う。
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.env = env
+
+        # --- 時間・ボーナス ---
+        self.T_hold_s   = P.get("T_hold_s", 0.1)
+        self.bonus      = P.get("bonus", 5.0)
+
+        # --- 接触判定 ---
+        self.require_contact     = P.get("require_contact", True)
+        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+        self.contact_threshold   = P.get("contact_threshold", 0.0)
+
+        # --- コマンド関連 ---
+        self.cmd_name          = P.get("cmd_name", "step_fr_to_block")
+        self.cmd_term_name     = P.get("cmd_term_name", self.cmd_name)
+        self.auto_advance_phase = P.get("auto_advance_phase", True)
+
+        # ターゲット近傍とみなす距離 [m]
+        self.near_radius_cmd   = P.get("near_radius_cmd", 0.08)
+        # XYZ で距離を見るか / XY のみか
+        self.use_xyz           = P.get("use_xyz", True)
+
+        # --- 脚順序 ---
+        self.leg_order = P.get(
+            "leg_order",
+            ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+        )
+        self.num_legs = len(self.leg_order)
+
+        # --- シーン参照 ---
+        scene = env.scene
+        self.robot = scene.articulations["robot"]
+
+        # foot index
+        self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_order]
+
+        # ContactSensor
+        if self.contact_sensor_name not in scene.sensors:
+            raise RuntimeError(
+                f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
+            )
+        self.sensor = scene.sensors[self.contact_sensor_name]
+
+        # ContactSensor 内の body_names → 列 index
+        sensor_body_names = self.sensor.body_names
+        self.sensor_cols: list[int] = []
+        for leg in self.leg_order:
+            if leg not in sensor_body_names:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' がありません。\n"
+                    f"  sensor.body_names = {sensor_body_names}"
+                )
+            self.sensor_cols.append(sensor_body_names.index(leg))
+
+        # コマンド term
+        if self.cmd_term_name not in env.command_manager._terms:
+            raise RuntimeError(
+                f"command_manager._terms に '{self.cmd_term_name}' が見つかりません。"
+            )
+        self.cmd_term = env.command_manager._terms[self.cmd_term_name]
+
+        # --- 状態（フェーズごとに 1 回だけ進行させるためのバッファ） ---
+        B = env.num_envs
+        dev = env.device
+        self.hold_t         = torch.zeros(B, device=dev)
+        self.paid_for_phase = torch.zeros(B, dtype=torch.bool, device=dev)
+        # 「前回のステップでこの env がどの phase だったか」
+        # → cmd_term.phase と比較して phase が変わったらリセット
+        self.prev_phase     = self.cmd_term.phase.clone().detach()
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        device = env.device
+        B = env.num_envs
+        dt = env.step_dt
+
+        # ==============================
+        # 0. phase 変更を検出して per-phase 状態をリセット
+        # ==============================
+        curr_phase = self.cmd_term.phase      # [B]
+        changed = curr_phase != self.prev_phase
+        if changed.any():
+            self.hold_t[changed]         = 0.0
+            self.paid_for_phase[changed] = False
+            self.prev_phase[changed]     = curr_phase[changed]
+
+        # ==============================
+        # 1. 足先位置 (world) [B, L, 3]
+        # ==============================
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+        else:
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+
+        # ==============================
+        # 2. 接触判定
+        # ==============================
+        if self.require_contact:
+            F = self.sensor.data.net_forces_w   # [B, num_sensor_bodies, 3]
+            if F is None:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の net_forces_w が None です。"
+                )
+            Fz_list = [F[:, col, 2] for col in self.sensor_cols]
+            Fz = torch.stack(Fz_list, dim=-1)             # [B, L]
+            contacts = (Fz.abs() > self.contact_threshold)  # [B, L]
+        else:
+            contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+
+        # ==============================
+        # 3. 足先位置を base 座標に変換
+        # ==============================
+        base_p = self.robot.data.root_pos_w   # [B,3]
+        base_q = self.robot.data.root_quat_w  # [B,4]
+        R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3]
+
+        diff_w = feet_w - base_p.unsqueeze(1)                 # [B,L,3]
+        feet_b = torch.matmul(
+            R_wb3.unsqueeze(1), diff_w.unsqueeze(-1)
+        ).squeeze(-1)                                         # [B,L,3]
+
+        # ==============================
+        # 4. コマンドターゲット（base）
+        # ==============================
+        cmd = env.command_manager.get_command(self.cmd_name)  # [B, 3*L]
+        tgt_b = cmd.view(B, self.num_legs, 3)                 # [B,L,3]
+
+        # ==============================
+        # 5. ターゲットとの距離 & 接触で good_legs 判定
+        # ==============================
+        if self.use_xyz:
+            diff = feet_b - tgt_b
+            dist = diff.norm(dim=-1)             # [B,L]
+        else:
+            diff_xy = feet_b[..., :2] - tgt_b[..., :2]
+            dist = diff_xy.norm(dim=-1)          # [B,L]
+
+        near_cmd  = dist <= self.near_radius_cmd   # [B,L]
+        good_legs = near_cmd & contacts           # [B,L]
+
+        # 全脚 OK ?
+        good_all = good_legs.all(dim=-1)          # [B]
+
+        # ==============================
+        # 6. hold_t 更新（この phase で）
+        # ==============================
+        self.hold_t = torch.where(
+            good_all,
+            self.hold_t + dt,
+            torch.zeros_like(self.hold_t),
+        )
+
+        # 「この phase でまだ進行しておらず、初めて T_hold_s を超えた env」
+        reached = (self.hold_t >= self.T_hold_s) & (~self.paid_for_phase)
+
+
+        # ==============================
+               # 6.5 カリキュラム用: 成功マスク / 成功カウントを env.extras に書く
+       # ==============================
+              # - success_mask: 「いま hold 条件を満たしている env」
+      #   ※ self.hold_t は good_all が False になった時点で 0 にリセットされるので、
+      #      self.hold_t >= T_hold_s なら「今も good_all かつ十分ホールドしている」ことになる
+        success_mask = self.hold_t >= self.T_hold_s  # [B] bool
+
+        # 「このステップで新たに成功に到達した env の数」をカリキュラムに渡す
+        # shared_mass_curriculum ではこれを `ctx.succ += n_succ_step` で累積する想定
+        self.env.extras["fr_hold_ok_mask"]  = success_mask
+        self.env.extras["fr_hold_ok_count"] = int(reached.sum().item())
+
+        # 報酬（重みは 1e-6 にする想定なので、ここは好きに）
+        payout = torch.where(
+            reached,
+            torch.full_like(self.hold_t, self.bonus / dt),
+            torch.zeros_like(self.hold_t),
+        )
+
+        # この phase ではもう一度進行させない
+        self.paid_for_phase |= reached
+
+        # ==============================
+        # 7. フェーズ進行（0→1→2 ...）
+        # ==============================
+        if self.auto_advance_phase and reached.any():
+            env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+            self.cmd_term.advance_phase(env_ids)
+
+        # ==============================
+        # 8. reset 時に状態クリア
+        # ==============================
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.hold_t[m]         = 0.0
+                self.paid_for_phase[m] = False
+                self.prev_phase[m]     = self.cmd_term.phase[m]
+
+                env_ids = torch.nonzero(m, as_tuple=False).squeeze(-1)# ★ ここで phase を 0 に戻す
+                self.cmd_term.set_phase(env_ids, phase=0)
+
+        return payout
+

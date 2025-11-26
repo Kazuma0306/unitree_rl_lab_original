@@ -464,7 +464,8 @@ z0 = 0.1  # 石の厚みに応じた天板高さ
 
 
 
-
+sizex = 0.16
+sizey = 0.16
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -509,7 +510,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     stone1 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_1",
         spawn=sim_utils.CuboidCfg(
-            size=(0.35, 0.35, 0.3),  # 天板サイズ
+            size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
             mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -520,7 +521,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.6, 0.2, -0.14)
+            pos=(0.4, 0.2, -0.14)
         )
     )
 
@@ -528,7 +529,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
     stone2 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_2",
         spawn=sim_utils.CuboidCfg(
-            size=(0.35, 0.35, 0.3),  # 天板サイズ
+            size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
             mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -539,16 +540,56 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.6, -0.2, -0.14)
+            pos=(0.4, -0.2, -0.14)
         )
     )
 
-    #FL
+    #ML
     stone3 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Stone_3",
         spawn=sim_utils.CuboidCfg(
-            size=(0.35, 0.35, 0.3),  # 天板サイズ
+            size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False,),
+            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0, 0.2, -0.14)
+        )
+    )
+
+
+    #MR
+    stone4 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_4",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0, -0.2, -0.14)
+        )
+    )
+
+
+    #FL
+    stone5 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_5",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
             mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -563,11 +604,30 @@ class RobotSceneCfg(InteractiveSceneCfg):
     )
 
 
-    #RL
-    stone4 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Stone_4",
+    #FR
+    stone6 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_6",
         spawn=sim_utils.CuboidCfg(
-            size=(0.35, 0.35, 0.3),  # 天板サイズ
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.2, -0.2, -0.14)
+        )
+    )
+
+    #RL
+    stone7 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_7",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
             mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -582,12 +642,11 @@ class RobotSceneCfg(InteractiveSceneCfg):
         )
     )
 
-
     #RR
-    stone5 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Stone_5",
+    stone8 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_8",
         spawn=sim_utils.CuboidCfg(
-            size=(0.35, 0.35, 0.3),  # 天板サイズ
+            size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
             mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
@@ -599,26 +658,6 @@ class RobotSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
             pos=(-0.2, -0.2, -0.14)
-        )
-    )
-
-
-    #FR
-    stone6 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Stone_6",
-        spawn=sim_utils.CuboidCfg(
-            size=(0.35, 0.35, 0.3),  # 天板サイズ
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(
-            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.2, -0.2, -0.14)
         )
     )
 
@@ -744,6 +783,22 @@ class EventCfg:
         mode="reset",  # リセット時に発火
         params={
             "asset_cfg": SceneEntityCfg("stone6"),  # 対象のアセット名
+        }
+    )
+
+    update_stone7_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
+        params={
+            "asset_cfg": SceneEntityCfg("stone7"),  # 対象のアセット名
+        }
+    )
+
+    update_stone8_mass = EventTerm(
+        func=mdp.apply_mass_curriculum,
+        mode="reset",  # リセット時に発火
+        params={
+            "asset_cfg": SceneEntityCfg("stone8"),  # 対象のアセット名
         }
     )
 
@@ -1180,7 +1235,8 @@ class RewardsCfg:
     # fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 1.0) #ブロック座標系、連続タッチ評価
 
     # bonus for all legs contact
-    fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusOnce2, weight= 2.0)
+    # fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusOnce2, weight= 0.001)
+    fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusPhase, weight= 0.001)
     
     # そっと置く
     # impact_spike_fr = RewTerm(func=mdp.impact_spike_penalty_fr, weight=-0.3, params=dict(dfz_thresh=0.15))
@@ -1203,7 +1259,7 @@ class RewardsCfg:
     # )　しかも報酬内でDtをかけるようになっているので二重がけになる
 
     # distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d4, weight = 0.5) #ベース座標系での距離
-    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.8) #ベース座標系での距離 , all legs
+    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.5) #ベース座標系での距離 , all legs
 
 
     distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
@@ -1384,7 +1440,7 @@ class TerminationsCfg:
         func=mdp.illegal_contact,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
     )
-    bad_orientation = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 0.8})
+    bad_orientation = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 1.0})
 
 
     # ★ 追加：成功（保持できたら終了）
@@ -1394,10 +1450,10 @@ class TerminationsCfg:
     # )
 
 
-    success_hold = DoneTerm(
-        func=mdp.HoldAllFeetWithContact2,
-        # time_outフラグは付けない（成功エピソードとしてカウントしたい）
-    )
+    # success_hold = DoneTerm(
+    #     func=mdp.HoldAllFeetWithContact2,
+    #     # time_outフラグは付けない（成功エピソードとしてカウントしたい）
+    # )
 
     # # ★ 追加：失敗（ブロックを動かし過ぎた）
     # block_overtilt = DoneTerm(
@@ -1427,6 +1483,23 @@ DOWN=0.25
 D_MIN_EPS=2000
 COOL_DOWN=1000
 ALPHA=0.001
+STAGE=[(30.0, 30.0),
+       (28.0, 28.0),
+        (26.0, 26.0),
+        (24.0, 24.0),
+        (22.0, 22.0),
+        (20.0, 20.0)]
+# STAGE=[(20.0, 20.0),
+#        (19.0, 19.0),
+#         (18.0, 18.0),
+#         (17.0, 17.0),
+#         (16.0, 16.0),
+#         (15.0, 15.0),
+#         (14.0, 14.0)
+#         (13.0, 13.0)
+#         (12.0, 12.0)
+#         (11.0, 11.0)
+#         ]
 
 
 
@@ -1506,12 +1579,14 @@ class CurriculumCfg:
     params=dict(
         # ここに必要なパラメータを全部書く
         old_range=(30.0, 30.0),
-        stages=[(30.0, 30.0),
-                    (28.0, 28.0),
-                    (26.0, 26.0),
-                    (24.0, 24.0),
-                    (22.0, 22.0),
-                    (20.0, 20.0)],
+        # stages=[(30.0, 30.0),
+        #             (28.0, 28.0),
+        #             (26.0, 26.0),
+        #             (24.0, 24.0),
+        #             (22.0, 22.0),
+        #             (20.0, 20.0)],
+
+        stages=STAGE,
         master=False, # ★ 1つだけ登録すればいいので True にする
         min_eps=MIN_EPS,
             up_rate=UP,
@@ -1530,12 +1605,13 @@ class CurriculumCfg:
     params=dict(
         # ここに必要なパラメータを全部書く
         old_range=(30.0, 30.0),
-        stages=[(30.0, 30.0),
-                    (28.0, 28.0),
-                    (26.0, 26.0),
-                    (24.0, 24.0),
-                    (22.0, 22.0),
-                    (20.0, 20.0)],
+        # stages=[(30.0, 30.0),
+        #             (28.0, 28.0),
+        #             (26.0, 26.0),
+        #             (24.0, 24.0),
+        #             (22.0, 22.0),
+        #             (20.0, 20.0)],
+        stages=STAGE,
         master=False, # ★ 1つだけ登録すればいいので True にする
         min_eps=MIN_EPS,
             up_rate=UP,
@@ -1556,12 +1632,13 @@ class CurriculumCfg:
     params=dict(
         # ここに必要なパラメータを全部書く
         old_range=(30.0, 30.0),
-        stages=[(30.0, 30.0),
-                    (28.0, 28.0),
-                    (26.0, 26.0),
-                    (24.0, 24.0),
-                    (22.0, 22.0),
-                    (20.0, 20.0)],
+        # stages=[(30.0, 30.0),
+        #             (28.0, 28.0),
+        #             (26.0, 26.0),
+        #             (24.0, 24.0),
+        #             (22.0, 22.0),
+        #             (20.0, 20.0)],
+        stages=STAGE,
         master=True, # ★ 1つだけ登録すればいいので True にする
         min_eps=MIN_EPS,
             up_rate=UP,
@@ -1579,12 +1656,13 @@ class CurriculumCfg:
         params=dict(
             # ここに必要なパラメータを全部書く
             old_range=(30.0, 30.0),
-            stages=[(30.0, 30.0),
-                        (28.0, 28.0),
-                        (26.0, 26.0),
-                        (24.0, 24.0),
-                        (22.0, 22.0),
-                        (20.0, 20.0)],
+            # stages=[(30.0, 30.0),
+            #             (28.0, 28.0),
+            #             (26.0, 26.0),
+            #             (24.0, 24.0),
+            #             (22.0, 22.0),
+            #             (20.0, 20.0)],
+            stages=STAGE,
             master=False, # ★ 1つだけ登録すればいいので True にする
             min_eps=MIN_EPS,
             up_rate=UP,
@@ -1603,12 +1681,13 @@ class CurriculumCfg:
         params=dict(
             # ここに必要なパラメータを全部書く
             old_range=(30.0, 30.0),
-            stages=[(30.0, 30.0),
-                        (28.0, 28.0),
-                        (26.0, 26.0),
-                        (24.0, 24.0),
-                        (22.0, 22.0),
-                        (20.0, 20.0)],
+            # stages=[(30.0, 30.0),
+            #             (28.0, 28.0),
+            #             (26.0, 26.0),
+            #             (24.0, 24.0),
+            #             (22.0, 22.0),
+            #             (20.0, 20.0)],
+            stages=STAGE,
             master=False, # ★ 1つだけ登録すればいいので True にする
             min_eps=MIN_EPS,
             up_rate=UP,
@@ -1625,12 +1704,59 @@ class CurriculumCfg:
         params=dict(
             # ここに必要なパラメータを全部書く
             old_range=(30.0, 30.0),
-            stages=[(30.0, 30.0),
-                        (28.0, 28.0),
-                        (26.0, 26.0),
-                        (24.0, 24.0),
-                        (22.0, 22.0),
-                        (20.0, 20.0)],
+            # stages=[(30.0, 30.0),
+            #             (28.0, 28.0),
+            #             (26.0, 26.0),
+            #             (24.0, 24.0),
+            #             (22.0, 22.0),
+            #             (20.0, 20.0)],
+            stages=STAGE,
+            master=False, # ★ 1つだけ登録すればいいので True にする
+            min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,      
+        ),
+    )
+
+    stone7_difficulty_update = CurrTerm(
+        # 直接計算関数を指定する
+        func=mdp.shared_mass_curriculum,
+        params=dict(
+            # ここに必要なパラメータを全部書く
+            old_range=(30.0, 30.0),
+            # stages=[(30.0, 30.0),
+            #             (28.0, 28.0),
+            #             (26.0, 26.0),
+            #             (24.0, 24.0),
+            #             (22.0, 22.0),
+            #             (20.0, 20.0)],
+            stages=STAGE,
+            master=False, # ★ 1つだけ登録すればいいので True にする
+            min_eps=MIN_EPS,
+            up_rate=UP,
+            down_rate=DOWN,
+            down_min_eps=D_MIN_EPS,
+            cooldown_steps=COOL_DOWN,
+            alpha=ALPHA,      
+        ),
+    )
+
+    stone8_difficulty_update = CurrTerm(
+        # 直接計算関数を指定する
+        func=mdp.shared_mass_curriculum,
+        params=dict(
+            # ここに必要なパラメータを全部書く
+            old_range=(30.0, 30.0),
+            # stages=[(30.0, 30.0),
+            #             (28.0, 28.0),
+            #             (26.0, 26.0),
+            #             (24.0, 24.0),
+            #             (22.0, 22.0),
+            #             (20.0, 20.0)],
+            stages=STAGE,
             master=False, # ★ 1つだけ登録すればいいので True にする
             min_eps=MIN_EPS,
             up_rate=UP,
@@ -1815,7 +1941,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
-    # curriculum: CurriculumCfg = CurriculumCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self):
         """Post initialization."""

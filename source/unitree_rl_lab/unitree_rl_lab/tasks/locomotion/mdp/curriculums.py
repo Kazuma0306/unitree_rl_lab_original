@@ -449,7 +449,7 @@ def shared_mass_curriculum(
     up_successes=64,  min_eps=3000,  up_rate=0.7,
     down_rate=0.25,   down_min_eps=100,
     cooldown_steps=0,
-    alpha=0.2,
+    alpha=0.05,
 ):
     if not hasattr(env, "_stone_mass_curr"):
         lo0, hi0 = old_range
