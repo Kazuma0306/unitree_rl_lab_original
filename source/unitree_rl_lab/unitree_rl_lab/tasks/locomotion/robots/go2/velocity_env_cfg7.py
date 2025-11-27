@@ -466,6 +466,7 @@ z0 = 0.1  # 石の厚みに応じた天板高さ
 
 sizex = 0.16
 sizey = 0.16
+MASS_B = 11
 
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
@@ -512,7 +513,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -531,7 +532,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -550,7 +551,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False,),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -570,7 +571,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -590,7 +591,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -610,7 +611,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -629,7 +630,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -648,7 +649,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(sizex, sizey, 0.3),  # 天板サイズ
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),   # ランダム化候補
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=1.0, dynamic_friction=1.0, restitution=0.0
@@ -1483,23 +1484,51 @@ DOWN=0.25
 D_MIN_EPS=2000
 COOL_DOWN=1000
 ALPHA=0.001
-STAGE=[(30.0, 30.0),
-       (28.0, 28.0),
-        (26.0, 26.0),
-        (24.0, 24.0),
-        (22.0, 22.0),
-        (20.0, 20.0)]
+# OLD=(11.0, 11.0)
+OLD=(1.0, 1.0)
+
+# STAGE=[(30.0, 30.0),
+#        (28.0, 28.0),
+#         (26.0, 26.0),
+#         (24.0, 24.0),
+#         (22.0, 22.0),
+#         (20.0, 20.0)]
 # STAGE=[(20.0, 20.0),
 #        (19.0, 19.0),
 #         (18.0, 18.0),
 #         (17.0, 17.0),
 #         (16.0, 16.0),
 #         (15.0, 15.0),
-#         (14.0, 14.0)
-#         (13.0, 13.0)
-#         (12.0, 12.0)
+#         (14.0, 14.0),
+#         (13.0, 13.0),
+#         (12.0, 12.0),
 #         (11.0, 11.0)
 #         ]
+
+# STAGE=[(11.0, 11.0),
+#        (10.0, 10.0),
+#         (9.0, 9.0),
+#         (8.0, 8.0),
+#         (7.0, 7.0),
+#         (6.0, 6.0),
+#         (5.0, 5.0),
+#         (4.0, 4.0),
+#         (3.0, 3.0),
+#         (2.0, 2.0),
+#         (1.0, 1.0),
+#         ]
+
+STAGE=[(1.0, 1.0),
+        (0.9, 0.9),
+        (0.8, 0.8),
+        (0.7, 0.7),
+        (0.6, 0.6),
+        (0.5, 0.5),
+        (0.4, 0.4),
+        (0.3, 0.3),
+        (0.2, 0.2),
+        (0.1, 0.1),
+        ]
 
 
 
@@ -1578,7 +1607,7 @@ class CurriculumCfg:
     func=mdp.shared_mass_curriculum,
     params=dict(
         # ここに必要なパラメータを全部書く
-        old_range=(30.0, 30.0),
+        old_range=OLD,
         # stages=[(30.0, 30.0),
         #             (28.0, 28.0),
         #             (26.0, 26.0),
@@ -1604,7 +1633,7 @@ class CurriculumCfg:
     func=mdp.shared_mass_curriculum,
     params=dict(
         # ここに必要なパラメータを全部書く
-        old_range=(30.0, 30.0),
+        old_range=OLD,
         # stages=[(30.0, 30.0),
         #             (28.0, 28.0),
         #             (26.0, 26.0),
@@ -1631,7 +1660,7 @@ class CurriculumCfg:
     func=mdp.shared_mass_curriculum,
     params=dict(
         # ここに必要なパラメータを全部書く
-        old_range=(30.0, 30.0),
+        old_range=OLD,
         # stages=[(30.0, 30.0),
         #             (28.0, 28.0),
         #             (26.0, 26.0),
@@ -1655,7 +1684,7 @@ class CurriculumCfg:
         func=mdp.shared_mass_curriculum,
         params=dict(
             # ここに必要なパラメータを全部書く
-            old_range=(30.0, 30.0),
+            old_range=OLD,
             # stages=[(30.0, 30.0),
             #             (28.0, 28.0),
             #             (26.0, 26.0),
@@ -1680,7 +1709,7 @@ class CurriculumCfg:
         func=mdp.shared_mass_curriculum,
         params=dict(
             # ここに必要なパラメータを全部書く
-            old_range=(30.0, 30.0),
+            old_range=OLD,
             # stages=[(30.0, 30.0),
             #             (28.0, 28.0),
             #             (26.0, 26.0),
@@ -1703,7 +1732,7 @@ class CurriculumCfg:
         func=mdp.shared_mass_curriculum,
         params=dict(
             # ここに必要なパラメータを全部書く
-            old_range=(30.0, 30.0),
+            old_range=OLD,
             # stages=[(30.0, 30.0),
             #             (28.0, 28.0),
             #             (26.0, 26.0),
@@ -1726,7 +1755,7 @@ class CurriculumCfg:
         func=mdp.shared_mass_curriculum,
         params=dict(
             # ここに必要なパラメータを全部書く
-            old_range=(30.0, 30.0),
+            old_range=OLD,
             # stages=[(30.0, 30.0),
             #             (28.0, 28.0),
             #             (26.0, 26.0),
@@ -1749,7 +1778,7 @@ class CurriculumCfg:
         func=mdp.shared_mass_curriculum,
         params=dict(
             # ここに必要なパラメータを全部書く
-            old_range=(30.0, 30.0),
+            old_range=OLD,
             # stages=[(30.0, 30.0),
             #             (28.0, 28.0),
             #             (26.0, 26.0),

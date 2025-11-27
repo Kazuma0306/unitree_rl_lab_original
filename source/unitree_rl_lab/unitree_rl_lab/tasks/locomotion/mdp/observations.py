@@ -384,3 +384,61 @@ def legs_err_base_all(env, cmd_name="step_fr_to_block", use_xyz=True, leg_names=
         return err_b.reshape(B, -1) 
     else:
         return err_b[..., :2]
+
+
+
+# 例: シーン上のブロック名
+BLOCK_KEYS = ["stone1", "stone2", "stone3", "stone4",
+              "stone5", "stone6", "stone7", "stone8"]
+
+def all_blocks_state_base(
+    env,
+    block_keys=BLOCK_KEYS,
+):
+    """
+    返り値: [B, 8 * F]
+        各ブロックについて
+        [pos_b(xyz), yaw_rel_cos, yaw_rel_sin] を並べたもの
+    """
+    device = env.device
+    B = env.num_envs
+    N = len(block_keys)
+
+    robot = env.scene.articulations["robot"]
+    base_p = robot.data.root_pos_w      # [B,3]
+    base_q = robot.data.root_quat_w     # [B,4]
+
+    # world -> base の回転 3x3
+    R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3]
+
+    feats = []
+
+    # base の yaw（相対yawを取りたい場合）
+    base_yaw = _yaw_from_quat(base_q)  # [B]
+
+    for key in block_keys:
+        robj = env.scene.rigid_objects[key]
+
+        # root_state_w: [B, num_instances, 13] みたいな形なら [:,0,:] でOK
+        state_w = robj.data.root_state_w[:, 0, :]  # [B,13] pos(3)+quat(4)+vel...
+        pos_w   = state_w[:, :3]                  # [B,3]
+        quat_w  = state_w[:, 3:7]                 # [B,4]
+
+        # --- 位置: world -> base ---
+        diff_w = pos_w - base_p                  # [B,3]
+        pos_b  = torch.matmul(R_wb3, diff_w.unsqueeze(-1)).squeeze(-1)  # [B,3]
+
+        # --- yaw: baseに対する相対yaw (cos,sin) ---
+        yaw_blk  = _yaw_from_quat(quat_w)        # [B]
+        yaw_rel  = yaw_blk - base_yaw            # [B]
+        yaw_rel  = (yaw_rel + torch.pi) % (2*torch.pi) - torch.pi  # [-pi,pi] に wrap
+        cy, sy   = torch.cos(yaw_rel), torch.sin(yaw_rel)
+
+        feat = torch.cat(
+            [pos_b, cy.unsqueeze(-1), sy.unsqueeze(-1)], dim=-1
+        )  # [B, 5]
+        feats.append(feat)
+
+    # [B, N, 5] -> [B, N*5]
+    all_feats = torch.cat(feats, dim=-1)
+    return all_feats  # Critic側にだけ食わせる
