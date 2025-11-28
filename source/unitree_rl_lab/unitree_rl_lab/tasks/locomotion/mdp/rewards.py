@@ -1905,7 +1905,23 @@ def legs_reward_gaussian(
 
     mean_s = leg_scores.mean(dim=-1)              # [B]
     min_s  = leg_scores.min(dim=-1).values        # [B]
-    reward = mean_s * min_s        
+    max_s = leg_scores.max(dim=-1).values  
+    var_s  = ((leg_scores - mean_s.unsqueeze(-1))**2).mean(dim=-1)  # 分散
+
+    # reward = mean_s * min_s   
+    # reward = min_s     
+    # spread = max_s - min_s                   # バラつきの大きさ
+
+
+    w_mean = 1
+    # w_spread = 1
+    w_var = 1.5
+
+
+    # r = w_mean * mean_s - w_spread * spread
+
+    reward  = w_mean * mean_s - w_var * var_s
+
 
     # return weighted.sum(dim=-1) / weights.sum()   # [B]
     return reward
@@ -2458,7 +2474,7 @@ class BlocksMovementPenalty(ManagerTermBase):
         
         # パラメータ取得
         # デフォルトで stone1 ~ stone6 を対象にする例
-        default_blocks = [f"stone{i}" for i in range(1, 9)]
+        default_blocks = [f"stone{i}" for i in range(1, 11)]
         self.block_names = cfg.params.get("block_names", default_blocks)
         
         # 線形速度と角速度の重みバランス（単位が違うため調整可能に）

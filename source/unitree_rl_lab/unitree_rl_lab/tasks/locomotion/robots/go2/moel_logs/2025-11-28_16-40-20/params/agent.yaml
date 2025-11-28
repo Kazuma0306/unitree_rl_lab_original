@@ -1,0 +1,92 @@
+seed: 42
+device: cuda:0
+num_steps_per_env: 24
+max_iterations: 2000
+empirical_normalization: {}
+policy:
+  class_name: MlpHFP
+  init_noise_std: 1.0
+  noise_std_type: scalar
+  actor_hidden_dims:
+  - 256
+  - 128
+  critic_hidden_dims:
+  - 256
+  - 128
+  activation: elu
+  prop_obs_keys:
+  - base_lin_vel
+  - base_ang_vel
+  - projected_gravity
+  - position_commands
+  - joint_pos_rel
+  - joint_vel_rel
+  - last_action
+  ft_stack_key: ft_stack
+algorithm:
+  class_name: PPO
+  num_learning_epochs: 3
+  num_mini_batches: 32
+  learning_rate: 0.0001
+  schedule: adaptive
+  gamma: 0.99
+  lam: 0.95
+  entropy_coef: 0.01
+  desired_kl: 0.01
+  max_grad_norm: 1.0
+  value_loss_coef: 1.0
+  use_clipped_value_loss: true
+  clip_param: 0.2
+  normalize_advantage_per_mini_batch: false
+  symmetry_cfg: null
+  rnd_cfg: null
+clip_actions: null
+save_interval: 100
+experiment_name: unitree_go2_proposed4
+run_name: ''
+logger: tensorboard
+neptune_project: isaaclab
+wandb_project: isaaclab
+resume: true
+load_run: 2025-11-28_12-36-52
+load_checkpoint: model_7899
+actor_obs_normalization: !!python/tuple
+- false
+critic_obs_normalization: !!python/tuple
+- false
+obs_groups:
+  policy:
+  - base_lin_vel
+  - base_ang_vel
+  - projected_gravity
+  - position_commands
+  - joint_pos_rel
+  - joint_vel_rel
+  - last_action
+  - fr_target_xy_rel
+  - leg_position
+  - ft_stack
+  critic:
+  - base_lin_vel
+  - base_ang_vel
+  - projected_gravity
+  - position_commands
+  - joint_pos_rel
+  - joint_vel_rel
+  - last_action
+  - fr_target_xy_rel
+  - leg_position
+  - ft_stack
+rnd:
+  weight: 1.0
+  weight_schedule: null
+  reward_normalization: false
+  state_normalization: false
+  learning_rate: 0.0001
+  num_outputs: 1
+  predictor_hidden_dims:
+  - 128
+  - 128
+  target_hidden_dims:
+  - 256
+  - 256

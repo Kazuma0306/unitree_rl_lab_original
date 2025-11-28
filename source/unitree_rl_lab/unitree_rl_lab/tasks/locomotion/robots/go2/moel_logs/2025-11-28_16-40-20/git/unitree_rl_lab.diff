@@ -1,0 +1,300 @@
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/mdp/rewards.py
+	modified:   source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/robots/go2/velocity_env_cfg7.py
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/mdp/rewards.py b/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/mdp/rewards.py
+index 70bcfff..e0f7657 100644
+--- a/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/mdp/rewards.py
++++ b/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/mdp/rewards.py
+@@ -1905,7 +1905,23 @@ def legs_reward_gaussian(
+ 
+     mean_s = leg_scores.mean(dim=-1)              # [B]
+     min_s  = leg_scores.min(dim=-1).values        # [B]
+-    reward = mean_s * min_s        
++    max_s = leg_scores.max(dim=-1).values  
++    var_s  = ((leg_scores - mean_s.unsqueeze(-1))**2).mean(dim=-1)  # 分散
++
++    # reward = mean_s * min_s   
++    # reward = min_s     
++    # spread = max_s - min_s                   # バラつきの大きさ
++
++
++    w_mean = 1
++    # w_spread = 1
++    w_var = 1
++
++
++    # r = w_mean * mean_s - w_spread * spread
++
++    reward  = w_mean * mean_s - w_var * var_s
++
+ 
+     # return weighted.sum(dim=-1) / weights.sum()   # [B]
+     return reward
+diff --git a/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/robots/go2/velocity_env_cfg7.py b/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/robots/go2/velocity_env_cfg7.py
+index 4ebe336..6e3355b 100644
+--- a/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/robots/go2/velocity_env_cfg7.py
++++ b/source/unitree_rl_lab/unitree_rl_lab/tasks/locomotion/robots/go2/velocity_env_cfg7.py
+@@ -466,7 +466,7 @@ z0 = 0.1  # 石の厚みに応じた天板高さ
+ 
+ sizex = 0.16
+ sizey = 0.16
+-MASS_B = 11
++MASS_B = 1.0
+ 
+ @configclass
+ class RobotSceneCfg(InteractiveSceneCfg):
+@@ -662,6 +662,44 @@ class RobotSceneCfg(InteractiveSceneCfg):
+         )
+     )
+ 
++    #左前2
++    stone9 = RigidObjectCfg(
++        prim_path="{ENV_REGEX_NS}/Stone_9",
++        spawn=sim_utils.CuboidCfg(
++            size=(sizex, sizey, 0.3),  # 天板サイズ
++            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
++            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            physics_material=sim_utils.RigidBodyMaterialCfg(
++                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
++            ),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
++        ),
++        init_state=RigidObjectCfg.InitialStateCfg(
++            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
++            pos=(0.6, 0.2, -0.14)
++        )
++    )
++
++    #右前2
++    stone10 = RigidObjectCfg(
++        prim_path="{ENV_REGEX_NS}/Stone_10",
++        spawn=sim_utils.CuboidCfg(
++            size=(sizex, sizey, 0.3),  # 天板サイズ
++            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
++            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            physics_material=sim_utils.RigidBodyMaterialCfg(
++                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
++            ),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
++        ),
++        init_state=RigidObjectCfg.InitialStateCfg(
++            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
++            pos=(0.6, -0.2, -0.14)
++        )
++    )
++
+ 
+    
+ 
+@@ -803,6 +841,22 @@ class EventCfg:
+         }
+     )
+ 
++    update_stone9_mass = EventTerm(
++        func=mdp.apply_mass_curriculum,
++        mode="reset",  # リセット時に発火
++        params={
++            "asset_cfg": SceneEntityCfg("stone9"),  # 対象のアセット名
++        }
++    )
++
++    update_stone10_mass = EventTerm(
++        func=mdp.apply_mass_curriculum,
++        mode="reset",  # リセット時に発火
++        params={
++            "asset_cfg": SceneEntityCfg("stone10"),  # 対象のアセット名
++        }
++    )
++
+     # stone_1 = EventTerm(
+ 
+     #     func = mdp.randomize_rigid_body_mass,
+@@ -1260,7 +1314,7 @@ class RewardsCfg:
+     # )　しかも報酬内でDtをかけるようになっているので二重がけになる
+ 
+     # distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d4, weight = 0.5) #ベース座標系での距離
+-    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.5) #ベース座標系での距離 , all legs
++    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.2) #ベース座標系での距離 , all legs
+ 
+ 
+     distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
+@@ -1451,6 +1505,8 @@ class TerminationsCfg:
+     # )
+ 
+ 
++
++
+     # success_hold = DoneTerm(
+     #     func=mdp.HoldAllFeetWithContact2,
+     #     # time_outフラグは付けない（成功エピソードとしてカウントしたい）
+@@ -1467,15 +1523,18 @@ class TerminationsCfg:
+     #     params={"limit_w": 2.0}
+     # )
+ 
+-    block_moved = DoneTerm(
+-    func=mdp.AllBlocksMovedTermination,
+-    # params={
+-    #     "block_names": ["stone1", "stone2", "stone3", "stone4", "stone5", "stone6"],
+-    #     "pos_limit": 0.20,  # 20cm動いたらアウト
+-    #     "ori_limit": 0.52,  # 30度(約0.52rad)以上回転したらアウト（傾きor回転）
+-    # },
+ 
+-    )
++
++
++    # block_moved = DoneTerm(
++    # func=mdp.AllBlocksMovedTermination,
++    # # params={
++    # #     "block_names": ["stone1", "stone2", "stone3", "stone4", "stone5", "stone6"],
++    # #     "pos_limit": 0.20,  # 20cm動いたらアウト
++    # #     "ori_limit": 0.52,  # 30度(約0.52rad)以上回転したらアウト（傾きor回転）
++    # # },
++
++    # )
+ 
+ 
+ MIN_EPS=2000
+@@ -1483,9 +1542,11 @@ UP=0.7
+ DOWN=0.25
+ D_MIN_EPS=2000
+ COOL_DOWN=1000
+-ALPHA=0.001
++ALPHA=0.0001
+ # OLD=(11.0, 11.0)
+ OLD=(1.0, 1.0)
++# OLD=(20.0, 20.0)
++
+ 
+ # STAGE=[(30.0, 30.0),
+ #        (28.0, 28.0),
+@@ -1505,31 +1566,31 @@ OLD=(1.0, 1.0)
+ #         (11.0, 11.0)
+ #         ]
+ 
+-# STAGE=[(11.0, 11.0),
+-#        (10.0, 10.0),
+-#         (9.0, 9.0),
+-#         (8.0, 8.0),
+-#         (7.0, 7.0),
+-#         (6.0, 6.0),
+-#         (5.0, 5.0),
+-#         (4.0, 4.0),
+-#         (3.0, 3.0),
+-#         (2.0, 2.0),
+-#         (1.0, 1.0),
+-#         ]
+-
+-STAGE=[(1.0, 1.0),
+-        (0.9, 0.9),
+-        (0.8, 0.8),
+-        (0.7, 0.7),
+-        (0.6, 0.6),
+-        (0.5, 0.5),
+-        (0.4, 0.4),
+-        (0.3, 0.3),
+-        (0.2, 0.2),
+-        (0.1, 0.1),
++STAGE=[(11.0, 11.0),
++       (10.0, 10.0),
++        (9.0, 9.0),
++        (8.0, 8.0),
++        (7.0, 7.0),
++        (6.0, 6.0),
++        (5.0, 5.0),
++        (4.0, 4.0),
++        (3.0, 3.0),
++        (2.0, 2.0),
++        (1.0, 1.0),
+         ]
+ 
++# STAGE=[(1.0, 1.0),
++#         (0.9, 0.9),
++#         (0.8, 0.8),
++#         (0.7, 0.7),
++#         (0.6, 0.6),
++#         (0.5, 0.5),
++#         (0.4, 0.4),
++#         (0.3, 0.3),
++#         (0.2, 0.2),
++#         (0.1, 0.1),
++#         ]
++
+ 
+ 
+ @configclass
+@@ -1797,6 +1858,53 @@ class CurriculumCfg:
+     )
+ 
+ 
++    stone9_difficulty_update = CurrTerm(
++        # 直接計算関数を指定する
++        func=mdp.shared_mass_curriculum,
++        params=dict(
++            # ここに必要なパラメータを全部書く
++            old_range=OLD,
++            # stages=[(30.0, 30.0),
++            #             (28.0, 28.0),
++            #             (26.0, 26.0),
++            #             (24.0, 24.0),
++            #             (22.0, 22.0),
++            #             (20.0, 20.0)],
++            stages=STAGE,
++            master=False, # ★ 1つだけ登録すればいいので True にする
++            min_eps=MIN_EPS,
++            up_rate=UP,
++            down_rate=DOWN,
++            down_min_eps=D_MIN_EPS,
++            cooldown_steps=COOL_DOWN,
++            alpha=ALPHA,      
++        ),
++    )
++
++    stone10_difficulty_update = CurrTerm(
++        # 直接計算関数を指定する
++        func=mdp.shared_mass_curriculum,
++        params=dict(
++            # ここに必要なパラメータを全部書く
++            old_range=OLD,
++            # stages=[(30.0, 30.0),
++            #             (28.0, 28.0),
++            #             (26.0, 26.0),
++            #             (24.0, 24.0),
++            #             (22.0, 22.0),
++            #             (20.0, 20.0)],
++            stages=STAGE,
++            master=False, # ★ 1つだけ登録すればいいので True にする
++            min_eps=MIN_EPS,
++            up_rate=UP,
++            down_rate=DOWN,
++            down_min_eps=D_MIN_EPS,
++            cooldown_steps=COOL_DOWN,
++            alpha=ALPHA,      
++        ),
++    )
++
++
+ 
+ 
+ #     stone1_mass_curriculum = CurrTerm(
+@@ -1970,7 +2078,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
+     rewards: RewardsCfg = RewardsCfg()
+     terminations: TerminationsCfg = TerminationsCfg()
+     events: EventCfg = EventCfg()
+-    curriculum: CurriculumCfg = CurriculumCfg()
++    # curriculum: CurriculumCfg = CurriculumCfg()
+ 
+     def __post_init__(self):
+         """Post initialization."""
