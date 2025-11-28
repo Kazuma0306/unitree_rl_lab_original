@@ -1915,7 +1915,7 @@ def legs_reward_gaussian(
 
     w_mean = 1
     # w_spread = 1
-    w_var = 1.5
+    w_var = 0.5
 
 
     # r = w_mean * mean_s - w_spread * spread
@@ -2991,7 +2991,7 @@ class MultiLegHoldBonusPhase(ManagerTermBase):
         self.auto_advance_phase = P.get("auto_advance_phase", True)
 
         # ターゲット近傍とみなす距離 [m]
-        self.near_radius_cmd   = P.get("near_radius_cmd", 0.08)
+        self.near_radius_cmd   = P.get("near_radius_cmd", 0.05)
         # XYZ で距離を見るか / XY のみか
         self.use_xyz           = P.get("use_xyz", True)
 
@@ -3173,3 +3173,95 @@ class MultiLegHoldBonusPhase(ManagerTermBase):
 
         return payout
 
+
+
+
+
+class WrongPlacePenalty(ManagerTermBase):
+    """
+    コマンドターゲット「近傍ではない」場所で接地している脚に
+    小さなペナルティを与える。
+    - 接地していない脚はノーペナルティ。
+    - near_radius_cmd の外にいる contact 脚の数に応じてマイナス。
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.env = env
+
+        self.T_hold_s = P.get("T_hold_s", 0.1)  # 使わなくてもOK
+        self.penalty  = P.get("penalty", 1.0)   # 1.0 → あとは weight で調整
+
+        self.require_contact     = P.get("require_contact", True)
+        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+        self.contact_threshold   = P.get("contact_threshold", 0.0)
+
+        self.cmd_name      = P.get("cmd_name", "step_fr_to_block")
+        self.use_xyz       = P.get("use_xyz", True)
+        self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
+
+        self.leg_order = P.get(
+            "leg_order", ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
+        )
+        self.num_legs = len(self.leg_order)
+
+        scene = env.scene
+        self.robot = scene.articulations["robot"]
+        self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_order]
+
+        if self.contact_sensor_name not in scene.sensors:
+            raise RuntimeError(...)
+        self.sensor = scene.sensors[self.contact_sensor_name]
+
+        sensor_body_names = self.sensor.body_names
+        self.sensor_cols: list[int] = []
+        for leg in self.leg_order:
+            if leg not in sensor_body_names:
+                raise RuntimeError(...)
+            self.sensor_cols.append(sensor_body_names.index(leg))
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        device = env.device
+        B = env.num_envs
+
+        # === 足先位置 world -> base (MultiLegHoldBonusPhase と同じ) ===
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+        else:
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+
+        if self.require_contact:
+            F = self.sensor.data.net_forces_w   # [B, num_sensor_bodies, 3]
+            Fz_list = [F[:, col, 2] for col in self.sensor_cols]
+            Fz = torch.stack(Fz_list, dim=-1)             # [B,L]
+            contacts = (Fz.abs() > self.contact_threshold)
+        else:
+            contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+
+        base_p = self.robot.data.root_pos_w
+        base_q = self.robot.data.root_quat_w
+        R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)
+
+        diff_w = feet_w - base_p.unsqueeze(1)
+        feet_b = torch.matmul(R_wb3.unsqueeze(1), diff_w.unsqueeze(-1)).squeeze(-1)
+
+        cmd = env.command_manager.get_command(self.cmd_name)  # [B, 3*L]
+        tgt_b = cmd.view(B, self.num_legs, 3)
+
+        if self.use_xyz:
+            dist = (feet_b - tgt_b).norm(dim=-1)          # [B,L]
+        else:
+            diff_xy = feet_b[..., :2] - tgt_b[..., :2]
+            dist = diff_xy.norm(dim=-1)
+
+        near_cmd = dist <= self.near_radius_cmd           # [B,L]
+
+        # === 「間違った場所で接地している脚」 ===
+        wrong_legs = (~near_cmd) & contacts              # [B,L]
+
+        # 例1: 間違った脚の数に比例するペナルティ
+        n_wrong = wrong_legs.float().sum(dim=-1)         # [B]
+        penalty = self.penalty * n_wrong               # [B]
+
+        return penalty

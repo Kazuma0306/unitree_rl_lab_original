@@ -1319,6 +1319,8 @@ class RewardsCfg:
 
     distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
 
+    wrong_penalty = RewTerm(func = mdp.WrongPlacePenalty, weight = -0.01)
+
 
   
 
