@@ -2991,7 +2991,7 @@ class MultiLegHoldBonusPhase(ManagerTermBase):
         self.auto_advance_phase = P.get("auto_advance_phase", True)
 
         # ターゲット近傍とみなす距離 [m]
-        self.near_radius_cmd   = P.get("near_radius_cmd", 0.1)
+        self.near_radius_cmd   = P.get("near_radius_cmd", 0.16)
         # XYZ で距離を見るか / XY のみか
         self.use_xyz           = P.get("use_xyz", True)
 
