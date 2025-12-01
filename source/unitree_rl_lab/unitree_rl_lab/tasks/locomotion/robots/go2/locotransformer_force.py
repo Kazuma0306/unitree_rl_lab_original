@@ -535,3 +535,178 @@ class MlpHFP(ActorCritic):
 
     def get_critic_obs(self, obs):
         return self.get_actor_obs(obs)
+
+
+
+
+
+
+
+class VisionHighLevelAC(ActorCritic):
+    """
+    上位ポリシー:
+    - 観測:
+        - Heightmap:   env 側の ObservationTerm で生成した 2D 高さマップ
+        - Proprio:     prop_obs_keys で指定したベクトル観測（下位と似た構成）
+    - モデル:
+        - Heightmap → CNN で z_img
+        - Proprio  → MLP で z_prop
+        - [z_img, z_prop] → Projection head → Actor / Critic
+    """
+    def __init__(
+        self,
+        obs: dict,
+        obs_groups: dict,
+        num_actions: int,
+        prop_obs_keys: list[str],
+        heightmap_key: str = "heightmap",
+        ft_stack_key: str = "ft_stack",
+        hm_shape: tuple[int, int] = (32, 32),   # Heightmap の (H,W)
+        prop_encoder_dims: list[int] = [256, 128],
+        projection_head_dims: list[int] = [256, 256],
+        activation: str = "elu",
+        init_noise_std: float = 1.0,
+        use_layernorm: bool = True,
+        **kwargs,
+    ):
+        # Heightmap は自前で処理するので、親には渡すがそのままでもOK（無視しても良い）
+        # 観測からheight/ftを親に渡さない
+        sanitized_obs = {k: v for k, v in obs.items() if k not in [heightmap_key, ft_stack_key]}
+        sanitized_groups = {g: [k for k in ks if k not in [heightmap_key]] for g, ks in obs_groups.items()}
+
+        # print("=== env.cfg.observations.policy.term_cfgs ===")
+        # print(env.cfg.observations.policy.term_cfgs.keys())
+
+        # # 2) 実際に ActorCritic に渡ってきた obs のキー
+        # print("=== obs keys passed to ActorCritic ===")
+        # print(list(obs.keys()))
+        # for k, v in obs.items():
+        #     print(k, v.shape)
+
+        # print("=== sanitized_obs shapes ===")
+        # for k, v in sanitized_obs.items():
+        #     print(k, v.shape, "ndim=", len(v.shape))
+
+        #     # デバッグ用: どれが3次元/4次元か強制チェック
+        #     assert len(v.shape) == 2, f"BAD OBS SHAPE: key={k}, shape={v.shape}"
+        super().__init__(obs=sanitized_obs, obs_groups=sanitized_groups, num_actions=num_actions, **kwargs)
+
+        # super().__init__(obs=obs, obs_groups=obs_groups, num_actions=num_actions,
+        #                  init_noise_std=init_noise_std, **kwargs)
+
+       
+
+
+        self.prop_obs_keys = prop_obs_keys
+        self.heightmap_key = heightmap_key
+        self.hm_H, self.hm_W = hm_shape
+
+        act = nn.ELU() if activation == "elu" else nn.ReLU()
+
+        # ===== Proprio encoder =====
+        prop_obs_dim = sum(obs[k].shape[1] for k in self.prop_obs_keys)
+        prop_layers, in_dim = [], prop_obs_dim
+        for dim in prop_encoder_dims:
+            prop_layers += [nn.Linear(in_dim, dim), act]
+            in_dim = dim
+        self.proprioception_encoder = nn.Sequential(*prop_layers)
+        self.prop_out_dim = prop_encoder_dims[-1]
+        self.prop_norm = nn.LayerNorm(self.prop_out_dim) if use_layernorm else nn.Identity()
+
+        # ===== Heightmap encoder (2D Conv) =====
+        # 入力: [B, 1, H, W]
+        # self.hm_encoder = nn.Sequential(
+        #     nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2), act,   # -> [B,16,H/2,W/2]
+        #     nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1), act,  # -> [B,32,H/4,W/4]
+        #     nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), act,  # -> [B,64,H/8,W/8]
+        # )
+
+        # self.hm_encoder = nn.Sequential(
+        #     nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2), act,   # 1→32
+        #     nn.Conv2d(32,64, kernel_size=3, stride=2, padding=1), act,   # 32→64
+        #     nn.Conv2d(64,128,kernel_size=3, stride=2, padding=1), act,   # 64→128
+        # )
+
+        self.hm_encoder = nn.Sequential(
+            # 入力: [B, 1, 32, 32]
+            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),  # -> [B,32,16,16]
+            act,
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), # -> [B,64, 8, 8]
+            act,
+            # 必要ならもう1段（32x32ならここで止めてもOK）
+            # nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1), act,
+        )
+        # self.hm_feat_dim = 64   # 最終 Conv のチャンネル数
+        self.hm_conv_out_channels = 64
+        # self.hm_feat_dim = 128
+        self.hm_conv_out_H = 8
+        self.hm_conv_out_W = 8
+
+        self.hm_mlp = nn.Sequential(
+            nn.Linear(self.hm_conv_out_channels * self.hm_conv_out_H * self.hm_conv_out_W, 256),
+            act,
+            nn.Linear(256, 128),
+            act,
+        )
+
+        # self.hm_global_pool = lambda x: x.mean(dim=[2, 3])
+        self.hm_feat_dim = 128
+        self.hm_norm = nn.LayerNorm(self.hm_feat_dim) if use_layernorm else nn.Identity()
+
+        # ===== Projection head / Actor-Critic =====
+        fused_feature_dim = self.prop_out_dim + self.hm_feat_dim
+        proj, in_dim = [], fused_feature_dim
+        for dim in projection_head_dims:
+            proj += [nn.Linear(in_dim, dim), act]
+            in_dim = dim
+        self.projection_head = nn.Sequential(*proj)
+
+        self.actor  = nn.Sequential(nn.Linear(projection_head_dims[-1], num_actions))
+        self.critic = nn.Sequential(nn.Linear(projection_head_dims[-1], 1))
+
+    # ------------------------------------------------------------------
+    #  観測のエンコード
+    # ------------------------------------------------------------------
+    def _encode_proprio(self, obs):
+        # 下位と同様、指定された key を concat。
+        # 例: ["base_lin_vel", "base_ang_vel", "joint_pos", "joint_vel", ...]
+        prop_vec  = torch.cat([obs[k] for k in self.prop_obs_keys], dim=-1)
+        prop_feat = self.proprioception_encoder(prop_vec)       # [B, P]
+        return self.prop_norm(prop_feat)
+
+    def _encode_heightmap(self, obs):
+        # ObservationTerm 側で heightmap をフラット (H*W) で返している想定。
+        # 例: depth_heightmap() が (N,H,W,1) → (N,H*W) で返している場合、
+        #     ここで (B,1,H,W) に reshape して Conv に入れる。
+        hm_flat = obs[self.heightmap_key]        # [B, H*W] or [B, H, W]
+        if hm_flat.ndim == 2:
+            B = hm_flat.shape[0]
+            hm = hm_flat.view(B, 1, self.hm_H, self.hm_W)  # [B,1,H,W]
+        elif hm_flat.ndim == 3:
+            # すでに [B,H,W] の場合
+            B = hm_flat.shape[0]
+            hm = hm_flat.view(B, 1, self.hm_H, self.hm_W)
+        else:
+            raise ValueError(f"Unexpected heightmap shape: {hm_flat.shape}")
+
+        x = self.hm_encoder(hm)                  # [B,64,h',w']
+        # x = self.hm_global_pool(x)               # [B,64]
+
+        x = x.view(B, -1)                # flatten → [B, C*H'*W']
+        x = self.hm_mlp(x)                         # [B,128]
+
+
+        return self.hm_norm(x)
+
+    # ------------------------------------------------------------------
+    #  Actor / Critic 入力
+    # ------------------------------------------------------------------
+    def get_actor_obs(self, obs):
+        prop_feat = self._encode_proprio(obs)    # [B, P]
+        hm_feat   = self._encode_heightmap(obs)  # [B, 64]
+        feat = torch.cat([prop_feat, hm_feat], dim=-1)  # [B, fused_feature_dim]　128＋128=256
+        return self.projection_head(feat)        # [B, hidden]
+
+    def get_critic_obs(self, obs):
+        # 今回は Actor/Critic 同じ特徴を使う（MlpHFP と同じポリシー）
+        return self.get_actor_obs(obs)

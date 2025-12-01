@@ -442,3 +442,189 @@ def all_blocks_state_base(
     # [B, N, 5] -> [B, N*5]
     all_feats = torch.cat(feats, dim=-1)
     return all_feats  # Critic側にだけ食わせる
+
+
+
+
+
+
+
+#視覚観測（Depth 2　Heightmap）
+
+import torch
+import isaaclab.utils.math as math_utils
+from isaaclab.assets import Articulation
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.sensors import Camera, TiledCamera, RayCasterCamera
+from isaaclab.envs import ManagerBasedEnv
+# from isaaclab.envs.mdp.observations import (
+#     generic_io_descriptor, record_shape, record_dtype,
+# )
+
+
+# @generic_io_descriptor(
+#     units="m",
+#     axes=["Heightmap"],
+#     observation_type="Sensor",
+#     on_inspect=[record_shape, record_dtype],
+# )
+def depth_heightmap(
+    env: ManagerBasedEnv,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("camera"),
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    # base 座標系で見たときの XY 範囲 [m]
+    x_range: tuple[float, float] = (-1.0, 1.0),
+    y_range: tuple[float, float] = (-0.8, 0.8),
+    # Heightmap 解像度
+    grid_shape: tuple[int, int] = (32, 32),
+    # 高さの初期値（何も hit が無いセル用）
+    default_height: float = 0.0,
+) -> torch.Tensor:
+    """Depth 画像から base フレームの Heightmap を作る観測。
+
+    返り値 shape: (num_envs, H_map, W_map, 1)
+    """
+
+    # --- 1. センサとロボットを取得 ---
+    sensor: TiledCamera | Camera | RayCasterCamera = env.scene.sensors[sensor_cfg.name]
+    robot: Articulation = env.scene[asset_cfg.name]
+
+    # depth 画像を取得（distance_to_image_plane を想定）
+    depth = sensor.data.output["depth"]  # (N, H, W, 1) or (N, H, W)
+    if depth.ndim == 4 and depth.shape[-1] == 1:
+        depth = depth[..., 0]  # (N, H, W)
+
+    # 無限距離を 0 に
+    depth = depth.clone()
+    depth[depth == float("inf")] = 4.0
+
+    num_envs, H_cam, W_cam = depth.shape
+
+    # --- 2. Depth を 3D 点群（カメラ座標系）へ投影 ---
+    # IsaacLab 公式の unproject_depth/transform_points の使い方と同じです
+    points_cam = math_utils.unproject_depth(
+        depth,  # (N, H, W)
+        sensor.data.intrinsic_matrices,  # (N, 3, 3)
+        # is_ortho=False がデフォルト（perspective depth）
+    )  # (N, H, W, 3)
+
+    # (N, H*W, 3) に reshape
+    points_cam = points_cam.view(num_envs, -1, 3)
+
+    # --- 3. カメラ座標 → ワールド座標 ---
+    # docs の例と同じく transform_points を使用
+    points_world = math_utils.transform_points(
+        points_cam,                  # (N, P, 3)
+        sensor.data.pos_w,           # (N, 3)
+        sensor.data.quat_w_ros,      # (N, 4)
+    )  # (N, P, 3)
+
+    # --- 4. ワールド → base 座標 ---
+    base_pos_w = robot.data.root_pos_w          # (N, 3)
+    base_quat_w = robot.data.root_quat_w        # (N, 4)
+
+    # 平行移動を引いてから base フレームへ回転
+    # quat_apply_inverse は「world ベクトル → body フレーム」変換に使われている関数です
+    points_rel = points_world - base_pos_w.unsqueeze(1)  # (N, P, 3)
+
+
+    N, P, _ = points_rel.shape
+    base_quat_w_exp = base_quat_w.unsqueeze(1).expand(N, P, 4).contiguous()  # (N, P, 4)
+
+
+    points_base = math_utils.quat_apply_inverse(
+        base_quat_w_exp,    # (N, P, 4)
+        points_rel,         # (N, P, 3)
+    )  # (N, P, 3)
+
+    X = points_base[..., 0]
+    Y = points_base[..., 1]
+    Z = points_base[..., 2]  # base 原点から見た高さ（Z）
+
+    # --- 5. XY 範囲でフィルタリング ---
+    xmin, xmax = x_range
+    ymin, ymax = y_range
+
+    # depth>0 かつ XY 範囲内だけを有効に
+    valid = (depth.view(num_envs, -1) > 0)
+    valid &= (X >= xmin) & (X <= xmax) & (Y >= ymin) & (Y <= ymax)
+
+    # --- 6. XY を Heightmap グリッド index に量子化 ---
+    H_map, W_map = grid_shape
+
+    gx = ((X - xmin) / (xmax - xmin) * (H_map - 1)).long()
+    gy = ((Y - ymin) / (ymax - ymin) * (W_map - 1)).long()
+    gx = gx.clamp(0, H_map - 1)
+    gy = gy.clamp(0, W_map - 1)
+
+    # --- 7. 各セルごとに高さを集約（ここでは最小 Z = 地面側 を採用） ---
+    # 注意: Z は base 原点からの高さなので、地面は負の値になるはず。
+    heightmap = torch.full(
+        (num_envs, H_map, W_map),
+        fill_value=default_height,
+        device=env.device,
+        dtype=Z.dtype,
+    )
+
+    # まず全セルを default_height にしておき、hit があるところだけ上書き/上書き最小値
+    for env_id in range(num_envs):
+        mask = valid[env_id]
+        if not torch.any(mask):
+            continue
+
+        ix = gx[env_id][mask]
+        iy = gy[env_id][mask]
+        z  = Z[env_id][mask]
+
+        flat_idx = ix * W_map + iy                   # (P_valid,)
+        hm_flat = heightmap[env_id].view(-1)         # (H_map*W_map,)
+
+        # PyTorch 1.12+ なら index_reduce_ が使えます
+        hm_flat.index_reduce_(
+            dim=0,
+            index=flat_idx,
+            source=z,
+            reduce="amin",   # or "amax" で「一番高い」面を取る
+        )
+
+    # shape を image() と揃えて (N, H, W, 1) で返す
+    # return heightmap.unsqueeze(-1)
+
+    try:
+        if getattr(env.cfg, "debug_heightmap", False):
+            # 代表として env 0 の現在ステップ
+            step0 = int(env.episode_length_buf[0].item()) if hasattr(env, "episode_length_buf") else 0
+            if step0 % 10 == 0:
+                # dump_heightmap は (B, H*W) でも動くようにしておけばよい
+                dump_heightmap(
+                    heightmap.view(num_envs, -1),  # [N, H*W]
+                    H_map,
+                    W_map,
+                    save_dir="./tmp/heightmaps",     # 好きなパスに変更
+                    env_index=0,
+                    step=step0,
+                )
+    
+    except Exception:
+        # デバッグ用途なので、失敗しても学習自体には影響させない
+        print("heightmap save error")
+        # pass
+
+    return heightmap.view(num_envs, -1)
+
+import os
+import matplotlib.pyplot as plt
+
+
+def dump_heightmap(heightmap: torch.Tensor, H: int, W: int,
+                   save_dir: str, env_index: int = 0, step: int = 0):
+    os.makedirs(save_dir, exist_ok=True)
+    hm = heightmap[env_index].view(H, W).detach().cpu().numpy()
+
+    plt.figure()
+    im = plt.imshow(hm, origin="lower")
+    plt.colorbar(im, label="height [m]")
+    plt.title(f"env {env_index}, step {step}")
+    plt.savefig(os.path.join(save_dir, f"heightmap_e{env_index}_s{step:06d}.png"),
+                bbox_inches="tight")
+    plt.close()

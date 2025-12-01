@@ -468,6 +468,9 @@ sizex = 0.16
 sizey = 0.16
 MASS_B = 1.0
 
+MASS_B = 0.1
+
+
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with a legged robot."""
@@ -1531,7 +1534,7 @@ class TerminationsCfg:
     # block_moved = DoneTerm(
     # func=mdp.AllBlocksMovedTermination,
     # # params={
-    # #     "block_names": ["stone1", "stone2", "stone3", "stone4", "stone5", "stone6"],
+    # #     0"block_names": ["stone1", "stone2", "stone3", "stone4", "stone5", "stone6"],
     # #     "pos_limit": 0.20,  # 20cm動いたらアウト
     # #     "ori_limit": 0.52,  # 30度(約0.52rad)以上回転したらアウト（傾きor回転）
     # # },
@@ -1543,8 +1546,10 @@ MIN_EPS=2000
 UP=0.7
 DOWN=0.25
 D_MIN_EPS=2000
-COOL_DOWN=1000
-ALPHA=0.0001
+COOL_DOWN=2000
+# ALPHA=0.0001
+ALPHA=0.00001
+
 # OLD=(11.0, 11.0)
 OLD=(1.0, 1.0)
 # OLD=(20.0, 20.0)
@@ -1582,18 +1587,30 @@ OLD=(0.1, 0.1)
 #         (1.0, 1.0),
 #         ]
 
-STAGE=[(1.0, 1.0),
-        (0.9, 0.9),
-        (0.8, 0.8),
-        (0.7, 0.7),
-        (0.6, 0.6),
-        (0.5, 0.5),
-        (0.4, 0.4),
-        (0.3, 0.3),
-        (0.2, 0.2),
-        (0.1, 0.1),
-        ]
+# STAGE=[(1.0, 1.0),
+#         (0.9, 0.9),
+#         (0.8, 0.8),
+#         (0.7, 0.7),
+#         (0.6, 0.6),
+#         (0.5, 0.5),
+#         (0.4, 0.4),
+#         (0.3, 0.3),
+#         (0.2, 0.2),
+#         (0.1, 0.1),
+#         ]
 
+
+STAGE=[(0.1, 0.1),
+        (0.09, 0.09),
+        (0.08, 0.08),
+        (0.07, 0.07),
+        (0.06, 0.06),
+        (0.05, 0.05),
+        (0.04, 0.04),
+        (0.03, 0.03),
+        (0.02, 0.02),
+        (0.01, 0.01),
+        ]
 
 
 @configclass
@@ -2081,7 +2098,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
-    # curriculum: CurriculumCfg = CurriculumCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self):
         """Post initialization."""

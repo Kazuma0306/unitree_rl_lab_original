@@ -62,7 +62,7 @@ from isaaclab_tasks.utils import get_checkpoint_path
 import unitree_rl_lab.tasks  # noqa: F401
 from unitree_rl_lab.utils.parser_cfg import parse_env_cfg
 from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer import VisionMLPActorCritic, LocoTransformerActorCritic, LocoTransformerFinetune
-from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer_force import LocoTransformerHFP, MlpHFP
+from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer_force import LocoTransformerHFP, MlpHFP, VisionHighLevelAC
 
 
 def main():
@@ -124,7 +124,9 @@ def main():
     # test_cfg["policy"]["class_name"] = LocoTransformerActorCritic
     # test_cfg["policy"]["class_name"] = LocoTransformerFinetune
     # test_cfg["policy"]["class_name"] = LocoTransformerHFP
-    test_cfg["policy"]["class_name"] = MlpHFP
+    # test_cfg["policy"]["class_name"] = MlpHFP
+    test_cfg["policy"]["class_name"] = VisionHighLevelAC
+
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
