@@ -9,3 +9,4 @@ from .rewards import *  # noqa: F401, F403
 from .termination import *
 from .helpers_single_block import *
 from .pre_trained_policy_action import *
+from .events import *

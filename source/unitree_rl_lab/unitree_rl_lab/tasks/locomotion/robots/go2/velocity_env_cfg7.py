@@ -860,6 +860,21 @@ class EventCfg:
         }
     )
 
+
+
+    randomize_all_stones = EventTerm(
+        func=mdp.randomize_multiple_stones,
+        mode="reset",
+        params={
+            "stone_names": [f"stone{i}" for i in range(10)],
+            "pose_range": {
+                "x": (-0.2, 0.2),
+                "y": (-0.2, 0.2),
+                "z": (0.0, 0.0),
+            },
+        },
+    )
+
     # stone_1 = EventTerm(
 
     #     func = mdp.randomize_rigid_body_mass,
