@@ -579,6 +579,34 @@ class RewardsCfg:
     )
 
 
+    joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
+    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+    # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
+    energy = RewTerm(func=mdp.energy, weight=-3e-5)
+
+    # -- robot
+    # dont_wait = RewTerm(
+    #     func=mdp.dont_wait_rel, weight=-1.0, # 前回実装した自作関数 -2.0 for simple walking
+    #     params={"velocity_threshold": 0.2, "distance_threshold": 1.0, "command_name": "goal_position"}
+    # )
+
+
+
+    # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
+
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0) 
+
+    undesired_contacts = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-1,
+        params={
+            "threshold": 1,
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["Head_.*", ".*_hip", ".*_thigh", ".*_calf"]),
+        },
+    )
+
+
 @configclass
 class CommandsCfg:
     """Command terms for the MDP."""
@@ -589,7 +617,7 @@ class CommandsCfg:
         resampling_time_range=(24.0, 24.0),
         debug_vis=True,
         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.0, 1.5), pos_y=(-0.0, 0.0), heading=(-0, 0)),
+        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.3, 2.5), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
     step_fr_to_block = mdp.FootstepFromHighLevelCfg()
@@ -635,13 +663,17 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
             self.scene.contact_forces.update_period = self.sim.dt
 
 
-class RobotEnvCfg_PLAY(RobotEnvCfg):
+class RobotPlayEnvCfg(RobotEnvCfg):
     def __post_init__(self) -> None:
         # post init of parent
         super().__post_init__()
 
         # make a smaller scene for play
         self.scene.num_envs = 2
+        if self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.num_rows = 2
+            self.scene.terrain.terrain_generator.num_cols = 2
+
         self.scene.env_spacing = 2.5
         # disable randomization for play
         self.observations.policy.enable_corruption = False

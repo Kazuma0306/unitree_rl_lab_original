@@ -7,6 +7,11 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
+import os
+import matplotlib.pyplot as plt
+
+
+
 def gait_phase(env: ManagerBasedRLEnv, period: float) -> torch.Tensor:
     if not hasattr(env, "episode_length_buf"):
         env.episode_length_buf = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
@@ -590,30 +595,44 @@ def depth_heightmap(
     # shape を image() と揃えて (N, H, W, 1) で返す
     # return heightmap.unsqueeze(-1)
 
-    try:
-        if getattr(env.cfg, "debug_heightmap", False):
-            # 代表として env 0 の現在ステップ
-            step0 = int(env.episode_length_buf[0].item()) if hasattr(env, "episode_length_buf") else 0
-            if step0 % 10 == 0:
-                # dump_heightmap は (B, H*W) でも動くようにしておけばよい
-                dump_heightmap(
-                    heightmap.view(num_envs, -1),  # [N, H*W]
-                    H_map,
-                    W_map,
-                    save_dir="./tmp/heightmaps",     # 好きなパスに変更
-                    env_index=0,
-                    step=step0,
-                )
+    # 代表として env 0 の現在ステップ
+    step0 = int(env.episode_length_buf[0].item()) if hasattr(env, "episode_length_buf") else 0
+    if step0 % 100 == 0:
+        # dump_heightmap は (B, H*W) でも動くようにしておけばよい
+        dump_heightmap(
+            heightmap.view(num_envs, -1),  # [N, H*W]
+            H_map,
+            W_map,
+            save_dir="/tmp/heightmaps",     # 好きなパスに変更
+            env_index=0,
+            step=step0,
+        )
     
-    except Exception:
-        # デバッグ用途なので、失敗しても学習自体には影響させない
-        print("heightmap save error")
-        # pass
+    # if not hasattr(env, "_hm_debug_dumped"):
+    #     env._hm_debug_dumped = False
+
+    # print("heightmapppp")
+
+    # if env._hm_debug_dumped is False:
+    #     save_dir = "/tmp/heightmaps_debug"  # わかりやすい固定パス
+    #     os.makedirs(save_dir, exist_ok=True)
+
+    #     hm0 = heightmap[0].detach().cpu().numpy()  # env 0 の (H_map, W_map)
+    #     plt.figure()
+    #     im = plt.imshow(hm0, origin="lower")
+    #     plt.colorbar(im, label="height [m]")
+    #     plt.title("debug heightmap env0")
+    #     out_path = os.path.join(save_dir, "heightmap_env0_debug.png")
+    #     print("[depth_heightmap] saving debug heightmap to:", out_path)
+    #     plt.savefig(out_path, bbox_inches="tight")
+    #     plt.close()
+
+    #     env._hm_debug_dumped = True
+    
 
     return heightmap.view(num_envs, -1)
 
-import os
-import matplotlib.pyplot as plt
+
 
 
 def dump_heightmap(heightmap: torch.Tensor, H: int, W: int,
