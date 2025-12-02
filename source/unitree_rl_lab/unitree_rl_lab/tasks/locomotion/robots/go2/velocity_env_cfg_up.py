@@ -95,6 +95,48 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
 )
 
 
+
+STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
+    curriculum=True,
+    size=(8.0, 8.0),
+    border_width=20.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    difficulty_range=(0.0, 1.0),
+    use_cache=False,
+    sub_terrains={
+        # "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
+        # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+        #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
+        # ),
+
+        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+        #      proportion=0.2, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (1.0, 1.5), stone_distance_range = (0.05, 0.08),  holes_depth = -5.0, platform_width = 1.5,
+
+        # ),
+
+        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+             proportion=0.7, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (0.7, 1.5), stone_distance_range = (0.05, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+
+        ),
+
+
+        #difficult version
+        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+        #      proportion=0.9, border_width=0.25,  horizontal_scale = 0.05, stone_height_max = 0.01, stone_width_range = (0.5, 0.9), stone_distance_range = (0.06, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+
+        # ),
+
+        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+        #      proportion=1.0, border_width=0.25,  stone_height_max = 0.05, stone_width_range = (0.2, 0.9), stone_distance_range = (0.08, 0.26),  holes_depth = -5.0, platform_width = 1.5,
+
+        # ),
+    },
+)
+
 BLOCK_CFG = terrain_gen.TerrainGeneratorCfg(
     curriculum=True,
     size=(8.0, 8.0),
@@ -388,7 +430,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         depth_clipping_behavior = "max",
         # depth_clipping_behavior = "zero",
         # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
-        offset=CameraCfg.OffsetCfg(pos=(0.25, 0.0, 0.2), rot=(0.418761, -0.612372, 0.581238, -0.327329), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.25, 0.0, 0.25), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
 
 
     )
@@ -456,10 +498,10 @@ class HighLevelPolicyObsCfg(ObsGroup):
     params=dict(
         sensor_cfg=SceneEntityCfg("camera"),  # 定義したカメラ名
         asset_cfg=SceneEntityCfg("robot"),
-        x_range=(-1.0, 1.0),
-        y_range=(-0.8, 0.8),
-        grid_shape=(32, 32),
-        default_height=0.0,
+        x_range=(-1.0, 3.0),
+        y_range=(-3.0, 3.0),
+        grid_shape=(64, 64),
+        default_height=-8.0,
     ),
     )
 
@@ -561,7 +603,7 @@ class ObservationsCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
+    # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
         weight=0.5,
@@ -579,11 +621,11 @@ class RewardsCfg:
     )
 
 
-    joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
-    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
-    # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
-    energy = RewTerm(func=mdp.energy, weight=-3e-5)
+    # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
+    # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
+    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+    # # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
+    # energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
     # -- robot
     # dont_wait = RewTerm(
@@ -632,7 +674,7 @@ class TerminationsCfg:
         func=mdp.illegal_contact,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
     )
-    bad_orientation = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 1.0})
+    bad_orientation = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 0.8})
 
 
 @configclass
@@ -642,6 +684,8 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     # environment settings
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
     scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
+
     actions: ActionsCfg = ActionsCfg()
     observations: ObservationsCfg = ObservationsCfg()
     # events: EventCfg = EventCfg()
@@ -652,6 +696,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         """Post initialization."""
+
+        # if self.scene.terrain.terrain_generator is not None:
+        #     self.scene.terrain.terrain_generator.num_rows = 2
+        #     self.scene.terrain.terrain_generator.num_cols = 2
 
         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation

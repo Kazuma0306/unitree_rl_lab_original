@@ -561,7 +561,8 @@ class VisionHighLevelAC(ActorCritic):
         prop_obs_keys: list[str],
         heightmap_key: str = "heightmap",
         ft_stack_key: str = "ft_stack",
-        hm_shape: tuple[int, int] = (32, 32),   # Heightmap の (H,W)
+        hm_shape: tuple[int, int] = (64, 64),   # Heightmap の (H,W)
+        # hm_shape: tuple[int, int] = (32, 32),
         prop_encoder_dims: list[int] = [256, 128],
         projection_head_dims: list[int] = [256, 256],
         activation: str = "elu",
@@ -628,13 +629,13 @@ class VisionHighLevelAC(ActorCritic):
         # )
 
         self.hm_encoder = nn.Sequential(
-            # 入力: [B, 1, 32, 32]
-            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),  # -> [B,32,16,16]
+            # 入力: [B, 1, 64, 64]
+            nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=2),  # -> [B,32,32,32]
             act,
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), # -> [B,64, 8, 8]
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), # -> [B,64, 16, 16]
             act,
             # 必要ならもう1段（32x32ならここで止めてもOK）
-            # nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1), act,
+            nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1), act,
         )
         # self.hm_feat_dim = 64   # 最終 Conv のチャンネル数
         self.hm_conv_out_channels = 64
@@ -675,7 +676,7 @@ class VisionHighLevelAC(ActorCritic):
         return self.prop_norm(prop_feat)
 
     def _encode_heightmap(self, obs):
-        # ObservationTerm 側で heightmap をフラット (H*W) で返している想定。
+        # ObservationTerm 側で heightmap をフラット (2H*W) で返している想定。
         # 例: depth_heightmap() が (N,H,W,1) → (N,H*W) で返している場合、
         #     ここで (B,1,H,W) に reshape して Conv に入れる。
         hm_flat = obs[self.heightmap_key]        # [B, H*W] or [B, H, W]
@@ -683,7 +684,7 @@ class VisionHighLevelAC(ActorCritic):
             B = hm_flat.shape[0]
             hm = hm_flat.view(B, 1, self.hm_H, self.hm_W)  # [B,1,H,W]
         elif hm_flat.ndim == 3:
-            # すでに [B,H,W] の場合
+            # すでに [B,H,W] の場合2
             B = hm_flat.shape[0]
             hm = hm_flat.view(B, 1, self.hm_H, self.hm_W)
         else:
