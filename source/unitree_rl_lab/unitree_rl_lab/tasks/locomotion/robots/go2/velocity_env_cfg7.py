@@ -468,7 +468,7 @@ sizex = 0.16
 sizey = 0.16
 MASS_B = 1.0
 
-MASS_B = 0.1
+MASS_B = 30
 
 
 @configclass
@@ -862,15 +862,27 @@ class EventCfg:
 
 
 
+
+    #randomize stone position
     randomize_all_stones = EventTerm(
         func=mdp.randomize_multiple_stones,
         mode="reset",
         params={
-            "stone_names": [f"stone{i}" for i in range(10)],
+            "stone_names": [f"stone{i}" for i in range(1, 10)],
             "pose_range": {
-                "x": (-0.2, 0.2),
-                "y": (-0.2, 0.2),
+                "x": (-0.02, 0.02),
+                "y": (-0.02, 0.02),
                 "z": (0.0, 0.0),
+            },
+
+            "velocity_range": {
+                # 位置だけ振りたいなら全部 (0,0) でOK
+                "x": (0.0, 0.0),
+                "y": (0.0, 0.0),
+                "z": (0.0, 0.0),
+                "roll": (0.0, 0.0),
+                "pitch": (0.0, 0.0),
+                "yaw": (0.0, 0.0),
             },
         },
     )
@@ -2103,8 +2115,8 @@ class CurriculumCfg:
 class RobotEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
     # Scene settings
-    scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
-    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=1, env_spacing=2.5)
+    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: RobotSceneCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -2113,7 +2125,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
-    curriculum: CurriculumCfg = CurriculumCfg()
+    # curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self):
         """Post initialization."""
@@ -2138,6 +2150,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
         # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
         # this generates terrains with increasing difficulty and is useful for training
+
+        if self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.num_rows = 2
+            self.scene.terrain.terrain_generator.num_cols = 2
 
 
        

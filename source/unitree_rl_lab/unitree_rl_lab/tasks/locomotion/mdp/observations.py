@@ -501,7 +501,7 @@ def depth_heightmap(
 
     # 無限距離を 0 に
     depth = depth.clone()
-    depth[depth == float("inf")] = 4.0
+    depth[depth == float("inf")] = 3.0
 
     num_envs, H_cam, W_cam = depth.shape
 
@@ -613,7 +613,7 @@ def depth_heightmap(
 
     # 代表として env 0 の現在ステップ
     step0 = int(env.episode_length_buf[0].item()) if hasattr(env, "episode_length_buf") else 0
-    if step0 % 1000 == 0:
+    if step0 % 100 == 0:
         # dump_heightmap は (B, H*W) でも動くようにしておけばよい
         dump_heightmap(
             heightmap.view(num_envs, -1),  # [N, H*W]
@@ -728,7 +728,7 @@ def depth_heightmap2(
 
     # valid = valid_depth & valid_xy & valid_z  # (N, H*W)
 
-     valid = (raw_depth.view(num_envs, -1) > 0) # Inf/0以外
+    valid = (raw_depth.view(num_envs, -1) > 0) # Inf/0以外
 
     # --- 5. XY を Heightmap グリッド index に量子化 ---
     H_map, W_map = grid_shape

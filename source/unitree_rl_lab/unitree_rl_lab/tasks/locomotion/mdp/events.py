@@ -10,7 +10,7 @@ def randomize_multiple_stones(
     env_ids: torch.Tensor | None,
     stone_names: list[str],
     pose_range: dict[str, tuple[float, float]],
-    # velocity_range: dict[str, tuple[float, float]],
+    velocity_range: dict[str, tuple[float, float]],
 ):
     """複数のブロック(Stone)をまとめて reset_root_state_uniform でランダム化するイベント."""
     # env_ids が None の場合は全 env を対象
@@ -23,6 +23,6 @@ def randomize_multiple_stones(
             env=env,
             env_ids=env_ids,
             pose_range=pose_range,
-            # velocity_range=velocity_range,
+            velocity_range=velocity_range,
             asset_cfg=SceneEntityCfg(name),
         )

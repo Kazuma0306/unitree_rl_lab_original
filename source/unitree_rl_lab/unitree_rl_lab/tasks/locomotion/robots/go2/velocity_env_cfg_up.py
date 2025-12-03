@@ -161,9 +161,9 @@ BLOCK_CFG = terrain_gen.TerrainGeneratorCfg(
 
 sizex = 0.16
 sizey = 0.16
-MASS_B = 1.0
+MASS_B = 30.0
 
-MASS_B = 0.1
+# MASS_B = 0.1
 
 
 @configclass
@@ -174,10 +174,10 @@ class RobotSceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",  # "plane", "generator"
-        terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
+        # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
-        # terrain_generator= STEPPING_STONES_CFG, 
+        terrain_generator= STEPPING_STONES_CFG, 
         # terrain_generator= MOAT_CFG, # proposed env
         # terrain_generator= BLOCK_CFG,
         max_init_terrain_level=0,
@@ -205,198 +205,198 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-    # #左前
-    # stone1 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_1",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0.4, 0.2, -0.14)
-    #     )
-    # )
+    #左前
+    stone1 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_1",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.4, 0.2, -0.14)
+        )
+    )
 
-    # #右前
-    # stone2 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_2",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0.4, -0.2, -0.14)
-    #     )
-    # )
+    #右前
+    stone2 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_2",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.4, -0.2, -0.14)
+        )
+    )
 
-    # #ML
-    # stone3 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_3",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False,),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0, 0.2, -0.14)
-    #     )
-    # )
-
-
-    # #MR
-    # stone4 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_4",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0, -0.2, -0.14)
-    #     )
-    # )
+    #ML
+    stone3 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_3",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False,),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0, 0.2, -0.14)
+        )
+    )
 
 
-    # #FL
-    # stone5 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_5",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0.2, 0.2, -0.14)
-    #     )
-    # )
+    #MR
+    stone4 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_4",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0, -0.2, -0.14)
+        )
+    )
 
 
-    # #FR
-    # stone6 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_6",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0.2, -0.2, -0.14)
-    #     )
-    # )
+    #FL
+    stone5 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_5",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.2, 0.2, -0.14)
+        )
+    )
 
-    # #RL
-    # stone7 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_7",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(-0.2, 0.2, -0.14)
-    #     )
-    # )
 
-    # #RR
-    # stone8 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_8",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(-0.2, -0.2, -0.14)
-    #     )
-    # )
+    #FR
+    stone6 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_6",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.2, -0.2, -0.14)
+        )
+    )
 
-    # #左前2
-    # stone9 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_9",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0.6, 0.2, -0.14)
-    #     )
-    # )
+    #RL
+    stone7 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_7",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(-0.2, 0.2, -0.14)
+        )
+    )
 
-    # #右前2
-    # stone10 = RigidObjectCfg(
-    #     prim_path="{ENV_REGEX_NS}/Stone_10",
-    #     spawn=sim_utils.CuboidCfg(
-    #         size=(sizex, sizey, 0.3),  # 天板サイズ
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-    #         mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
-    #         physics_material=sim_utils.RigidBodyMaterialCfg(
-    #             static_friction=1.0, dynamic_friction=1.0, restitution=0.0
-    #         ),
-    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-    #     ),
-    #     init_state=RigidObjectCfg.InitialStateCfg(
-    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-    #         pos=(0.6, -0.2, -0.14)
-    #     )
-    # )
+    #RR
+    stone8 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_8",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(-0.2, -0.2, -0.14)
+        )
+    )
+
+    #左前2
+    stone9 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_9",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.6, 0.2, -0.14)
+        )
+    )
+
+    #右前2
+    stone10 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_10",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.6, -0.2, -0.14)
+        )
+    )
 
 
    
@@ -424,8 +424,12 @@ class RobotSceneCfg(InteractiveSceneCfg):
         # spawn=sim_utils.PinholeCameraCfg(
         #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 5.0)
         # ),
+        # spawn=sim_utils.PinholeCameraCfg(
+        #     focal_length=16.0, focus_distance=3.0, horizontal_aperture=20.955, clipping_range=(0.1, 4.0)
+        # ),
+
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=16.0, focus_distance=3.0, horizontal_aperture=20.955, clipping_range=(0.1, 4.0)
+            focal_length=10.5, focus_distance=3.0, horizontal_aperture=20.955, clipping_range=(0.1, 3.0)
         ),
         depth_clipping_behavior = "max",
         # depth_clipping_behavior = "zero",
@@ -683,7 +687,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
     # environment settings
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=1, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
 
     actions: ActionsCfg = ActionsCfg()
@@ -693,13 +697,15 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     commands: CommandsCfg = CommandsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
+    # curriculum: CurriculumCfg = CurriculumCfg()
+
 
     def __post_init__(self):
         """Post initialization."""
 
-        # if self.scene.terrain.terrain_generator is not None:
-        #     self.scene.terrain.terrain_generator.num_rows = 2
-        #     self.scene.terrain.terrain_generator.num_cols = 2
+        if self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.num_rows = 2
+            self.scene.terrain.terrain_generator.num_cols = 2
 
         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation

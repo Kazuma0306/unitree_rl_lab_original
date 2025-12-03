@@ -245,8 +245,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # train_cfg["policy"]["class_name"] = LocoTransformerActorCritic
     # train_cfg["policy"]["class_name"] = LocoTransformerFinetune
     # train_cfg["policy"]["class_name"] = LocoTransformerHFP
-    # train_cfg["policy"]["class_name"] = MlpHFP
-    train_cfg["policy"]["class_name"] = VisionHighLevelAC
+    train_cfg["policy"]["class_name"] = MlpHFP
+    # train_cfg["policy"]["class_name"] = VisionHighLevelAC
 
 
     # create runner from rsl-rl
