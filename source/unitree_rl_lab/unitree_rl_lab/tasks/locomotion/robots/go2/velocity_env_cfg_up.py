@@ -174,10 +174,10 @@ class RobotSceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",  # "plane", "generator"
-        # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
+        terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
-        terrain_generator= STEPPING_STONES_CFG, 
+        # terrain_generator= STEPPING_STONES_CFG, 
         # terrain_generator= MOAT_CFG, # proposed env
         # terrain_generator= BLOCK_CFG,
         max_init_terrain_level=0,

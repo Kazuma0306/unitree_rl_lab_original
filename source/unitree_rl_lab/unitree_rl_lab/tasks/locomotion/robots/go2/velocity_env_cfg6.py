@@ -1,4 +1,4 @@
-#proposed method (multiple legs)
+#proposed method (multiple legs)　平地で、ランダム指定位置に足を置くだけ
 
 
 
@@ -453,11 +453,11 @@ class RobotSceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",  # "plane", "generator"
-        # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
+        terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
         # terrain_generator= STEPPING_STONES_CFG, #TODO
-        terrain_generator= MOAT_CFG, # proposed env
+        # terrain_generator= MOAT_CFG, # proposed env
         max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -484,41 +484,41 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-    stone1 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Stone_1",
-        spawn=sim_utils.CuboidCfg(
-            size=(0.2, 0.2, 0.3),  # 天板サイズ
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.9, dynamic_friction=0.8, restitution=0.0
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(
-            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.6, 0.2, 0.01)
-        )
-    )
+    # stone1 = RigidObjectCfg(
+    #     prim_path="{ENV_REGEX_NS}/Stone_1",
+    #     spawn=sim_utils.CuboidCfg(
+    #         size=(0.2, 0.2, 0.3),  # 天板サイズ
+    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+    #         mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
+    #         collision_props=sim_utils.CollisionPropertiesCfg(),
+    #         physics_material=sim_utils.RigidBodyMaterialCfg(
+    #             static_friction=0.9, dynamic_friction=0.8, restitution=0.0
+    #         ),
+    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+    #     ),
+    #     init_state=RigidObjectCfg.InitialStateCfg(
+    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+    #         pos=(0.6, 0.2, 0.01)
+    #     )
+    # )
 
-    stone2 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Stone_2",
-        spawn=sim_utils.CuboidCfg(
-            size=(0.2, 0.2, 0.3),  # 天板サイズ
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.9, dynamic_friction=0.8, restitution=0.0
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(
-            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.6, -0.2, 0.01)
-        )
-    )
+    # stone2 = RigidObjectCfg(
+    #     prim_path="{ENV_REGEX_NS}/Stone_2",
+    #     spawn=sim_utils.CuboidCfg(
+    #         size=(0.2, 0.2, 0.3),  # 天板サイズ
+    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+    #         mass_props=sim_utils.MassPropertiesCfg(mass=10.0),   # ランダム化候補
+    #         collision_props=sim_utils.CollisionPropertiesCfg(),
+    #         physics_material=sim_utils.RigidBodyMaterialCfg(
+    #             static_friction=0.9, dynamic_friction=0.8, restitution=0.0
+    #         ),
+    #         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+    #     ),
+    #     init_state=RigidObjectCfg.InitialStateCfg(
+    #         # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+    #         pos=(0.6, -0.2, 0.01)
+    #     )
+    # )
 
 
    
@@ -594,31 +594,31 @@ class EventCfg:
         mode = "reset",
     )
 
-    stone_1 = EventTerm(
+    # stone_1 = EventTerm(
 
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
-        params={
-            "asset_cfg": SceneEntityCfg("stone1"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
-    )
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone1"),
+    #         "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
 
-    stone_2 = EventTerm(
+    # stone_2 = EventTerm(
 
-        func = mdp.randomize_rigid_body_mass,
-        mode = "reset",
-        params={
-            "asset_cfg": SceneEntityCfg("stone2"),
-            "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-            "operation": "abs",
-            "distribution": "uniform",
-            "recompute_inertia": True,
-        },
-    )
+    #     func = mdp.randomize_rigid_body_mass,
+    #     mode = "reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("stone2"),
+    #         "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
+    #         "operation": "abs",
+    #         "distribution": "uniform",
+    #         "recompute_inertia": True,
+    #     },
+    # )
 
     #proposed
 
@@ -732,7 +732,7 @@ class CommandsCfg:
 
 
     step_fr_to_block = mdp.MultiLegBaseCommandCfg(
-        resampling_time_range=(2.0, 3.0),
+        resampling_time_range=(1.0, 2.0),
         debug_vis=True,
     )
 
@@ -975,7 +975,7 @@ class RewardsCfg:
     # fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 1.0) #ブロック座標系、連続タッチ評価
 
     # bonus for all legs contact
-    fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusOnce, weight= 2.0)
+    # fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusOnce, weight= 1.0)
     
     # そっと置く
     # impact_spike_fr = RewTerm(func=mdp.impact_spike_penalty_fr, weight=-0.3, params=dict(dfz_thresh=0.15))
@@ -987,7 +987,7 @@ class RewardsCfg:
     # )
 
     # ブロックを動かさない
-    block_angvel = RewTerm(func=mdp.ang_vel, weight=-0.35)
+    # block_angvel = RewTerm(func=mdp.ang_vel, weight=-0.35)
 
     # progress_to_stone = RewTerm(func=mdp.fr_target_progress_reward3, weight=2.5,#ワールド座標系だが内積を撮っているので問題なし、FRProgressToStoneBaseと役割がかぶる
     # )　しかも報酬内でDtをかけるようになっているので二重がけになる
@@ -1177,21 +1177,21 @@ class TerminationsCfg:
     # )
 
 
-    success_hold = DoneTerm(
-        func=mdp.HoldAllFeetWithContact,
-        # time_outフラグは付けない（成功エピソードとしてカウントしたい）
-    )
+    # success_hold = DoneTerm(
+    #     func=mdp.HoldAllFeetWithContact,
+    #     # time_outフラグは付けない（成功エピソードとしてカウントしたい）
+    # )
 
-    # ★ 追加：失敗（ブロックを動かし過ぎた）
-    block_overtilt = DoneTerm(
-        func=mdp.block_overtilt_single,
-        params={"limit_angle": 0.30}
-    )
-    # 任意：角速度による失敗
-    block_high_angvel = DoneTerm(
-        func=mdp.block_high_angvel_single,
-        params={"limit_w": 2.0}
-    )
+    # # ★ 追加：失敗（ブロックを動かし過ぎた）
+    # block_overtilt = DoneTerm(
+    #     func=mdp.block_overtilt_single,
+    #     params={"limit_angle": 0.30}
+    # )
+    # # 任意：角速度による失敗
+    # block_high_angvel = DoneTerm(
+    #     func=mdp.block_high_angvel_single,
+    #     params={"limit_w": 2.0}
+    # )
 
 
 @configclass
@@ -1264,55 +1264,55 @@ class CurriculumCfg:
 
 
 
-    stone1_mass_curriculum = CurrTerm(
-    func=mdp.modify_term_cfg,
-    params=dict(
-        address="events.stone_1.params.mass_distribution_params",
-        modify_fn=mdp.shared_mass_curriculum,
-        modify_params=dict(
-            stages=[(12.0, 12.0),
-                    (10.0, 10.0),
-                    (8.0, 8.0),
-                    (6.0, 6.0),
-                    (4.0, 4.0),
-                    (2.0, 2.0)],
-            master=True,        # ★ ここだけ True
-            up_successes=64,
-            min_eps=100,
-            up_rate=0.7,
-            down_rate=0.25,
-            down_min_eps=100,
-            cooldown_steps=0,
-            alpha=0.2,         # 連続的な変化にしたければ調整
-        ),
-    ),
-)
+#     stone1_mass_curriculum = CurrTerm(
+#     func=mdp.modify_term_cfg,
+#     params=dict(
+#         address="events.stone_1.params.mass_distribution_params",
+#         modify_fn=mdp.shared_mass_curriculum,
+#         modify_params=dict(
+#             stages=[(12.0, 12.0),
+#                     (10.0, 10.0),
+#                     (8.0, 8.0),
+#                     (6.0, 6.0),
+#                     (4.0, 4.0),
+#                     (2.0, 2.0)],
+#             master=True,        # ★ ここだけ True
+#             up_successes=64,
+#             min_eps=100,
+#             up_rate=0.7,
+#             down_rate=0.25,
+#             down_min_eps=100,
+#             cooldown_steps=0,
+#             alpha=0.2,         # 連続的な変化にしたければ調整
+#         ),
+#     ),
+# )
 
-# Stone2 用（master=False）
-stone2_mass_curriculum = CurrTerm(
-    func=mdp.modify_term_cfg,
-    params=dict(
-        address="events.stone_2.params.mass_distribution_params",
-        modify_fn=mdp.shared_mass_curriculum,
-        modify_params=dict(
-            stages=[(12.0, 12.0),
-                    (10.0, 10.0),
-                    (8.0, 8.0),
-                    (6.0, 6.0),
-                    (4.0, 4.0),
-                    (2.0, 2.0)],
-            master=False,       # ★ こちらは False
-            # 他のパラメータは master 側と同じで OK
-            up_successes=64,
-            min_eps=100,
-            up_rate=0.7,
-            down_rate=0.25,
-            down_min_eps=100,
-            cooldown_steps=0,
-            alpha=0.2,
-        ),
-    ),
-)
+# # Stone2 用（master=False）
+# stone2_mass_curriculum = CurrTerm(
+#     func=mdp.modify_term_cfg,
+#     params=dict(
+#         address="events.stone_2.params.mass_distribution_params",
+#         modify_fn=mdp.shared_mass_curriculum,
+#         modify_params=dict(
+#             stages=[(12.0, 12.0),
+#                     (10.0, 10.0),
+#                     (8.0, 8.0),
+#                     (6.0, 6.0),
+#                     (4.0, 4.0),
+#                     (2.0, 2.0)],
+#             master=False,       # ★ こちらは False
+#             # 他のパラメータは master 側と同じで OK
+#             up_successes=64,
+#             min_eps=100,
+#             up_rate=0.7,
+#             down_rate=0.25,
+#             down_min_eps=100,
+#             cooldown_steps=0,
+#             alpha=0.2,
+#         ),
+#     ),
+# )
 
     
 
@@ -1325,8 +1325,8 @@ stone2_mass_curriculum = CurrTerm(
 class RobotEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
     # Scene settings
-    scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
-    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=1, env_spacing=2.5)
+    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: RobotSceneCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -1376,6 +1376,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         # else:
         #     if self.scene.terrain.terrain_generator is not None:
         #         self.scene.terrain.terrain_generator.curriculum = False
+
+        if self.scene.terrain.terrain_generator is not None:
+            self.scene.terrain.terrain_generator.num_rows = 2
+            self.scene.terrain.terrain_generator.num_cols = 2
 
 
 

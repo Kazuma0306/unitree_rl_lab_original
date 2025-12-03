@@ -1161,34 +1161,6 @@ def fr_target_progress_reward3(env, d_clip=0.05, cmd_name="step_fr_to_block", bl
 
 
 
-# def fr_target_distance_reward(env, cmd_name="step_fr_to_block", block_key="stone2"):
-#     """
-#     目標地点との「距離」そのものを評価する報酬。
-#     近づくほど指数関数的に高くなる (Kernel function)。
-#     """
-#     # --- 1. 目標座標 (tgt_xy) の計算 (Progressと同じ) ---
-#     cmd = env.command_manager.get_command(cmd_name)
-#     ux, uy = cmd[..., 0], cmd[..., 1]
-#     c_xy = _block_pos_w(env, block_key)[..., :2]
-#     yaw  = _yaw_from_quat(_block_quat_w(env, block_key))
-#     cy, sy = torch.cos(yaw), torch.sin(yaw)
-#     R = torch.stack([torch.stack([cy, -sy], dim=-1),
-#                      torch.stack([sy,  cy], dim=-1)], dim=-2)
-#     tgt_xy = (R @ torch.stack([ux, uy], dim=-1).unsqueeze(-1)).squeeze(-1) + c_xy
-
-#     # --- 2. FR足の現在位置 ---
-#     robot = env.scene.articulations["robot"]
-#     fr_id = robot.body_names.index("FR_foot")
-#     fr_xy = robot.data.body_pos_w[:, fr_id, :2]
-
-#     # --- 3. 距離の計算 ---
-#     dist = torch.linalg.norm(tgt_xy - fr_xy, dim=-1)
-    
-#     # --- 4. 報酬変換 (距離0で1.0, 離れると減衰) ---
-#     # sigma が小さいほど「高精度」を要求する (例: 0.1m 〜 0.2m)
-#     sigma = 0.1
-#     return torch.exp(- (dist / sigma)**2 )
-
 
 
 
@@ -1494,67 +1466,67 @@ def fr_target_distance_reward_3d4(
 from isaaclab.managers import ManagerTermBase, RewardTermCfg
 from isaaclab.envs import ManagerBasedRLEnv
 
-class FRProgressToStone(ManagerTermBase):
-    """FR足の target までの3D距離の差分（prev - curr）を返す。
-       ManagerTermBase として実装し、prev_dist を内部に保持する。"""
-    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
-        super().__init__(cfg, env)
-        P = cfg.params
-        self.block_name = P.get("block_name", "stone2")
-        self.cmd_name   = P.get("cmd_name", "step_fr_to_block")
-        self.top_offset = P.get("top_offset", 0.15)
-        self.d_clip     = P.get("d_clip", 0.05)
+# class FRProgressToStone(ManagerTermBase):
+#     """FR足の target までの3D距離の差分（prev - curr）を返す。
+#        ManagerTermBase として実装し、prev_dist を内部に保持する。"""
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.block_name = P.get("block_name", "stone2")
+#         self.cmd_name   = P.get("cmd_name", "step_fr_to_block")
+#         self.top_offset = P.get("top_offset", 0.15)
+#         self.d_clip     = P.get("d_clip", 0.05)
 
-        self.robot = env.scene.articulations["robot"]
-        self.fr_id = self.robot.body_names.index("FR_foot")
-        self.block = env.scene.rigid_objects[self.block_name]
+#         self.robot = env.scene.articulations["robot"]
+#         self.fr_id = self.robot.body_names.index("FR_foot")
+#         self.block = env.scene.rigid_objects[self.block_name]
 
-        # per-env バッファ（このクラスの“状態”）
-        self.prev_dist = torch.zeros(env.num_envs, device=env.device)
+#         # per-env バッファ（このクラスの“状態”）
+#         self.prev_dist = torch.zeros(env.num_envs, device=env.device)
 
-    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
-        # --- 目標 (world) ---
-        p = self.block.data.root_pos_w
-        blk_pos = p[:, 0, :] if p.ndim == 3 else p      # [B,3]
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         # --- 目標 (world) ---
+#         p = self.block.data.root_pos_w
+#         blk_pos = p[:, 0, :] if p.ndim == 3 else p      # [B,3]
 
-        q = self.block.data.root_quat_w                 # wxyz
-        q = q[:, 0, :] if q.ndim == 3 else q
-        w,x,y,z = q.unbind(-1)
-        yaw = torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
-        cy, sy = torch.cos(yaw), torch.sin(yaw)
-        R = torch.stack([torch.stack([cy,-sy],-1), torch.stack([sy,cy],-1)], -2)
+#         q = self.block.data.root_quat_w                 # wxyz
+#         q = q[:, 0, :] if q.ndim == 3 else q
+#         w,x,y,z = q.unbind(-1)
+#         yaw = torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+#         cy, sy = torch.cos(yaw), torch.sin(yaw)
+#         R = torch.stack([torch.stack([cy,-sy],-1), torch.stack([sy,cy],-1)], -2)
 
-        cmd = env.command_manager.get_command(self.cmd_name)        # [B,2]
-        tgt_xy = (R @ cmd.unsqueeze(-1)).squeeze(-1) + blk_pos[:, :2]
-        tgt_z  = blk_pos[:, 2] + self.top_offset
-        tgt    = torch.cat([tgt_xy, tgt_z.unsqueeze(-1)], dim=-1)   # [B,3]
+#         cmd = env.command_manager.get_command(self.cmd_name)        # [B,2]
+#         tgt_xy = (R @ cmd.unsqueeze(-1)).squeeze(-1) + blk_pos[:, :2]
+#         tgt_z  = blk_pos[:, 2] + self.top_offset
+#         tgt    = torch.cat([tgt_xy, tgt_z.unsqueeze(-1)], dim=-1)   # [B,3]
 
-        # --- FR足の位置 (world) ---
-        if hasattr(self.robot.data, "body_link_pose_w"):
-            fr = self.robot.data.body_link_pose_w[:, self.fr_id, :3]
-        else:
-            fr = self.robot.data.body_pos_w[:, self.fr_id, :3]
+#         # --- FR足の位置 (world) ---
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             fr = self.robot.data.body_link_pose_w[:, self.fr_id, :3]
+#         else:
+#             fr = self.robot.data.body_pos_w[:, self.fr_id, :3]
 
-        # --- 距離と進歩 ---
-        diff    = tgt - fr
-        dist_xy = diff[:, :2].norm(dim=-1)
-        dist_z  = diff[:,  2].abs()
-        dist    = torch.sqrt(dist_xy**2 + dist_z**2)                # [B]
+#         # --- 距離と進歩 ---
+#         diff    = tgt - fr
+#         dist_xy = diff[:, :2].norm(dim=-1)
+#         dist_z  = diff[:,  2].abs()
+#         dist    = torch.sqrt(dist_xy**2 + dist_z**2)                # [B]
 
-        # エピソードリセットで prev を初期化
-        if hasattr(env, "reset_buf"):
-            m = env.reset_buf > 0
-            if m.any():
-                self.prev_dist[m] = dist[m].detach()
+#         # エピソードリセットで prev を初期化
+#         if hasattr(env, "reset_buf"):
+#             m = env.reset_buf > 0
+#             if m.any():
+#                 self.prev_dist[m] = dist[m].detach()
 
-        # 初回 or 未初期化は 0 を返して初期化
-        if not torch.isfinite(self.prev_dist).all():
-            self.prev_dist[:] = dist.detach()
-            return torch.zeros_like(dist)
+#         # 初回 or 未初期化は 0 を返して初期化
+#         if not torch.isfinite(self.prev_dist).all():
+#             self.prev_dist[:] = dist.detach()
+#             return torch.zeros_like(dist)
 
-        delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
-        self.prev_dist = dist.detach()
-        return delta  
+#         delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
+#         self.prev_dist = dist.detach()
+#         return delta  
 
 
 
@@ -1572,78 +1544,78 @@ def _rotmat_body_to_world_from_quat_wxyz(q):  # q=(w,x,y,z)
                         torch.stack([r10,r11,r12],-1),
                         torch.stack([r20,r21,r22],-1)], -2)
 
-class FRProgressToStoneBase(ManagerTermBase):
-    """FR足の target までの3D距離（base座標）の差分（prev - curr）を返す。"""
-    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
-        super().__init__(cfg, env)
-        P = cfg.params
-        self.block_name = P.get("block_name", "stone2")
-        self.cmd_name   = P.get("cmd_name", "step_fr_to_block")
-        self.top_offset = P.get("top_offset", 0.15)
-        self.d_clip     = P.get("d_clip", 0.1)
+# class FRProgressToStoneBase(ManagerTermBase):
+#     """FR足の target までの3D距離（base座標）の差分（prev - curr）を返す。"""
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.block_name = P.get("block_name", "stone2")
+#         self.cmd_name   = P.get("cmd_name", "step_fr_to_block")
+#         self.top_offset = P.get("top_offset", 0.15)
+#         self.d_clip     = P.get("d_clip", 0.1)
 
-        self.robot = env.scene.articulations["robot"]
-        self.fr_id = self.robot.body_names.index("FR_foot")
-        self.block = env.scene.rigid_objects[self.block_name]
+#         self.robot = env.scene.articulations["robot"]
+#         self.fr_id = self.robot.body_names.index("FR_foot")
+#         self.block = env.scene.rigid_objects[self.block_name]
 
-        # per-env バッファ（base距離の前回値）
-        self.prev_dist = torch.full((env.num_envs,), float("nan"), device=env.device)
+#         # per-env バッファ（base距離の前回値）
+#         self.prev_dist = torch.full((env.num_envs,), float("nan"), device=env.device)
 
-    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
-        # --- ブロック姿勢（world） ---
-        p = self.block.data.root_pos_w
-        blk_pos = p[:, 0, :] if p.ndim == 3 else p                    # [B,3]
-        q = self.block.data.root_quat_w
-        q = q[:, 0, :] if q.ndim == 3 else q                          # [B,4] (wxyz)
-        w,x,y,z = q.unbind(-1)
-        yaw = torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))           # [B]
-        cy, sy = torch.cos(yaw), torch.sin(yaw)
-        R2 = torch.stack([torch.stack([cy,-sy],-1),
-                          torch.stack([sy, cy],-1)], -2)              # [B,2,2] block→world (yaw)
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         # --- ブロック姿勢（world） ---
+#         p = self.block.data.root_pos_w
+#         blk_pos = p[:, 0, :] if p.ndim == 3 else p                    # [B,3]
+#         q = self.block.data.root_quat_w
+#         q = q[:, 0, :] if q.ndim == 3 else q                          # [B,4] (wxyz)
+#         w,x,y,z = q.unbind(-1)
+#         yaw = torch.atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))           # [B]
+#         cy, sy = torch.cos(yaw), torch.sin(yaw)
+#         R2 = torch.stack([torch.stack([cy,-sy],-1),
+#                           torch.stack([sy, cy],-1)], -2)              # [B,2,2] block→world (yaw)
 
-        # --- ターゲット（world） ---
-        cmd = env.command_manager.get_command(self.cmd_name)          # [B,2] (ux,uy)
-        tgt_xy = (R2 @ cmd.unsqueeze(-1)).squeeze(-1) + blk_pos[:, :2]
-        tgt_z  = blk_pos[:, 2] + self.top_offset
-        tgt_w  = torch.cat([tgt_xy, tgt_z.unsqueeze(-1)], dim=-1)     # [B,3]
+#         # --- ターゲット（world） ---
+#         cmd = env.command_manager.get_command(self.cmd_name)          # [B,2] (ux,uy)
+#         tgt_xy = (R2 @ cmd.unsqueeze(-1)).squeeze(-1) + blk_pos[:, :2]
+#         tgt_z  = blk_pos[:, 2] + self.top_offset
+#         tgt_w  = torch.cat([tgt_xy, tgt_z.unsqueeze(-1)], dim=-1)     # [B,3]
 
-        # --- FR足（world） ---
-        if hasattr(self.robot.data, "body_link_pose_w"):
-            fr_w = self.robot.data.body_link_pose_w[:, self.fr_id, :3]
-        else:
-            fr_w = self.robot.data.body_pos_w[:, self.fr_id, :3]      # [B,3]
+#         # --- FR足（world） ---
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             fr_w = self.robot.data.body_link_pose_w[:, self.fr_id, :3]
+#         else:
+#             fr_w = self.robot.data.body_pos_w[:, self.fr_id, :3]      # [B,3]
 
-        # --- base姿勢（world） ---
-        base_p = self.robot.data.root_pos_w                           # [B,3]
-        if hasattr(self.robot.data, "root_quat_w"):
-            base_q = self.robot.data.root_quat_w                      # [B,4] (wxyz)
-        else:
-            base_q = self.robot.data.root_state[..., 3:7]             # [B,4] (wxyz想定)
+#         # --- base姿勢（world） ---
+#         base_p = self.robot.data.root_pos_w                           # [B,3]
+#         if hasattr(self.robot.data, "root_quat_w"):
+#             base_q = self.robot.data.root_quat_w                      # [B,4] (wxyz)
+#         else:
+#             base_q = self.robot.data.root_state[..., 3:7]             # [B,4] (wxyz想定)
 
-        R_bw = _rotmat_body_to_world_from_quat_wxyz(base_q)           # [B,3,3]
-        R_wb = R_bw.transpose(1, 2)                                    # world→base
+#         R_bw = _rotmat_body_to_world_from_quat_wxyz(base_q)           # [B,3,3]
+#         R_wb = R_bw.transpose(1, 2)                                    # world→base
 
-        # --- world→base 変換 ---
-        tgt_b = torch.einsum('bij,bi->bj', R_wb, tgt_w - base_p)      # [B,3]
-        fr_b  = torch.einsum('bij,bi->bj', R_wb, fr_w  - base_p)      # [B,3]
+#         # --- world→base 変換 ---
+#         tgt_b = torch.einsum('bij,bi->bj', R_wb, tgt_w - base_p)      # [B,3]
+#         fr_b  = torch.einsum('bij,bi->bj', R_wb, fr_w  - base_p)      # [B,3]
 
-        # --- base座標の3D距離 & 進歩 ---
-        dist = (tgt_b - fr_b).norm(dim=-1)                            # [B]
+#         # --- base座標の3D距離 & 進歩 ---
+#         dist = (tgt_b - fr_b).norm(dim=-1)                            # [B]
 
-        # リセット時は prev を再初期化
-        if hasattr(env, "reset_buf"):
-            m = env.reset_buf > 0
-            if m.any():
-                self.prev_dist[m] = dist[m].detach()
+#         # リセット時は prev を再初期化
+#         if hasattr(env, "reset_buf"):
+#             m = env.reset_buf > 0
+#             if m.any():
+#                 self.prev_dist[m] = dist[m].detach()
 
-        # 初回は0返して初期化
-        if not torch.isfinite(self.prev_dist).all():
-            self.prev_dist[:] = dist.detach()
-            return torch.zeros_like(dist)
+#         # 初回は0返して初期化
+#         if not torch.isfinite(self.prev_dist).all():
+#             self.prev_dist[:] = dist.detach()
+#             return torch.zeros_like(dist)
 
-        delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
-        self.prev_dist = dist.detach()
-        return delta
+#         delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
+#         self.prev_dist = dist.detach()
+#         return delta
 
 
 
@@ -1730,107 +1702,6 @@ def targets_base_from_command(env, cmd_name="multi_leg_targets", leg_names=LEG_O
 # consider all legs
  
 
-# 前提: 下記の2ヘルパは既に実装済み（前回提案）。
-# feet_pos_base(env)               -> [B, 4, 3]  各脚の足先(ベース系)
-# targets_base_from_command(env, cmd_name) -> [B, 4, 3]  各脚の目標(ベース系)
-
-# def legs_reward_worst_linear(
-#     env,
-#     cmd_name: str = "step_fr_to_block",
-#     sxy: float = 0.10,     # XY の許容スケール (m) 例: 10 cm
-#     sz:  float = 0.05,     # Z  の許容スケール (m) 例: 5  cm
-#     scale: float = 2.0,    # どの距離まで 0→1 を線形に割り当てるか（大きいほど優しい）
-#     use_legs: tuple[str,...] = LEG_ORDER,  # 対象にする脚（デフォルト全脚）
-# ) -> torch.Tensor:
-#     """
-#     各脚の正規化距離 d_i を計算し、d_worst = max_i d_i を取って
-#     r = clip(1 - d_worst/scale, 0, 1) を返す。返り値 [B]。
-#     - すべてベース座標系で計算
-#     - RewardManager 側で *dt が掛かるのでここでは掛けない
-#     """
-#     # --- 目標/実測（ベース系） ---
-#     feet_b = feet_pos_base(env, leg_names=use_legs)          # [B,L,3]
-#     tgt_b  = targets_base_from_command(env, cmd_name)        # [B,4,3] 全脚
-#     # use_legs の順序に合わせて抽出
-#     name_to_idx = {n:i for i,n in enumerate(LEG_ORDER)}
-#     idxs = torch.tensor([name_to_idx[n] for n in use_legs], device=feet_b.device)
-#     tgt_b = tgt_b.index_select(dim=1, index=idxs)            # [B,L,3]
-
-#     # --- 正規化距離 d_i（異方性） ---
-#     err = tgt_b - feet_b                                     # [B,L,3]
-#     d = torch.sqrt(
-#         (err[...,0]/(sxy+1e-12))**2 +
-#         (err[...,1]/(sxy+1e-12))**2 +
-#         (err[...,2]/(sz +1e-12))**2
-#     )                                                        # [B,L]
-
-#     # --- ワースト脚だけ見る ---
-#     d_worst = d.max(dim=-1).values                           # [B]
-
-#     # --- 線形クリップ（0〜1） ---
-#     r = 1.0 - d_worst / max(scale, 1e-12)
-#     return r.clamp_(0.0, 1.0) 
-
-
-
-# def legs_reward_gaussian(
-#     env,
-#     cmd_name: str = "step_fr_to_block",
-#     sxy: float = 0.10,
-#     sz:  float = 0.05,
-#     use_legs: tuple[str,...] = LEG_ORDER,
-#     fr_name: str = "FR_foot",
-#     fr_weight: float = 3.0,         # ★ FR だけ重くする
-# ) -> torch.Tensor:
-#     """
-#     全脚の正規化誤差をガウスカーネルに入れ、その平均（または積）を取る。
-#     - 遠くても勾配が消えない,無限遠で0になるだけ
-#     - 全ての脚を同時に良くしようとする
-#     """
-#     dev = env.device 
-
-#     # 1. 誤差取得（ここは同じ）
-#     feet_b = feet_pos_base(env, leg_names=use_legs)
-#     tgt_b  = targets_base_from_command(env, cmd_name)
-#     name_to_idx = {n:i for i,n in enumerate(LEG_ORDER)}
-#     idxs = torch.tensor([name_to_idx[n] for n in use_legs], device=feet_b.device)
-#     tgt_b = tgt_b.index_select(dim=1, index=idxs)
-
-#     err = tgt_b - feet_b # [B, L, 3]
-
-#     # 2. 二乗誤差の重み付け和 (Mahalanobis distance squared)
-#     #    sum( (err/scale)^2 )
-#     dist_sq = (err[..., 0] / sxy)**2 + \
-#               (err[..., 1] / sxy)**2 + \
-#               (err[..., 2] / sz)**2  # [B, L]
-
-#     # 3. ガウスカーネル変換: exp(-dist_sq)
-#     #    これで各脚のスコアが 0.0(ダメ) ～ 1.0(完璧) になる
-#     leg_scores = torch.exp(-0.5 * dist_sq)  # [B, L]
-
-#     # 4. 全脚の平均（または最小値、積）を返す
-#     #    mean: 「全体的に良くせよ」 (推奨)
-#     #    min : 「一番ダメなやつを引き上げろ」 (Max戦略を滑らかにしたもの)
-#     #    prod: 「全部良くないと点は低い」 (厳しい)
-#     # return leg_scores.mean(dim=-1)
-
-
-#     # 4. 重み付き平均
-#     L = len(use_legs)
-#     weights = torch.ones(L, device=dev)
-
-#     # use_legs の中で FR にだけ fr_weight を掛ける
-#     if fr_name in use_legs:
-#         fr_local_idx = use_legs.index(fr_name)   # 0～L-1
-#         weights[fr_local_idx] = fr_weight
-
-#     # [B,L] * [L] → [B,L]
-#     weighted = leg_scores * weights
-#     return weighted.sum(dim=-1) / weights.sum()
-
-
-
-
 def legs_reward_gaussian(
     env,
     cmd_name: str = "step_fr_to_block",          # MultiLegBaseCommand など
@@ -1915,7 +1786,7 @@ def legs_reward_gaussian(
 
     w_mean = 1
     # w_spread = 1
-    w_var = 1
+    w_var = 1.2
 
 
     # r = w_mean * mean_s - w_spread * spread
@@ -2236,225 +2107,224 @@ def _rot3_from_quat_wxyz(q): # [B,3,3]
 
 
 
-class MultiLegHoldBonusOnce(ManagerTermBase):
-    """
-    FR がブロック上面矩形内(+接触)にあり、
-    かつ FL / RL / RR が MultiLegBaseCommand で指定された
-    ベース座標系の目標位置「周辺」で接触を保っている状態が
-    T_hold_s 続いた瞬間に一度だけボーナスを支払う。
+# class MultiLegHoldBonusOnce(ManagerTermBase):
+#     """
+#      FL / RL / RR が MultiLegBaseCommand で指定された
+#     ベース座標系の目標位置「周辺」で接触を保っている状態が
+#     T_hold_s 続いた瞬間に一度だけボーナスを支払う。
 
-    ※ RewardManager 側で *dt を掛ける前提なので、
-      支払いステップのみ bonus/dt を返す。
-    """
+#     ※ RewardManager 側で *dt を掛ける前提なので、
+#       支払いステップのみ bonus/dt を返す。
+#     """
 
-    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
-        super().__init__(cfg, env)
-        P = cfg.params
-        self.env = env
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.env = env
 
-        # --- ブロック関連 ---
-        self.block_name = P.get("block_name", "stone2")
-        self.half_x     = P.get("half_x", 0.10)
-        self.half_y     = P.get("half_y", 0.10)
-        self.margin     = P.get("margin", 0.01)
+#         # --- ブロック関連 ---
+#         self.block_name = P.get("block_name", "stone2")
+#         self.half_x     = P.get("half_x", 0.10)
+#         self.half_y     = P.get("half_y", 0.10)
+#         self.margin     = P.get("margin", 0.01)
 
-        # --- 時間・ボーナス ---
-        self.T_hold_s   = P.get("T_hold_s", 0.10)
-        self.bonus      = P.get("bonus", 5.0)
+#         # --- 時間・ボーナス ---
+#         self.T_hold_s   = P.get("T_hold_s", 0.10)
+#         self.bonus      = P.get("bonus", 5.0)
 
-        # --- 接触判定 ---
-        self.require_contact     = P.get("require_contact", True)
-        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
-        self.contact_threshold   = P.get("contact_threshold", 0.0)  # [N] |Fz| > これで接触
+#         # --- 接触判定 ---
+#         self.require_contact     = P.get("require_contact", True)
+#         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+#         self.contact_threshold   = P.get("contact_threshold", 0.0)  # [N] |Fz| > これで接触
 
-        # --- MultiLegBaseCommand から取るコマンド名 ---
-        self.cmd_name = P.get("cmd_name", "step_fr_to_block")
+#         # --- MultiLegBaseCommand から取るコマンド名 ---
+#         self.cmd_name = P.get("cmd_name", "step_fr_to_block")
 
-        # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と同じにする）---
-        self.leg_order = P.get(
-            "leg_order",
-            ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
-        )
-        self.num_legs = len(self.leg_order)
+#         # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と同じにする）---
+#         self.leg_order = P.get(
+#             "leg_order",
+#             ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+#         )
+#         self.num_legs = len(self.leg_order)
 
-        # FR の名前
-        self.fr_leg_name = P.get("fr_leg_name", "FR_foot")
+#         # FR の名前
+#         self.fr_leg_name = P.get("fr_leg_name", "FR_foot")
 
-        # FL/RL/RR が「コマンド目標周辺」にいるとみなす XY 距離 [m]
-        self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
+#         # FL/RL/RR が「コマンド目標周辺」にいるとみなす XY 距離 [m]
+#         self.near_radius_cmd = P.get("near_radius_cmd", 0.05)
 
-        # --- シーン参照 ---
-        scene = env.scene
-        self.robot = scene.articulations["robot"]
-        self.block = scene.rigid_objects[self.block_name]
+#         # --- シーン参照 ---
+#         scene = env.scene
+#         self.robot = scene.articulations["robot"]
+#         self.block = scene.rigid_objects[self.block_name]
 
-        # ロボット側の body index（位置取得用）
-        self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
-        self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
+#         # ロボット側の body index（位置取得用）
+#         self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
+#         self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
 
-        if self.fr_leg_name not in self.leg_to_idx:
-            raise RuntimeError(
-                f"fr_leg_name '{self.fr_leg_name}' が leg_order {self.leg_order} に含まれていません。"
-            )
-        self.fr_idx = self.leg_to_idx[self.fr_leg_name]
+#         if self.fr_leg_name not in self.leg_to_idx:
+#             raise RuntimeError(
+#                 f"fr_leg_name '{self.fr_leg_name}' が leg_order {self.leg_order} に含まれていません。"
+#             )
+#         self.fr_idx = self.leg_to_idx[self.fr_leg_name]
 
-        # --- ContactSensor 本体 ---
-        if self.contact_sensor_name not in scene.sensors:
-            raise RuntimeError(
-                f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
-            )
-        self.sensor = scene.sensors[self.contact_sensor_name]
+#         # --- ContactSensor 本体 ---
+#         if self.contact_sensor_name not in scene.sensors:
+#             raise RuntimeError(
+#                 f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
+#             )
+#         self.sensor = scene.sensors[self.contact_sensor_name]
 
-        # ContactSensor 内の body_names から「脚ごとの列」を引く
-        sensor_body_names = self.sensor.body_names  # [B_sensor]
-        self.sensor_cols: list[int] = []
-        for leg in self.leg_order:
-            if leg not in sensor_body_names:
-                raise RuntimeError(
-                    f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' が含まれていません。\n"
-                    f"  sensor.body_names = {sensor_body_names}\n"
-                    "ContactSensorCfg.prim_path が各足リンクをちゃんと拾うようになっているか確認してください。"
-                )
-            self.sensor_cols.append(sensor_body_names.index(leg))
+#         # ContactSensor 内の body_names から「脚ごとの列」を引く
+#         sensor_body_names = self.sensor.body_names  # [B_sensor]
+#         self.sensor_cols: list[int] = []
+#         for leg in self.leg_order:
+#             if leg not in sensor_body_names:
+#                 raise RuntimeError(
+#                     f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' が含まれていません。\n"
+#                     f"  sensor.body_names = {sensor_body_names}\n"
+#                     "ContactSensorCfg.prim_path が各足リンクをちゃんと拾うようになっているか確認してください。"
+#                 )
+#             self.sensor_cols.append(sensor_body_names.index(leg))
 
-        # --- 状態 ---
-        self.hold_t = torch.zeros(env.num_envs, device=env.device)
-        self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+#         # --- 状態 ---
+#         self.hold_t = torch.zeros(env.num_envs, device=env.device)
+#         self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
 
-    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
-        device = env.device
-        B = env.num_envs
-        dt = env.step_dt
-        scene = env.scene
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         device = env.device
+#         B = env.num_envs
+#         dt = env.step_dt
+#         scene = env.scene
 
-        # ==============================
-        # 1. ブロック姿勢（yaw, 中心）
-        # ==============================
-        p = self.block.data.root_pos_w
-        blk_pos = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
+#         # ==============================
+#         # 1. ブロック姿勢（yaw, 中心）
+#         # ==============================
+#         p = self.block.data.root_pos_w
+#         blk_pos = p[:, 0, :] if p.ndim == 3 else p  # [B,3]
 
-        q = self.block.data.root_quat_w
-        blk_q = q[:, 0, :] if q.ndim == 3 else q    # [B,4]
+#         q = self.block.data.root_quat_w
+#         blk_q = q[:, 0, :] if q.ndim == 3 else q    # [B,4]
 
-        yaw = _yaw_from_quat_wxyz(blk_q)            # [B]
-        Rz = _rot2d(yaw)                            # [B,2,2]
-        R_wb2 = Rz.transpose(-1, -2)                # [B,2,2] world -> block (XY)
+#         yaw = _yaw_from_quat_wxyz(blk_q)            # [B]
+#         Rz = _rot2d(yaw)                            # [B,2,2]
+#         R_wb2 = Rz.transpose(-1, -2)                # [B,2,2] world -> block (XY)
 
-        # ==============================
-        # 2. 足先位置（world） [B, num_legs, 3]
-        # ==============================
-        if hasattr(self.robot.data, "body_link_pose_w"):
-            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
-        else:
-            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
-        feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
+#         # ==============================
+#         # 2. 足先位置（world） [B, num_legs, 3]
+#         # ==============================
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+#         else:
+#             feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+#         feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
 
-        # FR の world 座標
-        fr_xy_w = feet_xy_w[:, self.fr_idx, :]  # [B,2]
+#         # FR の world 座標
+#         fr_xy_w = feet_xy_w[:, self.fr_idx, :]  # [B,2]
 
-        # ==============================
-        # 3. FR がブロック上面矩形内か？
-        # ==============================
-        d_xy_blk = (R_wb2 @ (fr_xy_w - blk_pos[..., :2]).unsqueeze(-1)).squeeze(-1)  # [B,2]
-        hx = self.half_x - self.margin
-        hy = self.half_y - self.margin
-        inside = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)     # [B]
+#         # ==============================
+#         # 3. FR がブロック上面矩形内か？
+#         # ==============================
+#         d_xy_blk = (R_wb2 @ (fr_xy_w - blk_pos[..., :2]).unsqueeze(-1)).squeeze(-1)  # [B,2]
+#         hx = self.half_x - self.margin
+#         hy = self.half_y - self.margin
+#         inside = (d_xy_blk[..., 0].abs() <= hx) & (d_xy_blk[..., 1].abs() <= hy)     # [B]
 
-        # ==============================
-        # 4. 接触判定（各足）
-        # ==============================
-        if self.require_contact:
-            F = self.sensor.data.net_forces_w   # 期待形状: [B, B_sensor, 3]
-            if F is None:
-                raise RuntimeError(
-                    f"ContactSensor '{self.contact_sensor_name}' の data.net_forces_w が None です。"
-                    " ContactSensorCfg.update_period や asset の activate_contact_sensors を確認してください。"
-                )
-            # sensor.body_names の順番に対応する列から、脚に対応する col だけ抜く
-            Fz_list = [F[:, col, 2] for col in self.sensor_cols]  # list of [B]
-            Fz = torch.stack(Fz_list, dim=-1)                     # [B, num_legs]
-            contacts = (Fz.abs() > self.contact_threshold)        # [B, num_legs] bool
-        # else:
-        #     contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+#         # ==============================
+#         # 4. 接触判定（各足）
+#         # ==============================
+#         if self.require_contact:
+#             F = self.sensor.data.net_forces_w   # 期待形状: [B, B_sensor, 3]
+#             if F is None:
+#                 raise RuntimeError(
+#                     f"ContactSensor '{self.contact_sensor_name}' の data.net_forces_w が None です。"
+#                     " ContactSensorCfg.update_period や asset の activate_contact_sensors を確認してください。"
+#                 )
+#             # sensor.body_names の順番に対応する列から、脚に対応する col だけ抜く
+#             Fz_list = [F[:, col, 2] for col in self.sensor_cols]  # list of [B]
+#             Fz = torch.stack(Fz_list, dim=-1)                     # [B, num_legs]
+#             contacts = (Fz.abs() > self.contact_threshold)        # [B, num_legs] bool
+#         # else:
+#         #     contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
 
-        fr_contact = contacts[:, self.fr_idx]                     # [B]
-        fr_good = inside & fr_contact                             # [B]
+#         fr_contact = contacts[:, self.fr_idx]                     # [B]
+#         fr_good = inside & fr_contact                             # [B]
 
-        # ==============================
-        # 5. 現在の足位置を base 座標に変換
-        # ==============================
-        base_p = self.robot.data.root_pos_w      # [B,3]
-        base_q = self.robot.data.root_quat_w     # [B,4] wxyz
+#         # ==============================
+#         # 5. 現在の足位置を base 座標に変換
+#         # ==============================
+#         base_p = self.robot.data.root_pos_w      # [B,3]
+#         base_q = self.robot.data.root_quat_w     # [B,4] wxyz
 
-        R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world->base
+#         R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world->base
 
-        diff_w = feet_w - base_p.unsqueeze(1)                    # [B,num_legs,3]
-        feet_b = torch.matmul(
-            R_wb3.unsqueeze(1),      # [B,1,3,3]
-            diff_w.unsqueeze(-1),    # [B,num_legs,3,1]
-        ).squeeze(-1)                # [B,num_legs,3]
+#         diff_w = feet_w - base_p.unsqueeze(1)                    # [B,num_legs,3]
+#         feet_b = torch.matmul(
+#             R_wb3.unsqueeze(1),      # [B,1,3,3]
+#             diff_w.unsqueeze(-1),    # [B,num_legs,3,1]
+#         ).squeeze(-1)                # [B,num_legs,3]
 
-        feet_xy_b = feet_b[..., :2]  # [B,num_legs,2]
+#         feet_xy_b = feet_b[..., :2]  # [B,num_legs,2]
 
-        # ==============================
-        # 6. MultiLegBaseCommand からターゲット取得（base座標）
-        # ==============================
-        cmd = env.command_manager.get_command(self.cmd_name)     # [B, 3*num_legs]
-        tgt_b = cmd.reshape(B, self.num_legs, 3)                 # [B,num_legs,3]
-        tgt_xy_b = tgt_b[..., :2]                               # [B,num_legs,2]
+#         # ==============================
+#         # 6. MultiLegBaseCommand からターゲット取得（base座標）
+#         # ==============================
+#         cmd = env.command_manager.get_command(self.cmd_name)     # [B, 3*num_legs]
+#         tgt_b = cmd.reshape(B, self.num_legs, 3)                 # [B,num_legs,3]
+#         tgt_xy_b = tgt_b[..., :2]                               # [B,num_legs,2]
 
-        # ==============================
-        # 7. FL/RL/RR が「コマンド目標周辺 & 接触」
-        # ==============================
-        near_all_others = torch.ones(B, dtype=torch.bool, device=device)
+#         # ==============================
+#         # 7. FL/RL/RR が「コマンド目標周辺 & 接触」
+#         # ==============================
+#         near_all_others = torch.ones(B, dtype=torch.bool, device=device)
 
-        for leg_name, j in self.leg_to_idx.items():
-            if leg_name == self.fr_leg_name:
-                # FR はブロック上判定のみでよい
-                continue
+#         for leg_name, j in self.leg_to_idx.items():
+#             if leg_name == self.fr_leg_name:
+#                 # FR はブロック上判定のみでよい
+#                 continue
 
-            # XY距離
-            dist = (feet_xy_b[:, j, :] - tgt_xy_b[:, j, :]).norm(dim=-1)  # [B]
-            near = dist <= self.near_radius_cmd                           # [B]
+#             # XY距離
+#             dist = (feet_xy_b[:, j, :] - tgt_xy_b[:, j, :]).norm(dim=-1)  # [B]
+#             near = dist <= self.near_radius_cmd                           # [B]
 
-            # 接触も要求
-            near = near & contacts[:, j]
+#             # 接触も要求
+#             near = near & contacts[:, j]
 
-            near_all_others = near_all_others & near
+#             near_all_others = near_all_others & near
 
-        # ==============================
-        # 8. 全体条件：FR がブロック上 & 他脚は目標周辺
-        # ==============================
-        good_all = fr_good & near_all_others   # [B]
+#         # ==============================
+#         # 8. 全体条件：FR がブロック上 & 他脚は目標周辺
+#         # ==============================
+#         good_all = fr_good & near_all_others   # [B]
 
-        # hold_t 更新
-        self.hold_t = torch.where(
-            good_all,
-            self.hold_t + dt,
-            torch.zeros_like(self.hold_t),
-        )
+#         # hold_t 更新
+#         self.hold_t = torch.where(
+#             good_all,
+#             self.hold_t + dt,
+#             torch.zeros_like(self.hold_t),
+#         )
 
-        # just reached
-        reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
-        payout  = torch.where(
-            reached,
-            torch.full_like(self.hold_t, self.bonus / dt),
-            torch.zeros_like(self.hold_t),
-        )
+#         # just reached
+#         reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+#         payout  = torch.where(
+#             reached,
+#             torch.full_like(self.hold_t, self.bonus / dt),
+#             torch.zeros_like(self.hold_t),
+#         )
 
-        # 一度払ったら二度と払わない
-        self.paid |= reached
+#         # 一度払ったら二度と払わない
+#         self.paid |= reached
 
-        # ==============================
-        # 9. env リセット時の状態クリア
-        # ==============================
-        if hasattr(env, "reset_buf"):
-            m = env.reset_buf > 0
-            if m.any():
-                self.hold_t[m] = 0.0
-                self.paid[m]   = False
+#         # ==============================
+#         # 9. env リセット時の状態クリア
+#         # ==============================
+#         if hasattr(env, "reset_buf"):
+#             m = env.reset_buf > 0
+#             if m.any():
+#                 self.hold_t[m] = 0.0
+#                 self.paid[m]   = False
 
-        return payout
+#         return payout
 
 
 
@@ -3265,3 +3135,175 @@ class WrongPlacePenalty(ManagerTermBase):
         penalty = self.penalty * n_wrong               # [B]
 
         return penalty
+
+
+
+
+class MultiLegHoldBonusOnce(ManagerTermBase):
+    """
+    4本の脚（leg_order で指定された順）のすべてが、
+    MultiLegBaseCommand で指定されたベース座標系の目標位置「周辺」で
+    接触を保っている状態が T_hold_s 続いた瞬間に一度だけボーナスを支払う。
+
+    ※ RewardManager 側で *dt を掛ける前提なので、
+      支払いステップのみ bonus/dt を返す。
+    """
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.env = env
+
+        # --- 時間・ボーナス ---
+        self.T_hold_s   = P.get("T_hold_s", 0.10)
+        self.bonus      = P.get("bonus", 5.0)
+
+        # --- 接触判定 ---
+        self.require_contact     = P.get("require_contact", True)
+        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+        self.contact_threshold   = P.get("contact_threshold", 0.0)  # [N] |Fz| > これで接触
+
+        # --- MultiLegBaseCommand から取るコマンド名 ---
+        # ここは MultiLegBaseCommand を登録したときの名前に合わせてください
+        self.cmd_name = P.get("cmd_name", "step_fr_to_block")  # ※名前だけ残しているが意味は「multi leg command」
+
+        # --- 足の順序（MultiLegBaseCommand の LEG_ORDER と同じにする）---
+        self.leg_order = P.get(
+            "leg_order",
+            ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+        )
+        self.num_legs = len(self.leg_order)
+
+        # 各脚が「コマンド目標周辺」にいるとみなす XY 距離 [m]
+        self.near_radius_cmd = P.get("near_radius_cmd", 0.03)
+
+        # --- シーン参照 ---
+        scene = env.scene
+        self.robot = scene.articulations["robot"]
+
+        # ロボット側の body index（位置取得用）
+        self.leg_to_idx = {name: i for i, name in enumerate(self.leg_order)}
+        self.foot_ids   = [self.robot.body_names.index(name) for name in self.leg_order]
+
+        # --- ContactSensor 本体 ---
+        if self.contact_sensor_name not in scene.sensors:
+            raise RuntimeError(
+                f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
+            )
+        self.sensor = scene.sensors[self.contact_sensor_name]
+
+        # ContactSensor 内の body_names から「脚ごとの列」を引く
+        sensor_body_names = self.sensor.body_names  # [B_sensor]
+        self.sensor_cols: list[int] = []
+        for leg in self.leg_order:
+            if leg not in sensor_body_names:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' が含まれていません。\n"
+                    f"  sensor.body_names = {sensor_body_names}\n"
+                    "ContactSensorCfg.prim_path が各足リンクをちゃんと拾うようになっているか確認してください。"
+                )
+            self.sensor_cols.append(sensor_body_names.index(leg))
+
+        # --- 状態 ---
+        self.hold_t = torch.zeros(env.num_envs, device=env.device)
+        self.paid   = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        device = env.device
+        B = env.num_envs
+        dt = env.step_dt
+
+        # ==============================
+        # 1. 足先位置（world） [B, num_legs, 3]
+        # ==============================
+        if hasattr(self.robot.data, "body_link_pose_w"):
+            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+        else:
+            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+        feet_xy_w = feet_w[..., :2]   # [B, num_legs, 2]
+
+        # ==============================
+        # 2. 接触判定（各足）
+        # ==============================
+        if self.require_contact:
+            F = self.sensor.data.net_forces_w   # 期待形状: [B, B_sensor, 3]
+            if F is None:
+                raise RuntimeError(
+                    f"ContactSensor '{self.contact_sensor_name}' の data.net_forces_w が None です。"
+                    " ContactSensorCfg.update_period や asset の activate_contact_sensors を確認してください。"
+                )
+            # sensor.body_names の順番に対応する列から、脚に対応する col だけ抜く
+            Fz_list = [F[:, col, 2] for col in self.sensor_cols]  # list of [B]
+            Fz = torch.stack(Fz_list, dim=-1)                     # [B, num_legs]
+            contacts = (Fz.abs() > self.contact_threshold)        # [B, num_legs] bool
+        else:
+            # 接触を要求しない場合は、全て「接触あり」とみなす
+            contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+
+        # ==============================
+        # 3. base 座標系に変換
+        # ==============================
+        base_p = self.robot.data.root_pos_w      # [B,3]
+        base_q = self.robot.data.root_quat_w     # [B,4] wxyz
+
+        R_wb3 = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3] world->base
+
+        diff_w = feet_w - base_p.unsqueeze(1)                    # [B,num_legs,3]
+        feet_b = torch.matmul(
+            R_wb3.unsqueeze(1),      # [B,1,3,3]
+            diff_w.unsqueeze(-1),    # [B,num_legs,3,1]
+        ).squeeze(-1)                # [B,num_legs,3]
+
+        feet_xy_b = feet_b[..., :2]  # [B,num_legs,2]
+
+        # ==============================
+        # 4. MultiLegBaseCommand からターゲット取得（base座標）
+        # ==============================
+        cmd = env.command_manager.get_command(self.cmd_name)     # [B, 3*num_legs]
+        tgt_b = cmd.reshape(B, self.num_legs, 3)                 # [B,num_legs,3]
+        tgt_xy_b = tgt_b[..., :2]                               # [B,num_legs,2]
+
+        # ==============================
+        # 5. 各足が「目標周辺 & 接触」か？
+        # ==============================
+        # XY距離
+        dist_xy = (feet_xy_b - tgt_xy_b).norm(dim=-1)        # [B,num_legs]
+        near_xy = (dist_xy <= self.near_radius_cmd)          # [B,num_legs] bool
+
+        # 接触も要求
+        good_each_leg = near_xy & contacts                   # [B,num_legs] bool
+
+        # 全足が条件を満たしているか？
+        good_all = good_each_leg.all(dim=-1)                 # [B] bool
+
+        # ==============================
+        # 6. hold_t 更新 & ボーナス支払い
+        # ==============================
+        self.hold_t = torch.where(
+            good_all,
+            self.hold_t + dt,
+            torch.zeros_like(self.hold_t),
+        )
+
+        # まだ支払い済みでない env で、T_hold_s に到達した瞬間に支払い
+        reached = (self.hold_t >= self.T_hold_s) & (~self.paid)
+
+        payout  = torch.where(
+            reached,
+            torch.full_like(self.hold_t, self.bonus / dt),
+            torch.zeros_like(self.hold_t),
+        )
+
+        # 一度払ったら二度と払わない
+        self.paid |= reached
+
+        # ==============================
+        # 7. env リセット時の状態クリア
+        # ==============================
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.hold_t[m] = 0.0
+                self.paid[m]   = False
+
+        return payout
