@@ -146,6 +146,8 @@ class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
         "base_ang_vel",
         "projected_gravity",
         "pose_command",
+        "last_action", 
+        "leg_position",
 
 
     ]
@@ -171,183 +173,192 @@ class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
 
 #Low Layer 
 
-@configclass
-class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 24
-    max_iterations = 2000 #50000
-    save_interval = 100
-    experiment_name = ""  # same as task name
-    # empirical_normalization = False 
-    actor_obs_normalization=False, 
-    critic_obs_normalization=False,
-
-    #for paper 1
-
-    # obs_groups =  {
-    #     "policy": ["base_lin_vel",
-    #             "base_ang_vel",
-    #             "projected_gravity",
-    #             "position_commands",
-    #             "joint_pos_rel",
-    #             "joint_vel_rel",
-    #             "last_action", "height_scanner"],
-    #     "critic":["base_lin_vel",
-    #             "base_ang_vel",
-    #             "projected_gravity",
-    #             "position_commands",
-    #             "joint_pos_rel",
-    #             "joint_vel_rel",
-    #             "joint_effort",
-    #             "last_action", "height_scanner"],
-
-
-    # }
-
-    # policy = RslRlPpoActorCriticCfg(
-    #     init_noise_std=1.0,
-    #     actor_hidden_dims=[512, 256, 128],
-    #     critic_hidden_dims=[512, 256, 128],
-    #     activation="elu",
-    # )
-
-    # for paper2
-
-    obs_groups =  {
-        "policy": ["base_lin_vel",
-                "base_ang_vel",
-                "projected_gravity",
-                "position_commands",
-                "joint_pos_rel",
-                "joint_vel_rel",
-                "last_action", 
-                "fr_target_xy_rel",
-                "leg_position",
-                # "camera_image",
-                # "front_depth",
-                # "front_normals",
-                # "height_scanner",
-                "ft_stack"
-
-                ],
-        "critic":["base_lin_vel",
-                "base_ang_vel",
-                "projected_gravity",
-                "position_commands",
-                "joint_pos_rel",
-                "joint_vel_rel",
-                # "joint_effort",
-                "last_action",
-                "fr_target_xy_rel",
-                "leg_position",
-                #  "camera_image",
-                # "front_depth",
-                # "front_normals".
-                # "height_scanner",
-                "ft_stack"
-                 ],
-
-
-
-    }
-      
-    # policy: RslRlPpoActorCriticCfg = VisionMLPActorCriticCfg()
-    # policy: RslRlPpoActorCriticCfg = LocoTransformerActorCriticCfg()
-    # policy: RslRlPpoActorCriticCfg = LocoTransformerHFPCfg()
-    policy: RslRlPpoActorCriticCfg =  MlpHFPCfg()
-
-
-    algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.01,
-        # num_learning_epochs=5,
-        num_learning_epochs=3,
-        # num_mini_batches=4,
-        num_mini_batches = 32, # for transformer
-        # learning_rate=1.0e-3,
-        learning_rate=1.0e-4, # for transformer
-        # learning_rate=1.0e-5, # for finetune
-        schedule="adaptive",
-        # schedule="constant",
-        gamma=0.99,
-        lam=0.95,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-    )
-
-    rnd =  RslRlRndCfg(
-        weight = 1.0,
-        learning_rate = 1.0e-4,
-        predictor_hidden_dims = [128,128],
-        target_hidden_dims = [256, 256]
-
-    )
-
-
-
-
-
-# # High Layer
 # @configclass
 # class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
 #     num_steps_per_env = 24
-#     max_iterations = 3000
+#     max_iterations = 2000 #50000
 #     save_interval = 100
-#     # experiment_name = "anymal_c_navigation"
 #     experiment_name = ""  # same as task name
 #     # empirical_normalization = False 
 #     actor_obs_normalization=False, 
 #     critic_obs_normalization=False,
 
-#     obs_groups =  {
-#     "policy": ["base_lin_vel",
-#             "base_ang_vel",
-#             "projected_gravity",
-#             "pose_command",
-#             "heightmap",
-#             # "front_depth",
-#             # "front_normals",
-#             # "height_scanner",
+#     #for paper 1
 
-#             ],
-#     "critic":["base_lin_vel",
-#             "base_ang_vel",
-#             "projected_gravity",
-#             "pose_command",
-#             "heightmap",
-#             # "front_depth",
-#             # "front_normals",
-#             # "height_scanner",
-#                 ],
-                
-#     }
+#     # obs_groups =  {
+#     #     "policy": ["base_lin_vel",
+#     #             "base_ang_vel",
+#     #             "projected_gravity",
+#     #             "position_commands",
+#     #             "joint_pos_rel",
+#     #             "joint_vel_rel",
+#     #             "last_action", "height_scanner"],
+#     #     "critic":["base_lin_vel",
+#     #             "base_ang_vel",
+#     #             "projected_gravity",
+#     #             "position_commands",
+#     #             "joint_pos_rel",
+#     #             "joint_vel_rel",
+#     #             "joint_effort",
+#     #             "last_action", "height_scanner"],
 
 
-#     policy: RslRlPpoActorCriticCfg =  VisionHighLevelACCfg()
-
-
-
+#     # }
 
 #     # policy = RslRlPpoActorCriticCfg(
-#     #     init_noise_std=0.5,
-#     #     actor_obs_normalization=False,
-#     #     critic_obs_normalization=False,
-#     #     actor_hidden_dims=[128, 128],
-#     #     critic_hidden_dims=[128, 128],
+#     #     init_noise_std=1.0,
+#     #     actor_hidden_dims=[512, 256, 128],
+#     #     critic_hidden_dims=[512, 256, 128],
 #     #     activation="elu",
 #     # )
+
+#     # for paper2
+
+#     obs_groups =  {
+#         "policy": ["base_lin_vel",
+#                 "base_ang_vel",
+#                 "projected_gravity",
+#                 "position_commands",
+#                 "joint_pos_rel",
+#                 "joint_vel_rel",
+#                 "last_action", 
+#                 "fr_target_xy_rel",
+#                 "leg_position",
+#                 # "camera_image",
+#                 # "front_depth",
+#                 # "front_normals",
+#                 # "height_scanner",
+#                 "ft_stack"
+
+#                 ],
+#         "critic":["base_lin_vel",
+#                 "base_ang_vel",
+#                 "projected_gravity",
+#                 "position_commands",
+#                 "joint_pos_rel",
+#                 "joint_vel_rel",
+#                 # "joint_effort",
+#                 "last_action",
+#                 "fr_target_xy_rel",
+#                 "leg_position",
+#                 #  "camera_image",
+#                 # "front_depth",
+#                 # "front_normals".
+#                 # "height_scanner",
+#                 "ft_stack"
+#                  ],
+
+
+
+#     }
+      
+#     # policy: RslRlPpoActorCriticCfg = VisionMLPActorCriticCfg()
+#     # policy: RslRlPpoActorCriticCfg = LocoTransformerActorCriticCfg()
+#     # policy: RslRlPpoActorCriticCfg = LocoTransformerHFPCfg()
+#     policy: RslRlPpoActorCriticCfg =  MlpHFPCfg()
+
+
 #     algorithm = RslRlPpoAlgorithmCfg(
 #         value_loss_coef=1.0,
 #         use_clipped_value_loss=True,
 #         clip_param=0.2,
-#         entropy_coef=0.005,
-#         num_learning_epochs=5,
-#         num_mini_batches=4,
-#         learning_rate=1.0e-3,
+#         entropy_coef=0.01,
+#         # num_learning_epochs=5,
+#         num_learning_epochs=3,
+#         # num_mini_batches=4,
+#         num_mini_batches = 32, # for transformer
+#         # learning_rate=1.0e-3,
+#         learning_rate=1.0e-4, # for transformer
+#         # learning_rate=1.0e-5, # for finetune
 #         schedule="adaptive",
+#         # schedule="constant",
 #         gamma=0.99,
 #         lam=0.95,
 #         desired_kl=0.01,
 #         max_grad_norm=1.0,
 #     )
+
+#     rnd =  RslRlRndCfg(
+#         weight = 1.0,
+#         learning_rate = 1.0e-4,
+#         predictor_hidden_dims = [128,128],
+#         target_hidden_dims = [256, 256]
+
+#     )
+
+
+
+
+
+# High Layer
+@configclass
+class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    num_steps_per_env = 24
+    # num_steps_per_env = 100
+    max_iterations = 4000
+    save_interval = 100
+    # experiment_name = "anymal_c_navigation"
+    experiment_name = ""  # same as task name
+    # empirical_normalization = False 
+    actor_obs_normalization=False, 
+    critic_obs_normalization=False,
+
+    obs_groups =  {
+    "policy": ["base_lin_vel",
+            "base_ang_vel",
+            "projected_gravity",
+            "pose_command",
+            "last_action", 
+            "leg_position",
+            "heightmap",
+            # "front_depth",
+            # "front_normals",
+            # "height_scanner",
+
+            ],
+    "critic":["base_lin_vel",
+            "base_ang_vel",
+            "projected_gravity",
+            "pose_command",
+            "last_action", 
+            "leg_position",
+            "heightmap",
+            # "front_depth",
+            # "front_normals",
+            # "height_scanner",
+                ],
+                
+    }
+
+
+    policy: RslRlPpoActorCriticCfg =  VisionHighLevelACCfg()
+
+
+
+
+    # policy = RslRlPpoActorCriticCfg(
+    #     init_noise_std=0.5,
+    #     actor_obs_normalization=False,
+    #     critic_obs_normalization=False,
+    #     actor_hidden_dims=[128, 128],
+    #     critic_hidden_dims=[128, 128],
+    #     activation="elu",
+    # )
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        # value_loss_coef=0.5,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.005,
+        num_learning_epochs=5,
+        # num_learning_epochs=3,
+        num_mini_batches=4,
+        # num_mini_batches=64,
+        learning_rate=1.0e-4,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+        # max_grad_norm=0.5,
+    )

@@ -796,3 +796,264 @@ def depth_heightmap2(
         )
 
     return obs
+
+
+
+
+
+def depth_heightmap3(
+    env: ManagerBasedEnv,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("camera"),
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    # base 座標系で見たときの XY 範囲 [m]
+    x_range: tuple[float, float] = (-1.0, 2.0),
+    y_range: tuple[float, float] = (-2.0, 2.0),
+    # Heightmap 解像度
+    grid_shape: tuple[int, int] = (64, 64),
+    # 高さの初期値（★修正: 死角を穴として認識させるため、低い値を推奨）
+    default_height: float = -2.0,
+) -> torch.Tensor:
+    """
+    修正版 Heightmap 生成関数
+    - 機能: マスク出力、デバッグ保存機能は元のまま維持
+    - 修正: forループを排除(高速化)、座標変換ロジックを修正(正確化)
+    """
+
+    # --- 1. センサとロボットを取得 ---
+    sensor: Camera = env.scene.sensors[sensor_cfg.name]
+    robot = env.scene[asset_cfg.name]
+
+    # depth 画像を取得
+    depth = sensor.data.output["depth"]
+    if depth.ndim == 4:
+        depth = depth[..., 0]  # (N, H, W)
+
+    num_envs, H_cam, W_cam = depth.shape
+    device = env.device
+
+    # --- 2. 座標変換 (Camera -> World -> Base) [高速化・修正箇所] ---
+    
+    # (A) Depth -> Camera座標系 (点群)
+    points_cam = math_utils.unproject_depth(depth, sensor.data.intrinsic_matrices)
+    points_cam = points_cam.view(num_envs, -1, 3)  # (N, P, 3)
+
+    # (B) Camera -> World座標系
+    # センサーの正確な位置姿勢を使用
+    cam_pos_w = sensor.data.pos_w
+    cam_quat_w = sensor.data.quat_w_ros 
+    points_world = math_utils.transform_points(points_cam, cam_pos_w, cam_quat_w)
+
+    # (C) World -> Base座標系
+    # ロボットのベース位置姿勢
+    base_pos_w = robot.data.root_pos_w
+    base_quat_w = robot.data.root_quat_w
+
+    # ベース基準への変換: P_base = R_inv * (P_world - T_base)
+    # 平行移動
+    rel_pos = points_world - base_pos_w.unsqueeze(1)
+    # 回転 (World->Base なので、Baseの回転の逆回転をかける)
+    base_quat_inv = math_utils.quat_inv(base_quat_w)
+    
+    # 回転適用 (transform_pointsの平行移動成分を0にして回転だけ適用)
+    points_base = math_utils.transform_points(
+        rel_pos, 
+        torch.zeros_like(base_pos_w), 
+        base_quat_inv
+    )
+
+    X = points_base[..., 0]
+    Y = points_base[..., 1]
+    Z = points_base[..., 2]
+
+    # --- 3. マスク条件とグリッド化 [高速化箇所] ---
+    xmin, xmax = x_range
+    ymin, ymax = y_range
+    H_map, W_map = grid_shape
+
+    # 有効な点: 範囲内 かつ depthが有効(>0) かつ Zが異常値でない
+    # ※ Z < 0.3 などの条件が必要であればここに追加してください (例: & (Z < 0.5))
+    valid_mask = (X >= xmin) & (X < xmax) & \
+                 (Y >= ymin) & (Y < ymax) & \
+                 (depth.view(num_envs, -1) > 0) & \
+                 (~torch.isinf(Z))
+
+    # グリッドインデックス計算
+    gx = ((X - xmin) / (xmax - xmin) * H_map).long()
+    gy = ((Y - ymin) / (ymax - ymin) * W_map).long()
+    gx = gx.clamp(0, H_map - 1)
+    gy = gy.clamp(0, W_map - 1)
+
+    # --- 4. 集約処理 (Scatter Reduce) [forループ除去] ---
+    
+    # バッチ一括処理用のフラットインデックスを作成
+    # index = env_id * (H*W) + gx * W + gy
+    batch_ids = torch.arange(num_envs, device=device).unsqueeze(1).expand_as(gx)
+    flat_indices = batch_ids * (H_map * W_map) + gx * W_map + gy
+
+    # validな点だけを抽出
+    valid_indices = flat_indices[valid_mask]
+    valid_z       = Z[valid_mask]
+
+    # (A) Heightmap の作成
+    # 全環境分を1次元配列で確保
+    heightmap_flat = torch.full(
+        (num_envs * H_map * W_map,), 
+        default_height, 
+        device=device, 
+        dtype=Z.dtype
+    )
+    # 最大値プーリングで書き込み
+    heightmap_flat.index_reduce_(
+        dim=0,
+        index=valid_indices,
+        source=valid_z,
+        reduce="amax",
+        include_self=True
+    )
+
+    # (B) Maskmap の作成 (元の機能の維持)
+    # 全環境分を1次元配列で確保 (0.0で初期化)
+    maskmap_flat = torch.zeros(
+        (num_envs * H_map * W_map,), 
+        device=device, 
+        dtype=torch.float32 # catするためにfloat
+    )
+    # データがある場所を 1.0 にする
+    # (値は何でもいいので、valid_indices の場所に 1.0 を書き込む)
+    maskmap_flat.index_fill_(0, valid_indices, 1.0)
+
+    # --- 5. 整形と結合 (元の出力形式に合わせる) ---
+    h_out = heightmap_flat.view(num_envs, -1)  # (N, H*W)
+    m_out = maskmap_flat.view(num_envs, -1)    # (N, H*W)
+
+    obs = torch.cat([h_out, m_out], dim=-1)    # (N, 2*H*W)
+
+    # --- 6. デバッグ保存 (元の機能の維持) ---
+    if hasattr(env, "episode_length_buf"):
+        step0 = int(env.episode_length_buf[0].item())
+        if step0 % 1000 == 0:
+            # dump_heightmap 関数が定義されている前提
+            try:
+                # dump_heightmap は元の実装に合わせて呼び出す
+                # (h_flat を渡していたようなので、h_out を渡す)
+                dump_heightmap(
+                    h_out,          
+                    H_map,
+                    W_map,
+                    save_dir="/tmp/heightmaps",
+                    env_index=0,
+                    step=step0,
+                )
+            except NameError:
+                pass # dump_heightmapがない場合はスキップ
+
+    return obs
+
+
+
+def depth_heightmap4(
+    env: ManagerBasedEnv,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("camera"),
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    x_range: tuple[float, float] = (-1.0, 2.0),
+    y_range: tuple[float, float] = (-2.0, 2.0),
+    grid_shape: tuple[int, int] = (64, 64),
+    default_height: float = -4.0,  # ユーザー様の環境に合わせて -4.0 に設定
+    # 固定オフセット (Base座標系)
+    cam_pos_offset: list = [0.25, 0.0, 0.25], 
+) -> torch.Tensor:
+    
+    # --- 1. データ取得 ---
+    sensor = env.scene.sensors[sensor_cfg.name]
+    
+    depth = sensor.data.output["depth"]
+    if depth.ndim == 4: depth = depth[..., 0]
+    
+    # invalid (Inf/NaN/負) の処理 (元のコードの再現)
+    # 元コード: depth[invalid] = 0.0
+    # ここで 0.0 にしておかないと unproject で Inf が発生し、計算がおかしくなります
+    depth = torch.nan_to_num(depth, posinf=0.0, neginf=0.0)
+    depth[depth <= 0.0] = 0.0
+
+    N, H_cam, W_cam = depth.shape
+    device = env.device
+
+    # --- 2. 座標変換 (元のロジックを再現) ---
+    
+    # (A) Unproject
+    points_cam = math_utils.unproject_depth(depth, sensor.data.intrinsic_matrices)
+    points_cam = points_cam.view(N, -1, 3)
+
+    # (B) Transform: "固定位置" + "センサー回転(World)"
+    # ※ 元のコード通りの組み合わせです
+    
+    # 位置: 固定値
+    pos_offset = torch.tensor(cam_pos_offset, device=device).unsqueeze(0).expand(N, -1)
+    
+    # 回転: センサーの値をそのまま使う (元のコードに合わせる)
+    # これによりカメラのチルト角などが反映されます
+    rot_quat = sensor.data.quat_w_ros
+
+    # 変換実行
+    points_base = math_utils.transform_points(points_cam, pos_offset, rot_quat)
+
+    X = points_base[..., 0]
+    Y = points_base[..., 1]
+    Z = points_base[..., 2]
+
+    # --- 3. グリッド化 (元のロジックを再現) ---
+    xmin, xmax = x_range
+    ymin, ymax = y_range
+    H_map, W_map = grid_shape
+
+    # グリッドインデックス計算
+    gx = ((X - xmin) / (xmax - xmin) * (H_map - 1)).long()
+    gy = ((Y - ymin) / (ymax - ymin) * (W_map - 1)).long()
+
+    # ★重要: 元のコード同様、範囲チェックで捨てずに clamp で端に寄せます
+    # これにより、範囲外の点もマップの縁に書き込まれます（-4にならなくなります）
+    gx = gx.clamp(0, H_map - 1)
+    gy = gy.clamp(0, W_map - 1)
+
+    # --- 4. 集約処理 (Scatter Reduce) ---
+    
+    # 有効な点: depth > 0 のみ (X,Yの範囲チェックはしない)
+    valid_mask = (depth.view(N, -1) > 0)
+    
+    batch_ids = torch.arange(N, device=device).unsqueeze(1).expand_as(gx)
+    flat_indices = batch_ids * (H_map * W_map) + gx * W_map + gy
+
+    valid_indices = flat_indices[valid_mask]
+    valid_z       = Z[valid_mask]
+
+    # Heightmap
+    heightmap_flat = torch.full((N * H_map * W_map,), default_height, device=device, dtype=Z.dtype)
+    heightmap_flat.index_reduce_(0, valid_indices, valid_z, reduce="amax", include_self=True)
+
+    # Maskmap
+    maskmap_flat = torch.zeros((N * H_map * W_map,), device=device, dtype=torch.float32)
+    maskmap_flat.index_fill_(0, valid_indices, 1.0)
+
+    obs = torch.cat([heightmap_flat.view(N, -1), maskmap_flat.view(N, -1)], dim=-1)
+
+
+    # --- 6. デバッグ保存 (元の機能の維持) ---
+    if hasattr(env, "episode_length_buf"):
+        step0 = int(env.episode_length_buf[0].item())
+        if step0 % 1000 == 0:
+            # dump_heightmap 関数が定義されている前提
+            try:
+                # dump_heightmap は元の実装に合わせて呼び出す
+                # (h_flat を渡していたようなので、h_out を渡す)
+                dump_heightmap(
+                    heightmap_flat.view(N, -1),          
+                    H_map,
+                    W_map,
+                    save_dir="/tmp/heightmaps",
+                    env_index=0,
+                    step=step0,
+                )
+            except NameError:
+                pass # dump_heightmapがない場合はスキップ
+    
+    return obs

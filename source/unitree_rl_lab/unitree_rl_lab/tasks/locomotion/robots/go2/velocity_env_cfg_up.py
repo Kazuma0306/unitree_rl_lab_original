@@ -159,8 +159,8 @@ BLOCK_CFG = terrain_gen.TerrainGeneratorCfg(
 )
 
 
-sizex = 0.16
-sizey = 0.16
+sizex = 0.2
+sizey = 0.2
 MASS_B = 30.0
 
 # MASS_B = 0.1
@@ -174,12 +174,12 @@ class RobotSceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",  # "plane", "generator"
-        terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
+        # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
         # terrain_generator= STEPPING_STONES_CFG, 
         # terrain_generator= MOAT_CFG, # proposed env
-        # terrain_generator= BLOCK_CFG,
+        terrain_generator= BLOCK_CFG,
         max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -399,6 +399,134 @@ class RobotSceneCfg(InteractiveSceneCfg):
     )
 
 
+    
+    #左前3
+    stone11 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_11",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.8, 0.2, -0.14)
+        )
+    )
+
+    #右前3
+    stone12 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_12",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.8, -0.2, -0.14)
+        )
+    )
+
+
+    #左前4
+    stone13 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_13",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.0, 0.2, -0.14)
+        )
+    )
+
+
+    #右前4
+    stone14= RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_14",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.0, -0.2, -0.14)
+        )
+    )
+
+
+
+    #左前4
+    stone15 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_15",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.2, 0.2, -0.14)
+        )
+    )
+
+
+    #右前4
+    stone16= RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_16",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.2, -0.2, -0.14)
+        )
+    )
+
+
+
+
+
+
+
+
+
    
 
 
@@ -434,7 +562,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
         depth_clipping_behavior = "max",
         # depth_clipping_behavior = "zero",
         # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
-        offset=CameraCfg.OffsetCfg(pos=(0.25, 0.0, 0.25), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.32, 0.0, 0.15), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.37, 0.0, 0.15), rot=(0.0616, -0.7044, 0.7044, -0.0616), convention="ros"),
+
 
 
     )
@@ -492,21 +622,39 @@ class HighLevelPolicyObsCfg(ObsGroup):
     projected_gravity = ObsTerm(func=mdp.projected_gravity)
     pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "pose_command"})
 
+    last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100)) #last command
+
+    leg_position = ObsTerm(func = mdp.ee_pos_base_obs)#ベース座標系での脚位置
+
+
     # front_depth = ObsTerm(
     #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
     #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
     # )
 
+    # heightmap = ObsTerm(
+    # func=mdp.depth_heightmap4,
+    # params=dict(
+    #     sensor_cfg=SceneEntityCfg("camera"),  # 定義したカメラ名
+    #     asset_cfg=SceneEntityCfg("robot"),
+    #     x_range=(0.1, 3.0),
+    #     y_range=(-2.0, 2.0),
+    #     grid_shape=(64, 64),
+    #     default_height=-4,
+    # ),
+    # )
+
     heightmap = ObsTerm(
-    func=mdp.depth_heightmap,
-    params=dict(
-        sensor_cfg=SceneEntityCfg("camera"),  # 定義したカメラ名
-        asset_cfg=SceneEntityCfg("robot"),
-        x_range=(-1.0, 3.0),
-        y_range=(-3.0, 3.0),
-        grid_shape=(64, 64),
-        default_height=-8.0,
-    ),
+        func=mdp.image,
+        # env.scene.sensors["camera"] に合わせて名前を変える
+        params={
+            "sensor_cfg": SceneEntityCfg("camera"),
+            "data_type": "depth",   # TiledCameraCfg.data_types=["depth"] と合わせる
+            "normalize": True,      # depthの inf を0にするなどの処理をしてくれる
+        },
+        # ↓ここがキモ：このtermだけ履歴を持たせる
+        history_length=6,           # 4フレーム分スタック
+        flatten_history_dim=True,   # (B,4,H,W,C) → (B, 4*H*W*C)にflatten
     )
 
 
@@ -610,14 +758,14 @@ class RewardsCfg:
     # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.5,
+        weight=0.7,
         params={"std": 2.0, "command_name": "pose_command"},
     )
-    position_tracking_fine_grained = RewTerm(
-        func=mdp.position_command_error_tanh,
-        weight=0.5,
-        params={"std": 0.2, "command_name": "pose_command"},
-    )
+    # position_tracking_fine_grained = RewTerm(
+    #     func=mdp.position_command_error_tanh,
+    #     weight=0.5,
+    #     params={"std": 0.2, "command_name": "pose_command"},
+    # )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
         weight=-0.2,
@@ -661,9 +809,9 @@ class CommandsCfg:
         asset_name="robot",
         simple_heading=False,
         resampling_time_range=(24.0, 24.0),
-        debug_vis=True,
+        debug_vis=False,
         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.3, 2.5), pos_y=(-0.0, 0.0), heading=(-0, 0)),
+        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.3, 1.1), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
     step_fr_to_block = mdp.FootstepFromHighLevelCfg()
@@ -687,13 +835,13 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
     # environment settings
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=1, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
 
     actions: ActionsCfg = ActionsCfg()
     observations: ObservationsCfg = ObservationsCfg()
     # events: EventCfg = EventCfg()
-    # mdp settings
     commands: CommandsCfg = CommandsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
@@ -703,10 +851,6 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
 
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 2
-            self.scene.terrain.terrain_generator.num_cols = 2
-
         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
         self.decimation = LOW_LEVEL_ENV_CFG.decimation #* 10　#TODO
@@ -715,6 +859,14 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
        
         if self.scene.contact_forces is not None:
             self.scene.contact_forces.update_period = self.sim.dt
+
+        
+        # if self.scene.terrain.terrain_generator is not None:
+        #     self.scene.terrain.terrain_generator.num_rows = 2
+        #     self.scene.terrain.terrain_generator.num_cols = 2
+
+
+
 
 
 class RobotPlayEnvCfg(RobotEnvCfg):
