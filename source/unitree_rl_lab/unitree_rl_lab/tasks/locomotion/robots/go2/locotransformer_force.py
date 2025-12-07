@@ -564,6 +564,8 @@ class VisionHighLevelAC(ActorCritic):
         prop_obs_keys: list[str],
         heightmap_key: str = "heightmap",
         # ft_stack_key: str = "ft_stack",
+
+        # ft_stack_key: str = "ft_stack",
         hm_shape: tuple[int, int] = (64, 64),   # Heightmap の (H,W)
         # hm_shape: tuple[int, int] = (32, 32),
         prop_encoder_dims: list[int] = [256, 256],
@@ -576,7 +578,7 @@ class VisionHighLevelAC(ActorCritic):
     ):
         # Heightmap は自前で処理するので、親には渡すがそのままでもOK（無視しても良い）
         # 観測からheight/ftを親に渡さない
-        sanitized_obs = {k: v for k, v in obs.items() if k not in [heightmap_key]}
+        sanitized_obs = {k: v for k, v in obs.items() if k not in [heightmap_key, ]}
         sanitized_groups = {g: [k for k in ks if k not in [heightmap_key]] for g, ks in obs_groups.items()}
 
         # print("=== env.cfg.observations.policy.term_cfgs ===")

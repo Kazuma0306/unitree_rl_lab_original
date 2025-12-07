@@ -584,7 +584,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=12, track_air_time=True)
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3 , track_air_time=True)
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -656,6 +656,18 @@ class HighLevelPolicyObsCfg(ObsGroup):
         history_length=6,           # 4フレーム分スタック
         flatten_history_dim=True,   # (B,4,H,W,C) → (B, 4*H*W*C)にflatten
     )
+
+    ft_stack = ObsTerm(
+            func=mdp.contact_ft_stack,   # 下の関数
+            params=dict(
+                sensor_cfg=SceneEntityCfg("contact_forces",
+                # body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"]),
+                body_names=".*_foot"),
+                mass_kg=15.0,
+                return_shape="flat",
+            ),
+            clip=(-3.0, 3.0),
+        )
 
 
     def __post_init__(self):
@@ -782,8 +794,14 @@ class RewardsCfg:
     # -- robot
     # dont_wait = RewTerm(
     #     func=mdp.dont_wait_rel, weight=-1.0, # 前回実装した自作関数 -2.0 for simple walking
-    #     params={"velocity_threshold": 0.2, "distance_threshold": 1.0, "command_name": "goal_position"}
+    #     params={"velocity_threshold": 0.2, "distance_threshold":0.8, "command_name": "pose_command"}
     # )
+
+    dont_wait = RewTerm(
+        func=mdp.dont_wait_rel2, weight=-0.5, 
+        params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
+    )
+
 
 
 
@@ -809,9 +827,9 @@ class CommandsCfg:
         asset_name="robot",
         simple_heading=False,
         resampling_time_range=(24.0, 24.0),
-        debug_vis=False,
+        debug_vis=True,
         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.3, 1.1), pos_y=(-0.0, 0.0), heading=(-0, 0)),
+        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.9, 1.1), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
     step_fr_to_block = mdp.FootstepFromHighLevelCfg()

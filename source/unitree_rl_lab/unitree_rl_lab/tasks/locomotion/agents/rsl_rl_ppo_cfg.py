@@ -148,6 +148,7 @@ class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
         "pose_command",
         "last_action", 
         "leg_position",
+        "ft_stack"
 
 
     ]
@@ -311,6 +312,7 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "last_action", 
             "leg_position",
             "heightmap",
+            "ft_stack"
             # "front_depth",
             # "front_normals",
             # "height_scanner",
@@ -323,6 +325,7 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "last_action", 
             "leg_position",
             "heightmap",
+            "ft_stack"
             # "front_depth",
             # "front_normals",
             # "height_scanner",

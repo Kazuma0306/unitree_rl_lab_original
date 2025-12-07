@@ -549,9 +549,28 @@ def dont_wait_rel(env, command_name: str = "goal_position",
     speed = env.scene["robot"].data.root_lin_vel_b[:, :2].norm(dim=1)
     # 遠い & 遅い ほど強い罰（連続値）
     a = torch.sigmoid(10*(dist - distance_threshold))
-    b = torch.sigmoid(10*(velocity_threshold - speed))
-    return a * b 
+    # b = torch.sigmoid(10*(velocity_threshold - speed))
+    return a #* b 
 
+
+
+def dont_wait_rel2(env,
+                  command_name: str = "goal_position",
+                  distance_threshold: float = 0.2,
+                  max_distance: float = 0.8) -> torch.Tensor:
+    """
+    ・dist <= distance_threshold: ペナルティ 0
+    ・dist >= max_distance: ペナルティ 1
+    ・その間は線形に 0→1
+    """
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]  # (N,2)
+    dist = des_pos_b.norm(dim=1)                                      # (N,)
+
+    # 0〜1に線形マッピング
+    raw = (dist - distance_threshold) / (max_distance - distance_threshold)
+    penalty = raw.clamp(0.0, 1.0)
+
+    return penalty  # RewTerm側で weight=-w_dont_wait を掛ける
 
 
 
