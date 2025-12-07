@@ -574,6 +574,34 @@ def dont_wait_rel2(env,
 
 
 
+def dont_wait_rel3(env,
+                  command_name: str = "goal_position",
+                  distance_threshold: float = 0.2,
+                  max_distance: float = 0.8,
+                  velocity_threshold: float = 0.01) -> torch.Tensor: # 閾値追加
+    3
+    # 1. 距離のペナルティ項 (遠いほど 1.0)
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+    dist = des_pos_b.norm(dim=1)
+    
+    dist_factor = (dist - distance_threshold) / (max_distance - distance_threshold)
+    dist_factor = dist_factor.clamp(0.0, 1.0)
+
+    # 2. 速度のペナルティ項 (遅いほど 1.0)
+    # 現在の移動速度を取得
+    vel = env.scene["robot"].data.root_lin_vel_b[:, :2].norm(dim=1)
+    
+    # 0.2m/s 以下ならペナルティ発生、0.0m/s で最大
+    speed_factor = (velocity_threshold - vel) / velocity_threshold
+    speed_factor = speed_factor.clamp(0.0, 1.0)
+
+    # 3. 結合: 「遠い」AND「遅い」ときだけ罰を与える
+    penalty = dist_factor * speed_factor
+
+    return penalty
+
+
+
 
 
 def _contacts_bool(env, sensor_cfg, min_contact_time: float, force_z_thresh: float|None):

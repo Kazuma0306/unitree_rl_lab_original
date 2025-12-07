@@ -771,13 +771,13 @@ class RewardsCfg:
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
         weight=0.7,
-        params={"std": 2.0, "command_name": "pose_command"},
+        params={"std": 0.3, "command_name": "pose_command"},
     )
-    # position_tracking_fine_grained = RewTerm(
-    #     func=mdp.position_command_error_tanh,
-    #     weight=0.5,
-    #     params={"std": 0.2, "command_name": "pose_command"},
-    # )
+    position_tracking_fine_grained = RewTerm(
+        func=mdp.position_command_error_tanh,
+        weight=0.1,
+        params={"std": 0.8, "command_name": "pose_command"},
+    )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
         weight=-0.2,
@@ -798,7 +798,7 @@ class RewardsCfg:
     # )
 
     dont_wait = RewTerm(
-        func=mdp.dont_wait_rel2, weight=-0.5, 
+        func=mdp.dont_wait_rel3, weight=-5, 
         params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
     )
 
