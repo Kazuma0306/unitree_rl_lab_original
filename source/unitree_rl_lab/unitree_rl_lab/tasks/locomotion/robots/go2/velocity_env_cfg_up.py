@@ -159,6 +159,30 @@ BLOCK_CFG = terrain_gen.TerrainGeneratorCfg(
 )
 
 
+
+MOAT_CFG = terrain_gen.TerrainGeneratorCfg(
+    curriculum=True,
+    size=(8.0, 8.0),
+    # border_width=20.0,
+    num_rows=10,
+    num_cols=20,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    difficulty_range=(0.0, 1.0),
+    use_cache=False,
+    sub_terrains={
+
+        "moat_terrain": terrain_gen.MeshMoatTerrainCfg(
+             proportion=0.7, platform_width = 1.0,
+
+        ),
+
+    },
+)
+
+
+
 sizex = 0.2
 sizey = 0.2
 MASS_B = 30.0
@@ -178,8 +202,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
         # terrain_generator= STEPPING_STONES_CFG, 
-        # terrain_generator= MOAT_CFG, # proposed env
-        terrain_generator= BLOCK_CFG,
+        terrain_generator= MOAT_CFG, # proposed env
+        # terrain_generator= BLOCK_CFG,
         max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -220,7 +244,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.4, 0.2, -0.14)
+            # pos=(0.4, 0.2, -0.14)
+            pos=(1.2, 0.2, -0.14)
         )
     )
 
@@ -239,7 +264,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.4, -0.2, -0.14)
+            # pos=(0.4, -0.2, -0.14)
+            pos=(1.2, -0.2, -0.14)
         )
     )
 
@@ -258,7 +284,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0, 0.2, -0.14)
+            pos=(0.8, 0.2, -0.14)
         )
     )
 
@@ -278,7 +304,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0, -0.2, -0.14)
+            pos=(0.8, -0.2, -0.14)
         )
     )
 
@@ -298,7 +324,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.2, 0.2, -0.14)
+            # pos=(0.2, 0.2, -0.14)
+            pos=(1.0, 0.2, -0.14)
         )
     )
 
@@ -318,7 +345,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.2, -0.2, -0.14)
+            # pos=(0.2, -0.2, -0.14)
+            pos=(1.0, -0.2, -0.14)
         )
     )
 
@@ -337,7 +365,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(-0.2, 0.2, -0.14)
+            # pos=(-0.2, 0.2, -0.14)
+            pos=(0.6, 0.2, -0.14)
         )
     )
 
@@ -356,7 +385,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(-0.2, -0.2, -0.14)
+            # pos=(-0.2, -0.2, -0.14)
+            pos=(0.6, -0.2, -0.14)
         )
     )
 
@@ -375,7 +405,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.6, 0.2, -0.14)
+            # pos=(0.6, 0.2, -0.14)
+            pos=(1.4, 0.2, -0.14)
         )
     )
 
@@ -394,7 +425,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.6, -0.2, -0.14)
+            # pos=(0.6, -0.2, -0.14)
+            pos=(1.4, -0.2, -0.14)
         )
     )
 
@@ -415,7 +447,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.8, 0.2, -0.14)
+            pos=(1.6, 0.2, -0.14)
         )
     )
 
@@ -434,7 +466,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(0.8, -0.2, -0.14)
+            pos=(1.6, -0.2, -0.14)
         )
     )
 
@@ -454,7 +486,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(1.0, 0.2, -0.14)
+            pos=(1.8, 0.2, -0.14)
         )
     )
 
@@ -474,7 +506,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(1.0, -0.2, -0.14)
+            pos=(1.8, -0.2, -0.14)
         )
     )
 
@@ -495,7 +527,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(1.2, 0.2, -0.14)
+            pos=(2.0, 0.2, -0.14)
         )
     )
 
@@ -515,7 +547,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
-            pos=(1.2, -0.2, -0.14)
+            pos=(2.0, -0.2, -0.14)
         )
     )
 
@@ -771,11 +803,11 @@ class RewardsCfg:
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
         weight=0.7,
-        params={"std": 0.3, "command_name": "pose_command"},
+        params={"std": 0.4, "command_name": "pose_command"},
     )
     position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.1,
+        weight=0.5,
         params={"std": 0.8, "command_name": "pose_command"},
     )
     orientation_tracking = RewTerm(
@@ -819,6 +851,12 @@ class RewardsCfg:
     )
 
 
+
+
+
+
+
+
 @configclass
 class CommandsCfg:
     """Command terms for the MDP."""
@@ -829,10 +867,15 @@ class CommandsCfg:
         resampling_time_range=(24.0, 24.0),
         debug_vis=True,
         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.9, 1.1), pos_y=(-0.0, 0.0), heading=(-0, 0)),
+        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(1.0, 1.8), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
     step_fr_to_block = mdp.FootstepFromHighLevelCfg()
+
+
+
+
+
 
 
 @configclass
@@ -845,6 +888,26 @@ class TerminationsCfg:
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
     )
     bad_orientation = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 0.8})
+
+
+
+
+@configclass
+class CurriculumCfg:
+    """Curriculum terms for the MDP."""
+
+
+    schedule_lin = CurrTerm(
+        func = mdp.schedule_reward_weight,
+        params = {
+            "term_name" : "position_tracking_fine_grained",
+            "weight": 0,
+            "num_steps": 25000
+        }
+    )
+
+
+
 
 
 @configclass
@@ -863,7 +926,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     commands: CommandsCfg = CommandsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
-    # curriculum: CurriculumCfg = CurriculumCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
 
 
     def __post_init__(self):
