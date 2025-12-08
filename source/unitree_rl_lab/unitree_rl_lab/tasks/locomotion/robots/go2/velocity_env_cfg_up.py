@@ -594,9 +594,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
         depth_clipping_behavior = "max",
         # depth_clipping_behavior = "zero",
         # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
-        # offset=CameraCfg.OffsetCfg(pos=(0.32, 0.0, 0.15), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.32, 0.0, 0.15), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
         # offset=CameraCfg.OffsetCfg(pos=(0.37, 0.0, 0.15), rot=(0.0616, -0.7044, 0.7044, -0.0616), convention="ros"),
-        offset=CameraCfg.OffsetCfg(pos=(0.05, 0.0, 1), rot = (0.0, -0.7071, 0.7071, 0.0), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.05, 0.0, 1), rot = (0.0, -0.7071, 0.7071, 0.0), convention="ros"),
 
 
 
@@ -617,7 +617,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3 , track_air_time=True)
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=2 , track_air_time=True)
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -698,6 +698,7 @@ class HighLevelPolicyObsCfg(ObsGroup):
                 body_names=".*_foot"),
                 mass_kg=15.0,
                 return_shape="flat",
+                components="z"
             ),
             clip=(-3.0, 3.0),
         )
@@ -809,7 +810,7 @@ class RewardsCfg:
     position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
         weight=0.5,
-        params={"std": 0.8, "command_name": "pose_command"},
+        params={"std": 1.0, "command_name": "pose_command"},
     )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
@@ -935,7 +936,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
-        self.decimation = LOW_LEVEL_ENV_CFG.decimation #* 10　#TODO
+        self.decimation = LOW_LEVEL_ENV_CFG.decimation * 5#TODO
         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
 
        
