@@ -578,7 +578,7 @@ def dont_wait_rel3(env,
                   command_name: str = "goal_position",
                   distance_threshold: float = 0.2,
                   max_distance: float = 0.8,
-                  velocity_threshold: float = 0.01) -> torch.Tensor: # 閾値追加
+                  velocity_threshold: float = 0.1) -> torch.Tensor: # 閾値追加
     3
     # 1. 距離のペナルティ項 (遠いほど 1.0)
     des_pos_b = env.command_manager.get_command(command_name)[:, :2]

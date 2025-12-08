@@ -595,7 +595,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         # depth_clipping_behavior = "zero",
         # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
         # offset=CameraCfg.OffsetCfg(pos=(0.32, 0.0, 0.15), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
-        offset=CameraCfg.OffsetCfg(pos=(0.37, 0.0, 0.15), rot=(0.0616, -0.7044, 0.7044, -0.0616), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.37, 0.0, 0.15), rot=(0.0616, -0.7044, 0.7044, -0.0616), convention="ros"),
+        offset=CameraCfg.OffsetCfg(pos=(0.05, 0.0, 1), rot = (0.0, -0.7071, 0.7071, 0.0), convention="ros"),
 
 
 
@@ -685,7 +686,7 @@ class HighLevelPolicyObsCfg(ObsGroup):
             "normalize": True,      # depthの inf を0にするなどの処理をしてくれる
         },
         # ↓ここがキモ：このtermだけ履歴を持たせる
-        history_length=6,           # 4フレーム分スタック
+        history_length=3,           # 4フレーム分スタック
         flatten_history_dim=True,   # (B,4,H,W,C) → (B, 4*H*W*C)にflatten
     )
 
@@ -803,12 +804,12 @@ class RewardsCfg:
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
         weight=0.5,
-        params={"std": 0.4, "command_name": "pose_command"},
+        params={"std": 0.2, "command_name": "pose_command"},
     )
     position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
         weight=0.5,
-        params={"std": 1.2, "command_name": "pose_command"},
+        params={"std": 0.8, "command_name": "pose_command"},
     )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
@@ -830,7 +831,7 @@ class RewardsCfg:
     # )
 
     dont_wait = RewTerm(
-        func=mdp.dont_wait_rel3, weight=-5, 
+        func=mdp.dont_wait_rel3, weight=-1, 
         params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
     )
 
@@ -926,7 +927,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     commands: CommandsCfg = CommandsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
-    curriculum: CurriculumCfg = CurriculumCfg()
+    # curriculum: CurriculumCfg = CurriculumCfg()
 
 
     def __post_init__(self):
