@@ -802,13 +802,13 @@ class RewardsCfg:
     # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.7,
+        weight=0.5,
         params={"std": 0.4, "command_name": "pose_command"},
     )
     position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
         weight=0.5,
-        params={"std": 0.8, "command_name": "pose_command"},
+        params={"std": 1.2, "command_name": "pose_command"},
     )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
@@ -867,7 +867,7 @@ class CommandsCfg:
         resampling_time_range=(24.0, 24.0),
         debug_vis=True,
         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(1.0, 1.8), pos_y=(-0.0, 0.0), heading=(-0, 0)),
+        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.5, 1.8), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
     step_fr_to_block = mdp.FootstepFromHighLevelCfg()
@@ -901,7 +901,7 @@ class CurriculumCfg:
         func = mdp.schedule_reward_weight,
         params = {
             "term_name" : "position_tracking_fine_grained",
-            "weight": 0,
+            "weight": 0.1,
             "num_steps": 25000
         }
     )
