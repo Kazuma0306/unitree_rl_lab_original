@@ -222,7 +222,9 @@ class FootstepPolicyAction(ActionTerm):
 
              # ① 上位の raw_actions (self._raw_actions) を
             #   step_fr_to_block の command バッファに書き込む
-            self.step_cmd_term._command[:] = self._raw_actions
+            # self.step_cmd_term._command[:] = self._raw_actions
+            self.step_cmd_term.set_foot_targets_base(self._raw_actions)
+
             # 1) 低レベル観測を取得
             low_level_obs = self._low_level_obs_manager.compute_group("ll_policy")
 

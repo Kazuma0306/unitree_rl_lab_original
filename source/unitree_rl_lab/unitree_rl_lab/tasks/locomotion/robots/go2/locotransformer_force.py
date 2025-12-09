@@ -955,13 +955,13 @@ class VisionHighLevelAC(ActorCriticRecurrent):
         hm_channels: int = 3,  # Height + Mask なら 2。Heightだけなら 1 にする
         prop_encoder_dims: list[int] = [256, 256],
         hm_mlp_dims: list[int] = [256, 256],
-        projection_head_dims: list[int] = [256, 256],
-        actor_hidden_dims=[256, 256],
-        critic_hidden_dims=[256, 256],
+        projection_head_dims: list[int] = [256, 128],
+        actor_hidden_dims=[128, 256],
+        critic_hidden_dims=[128, 256],
         activation: str = "elu",
         use_layernorm: bool = True,
         rnn_type="gru",
-        rnn_hidden_dim=256,
+        rnn_hidden_dim=128,
         rnn_num_layers=1,
         **kwargs,
     ):

@@ -804,17 +804,17 @@ class RewardsCfg:
     # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.5,
+        weight=0.3,
         params={"std": 0.2, "command_name": "pose_command"},
     )
     position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.5,
+        weight=0.3,
         params={"std": 1.0, "command_name": "pose_command"},
     )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
-        weight=-0.2,
+        weight=-0.4,
         params={"command_name": "pose_command"},
     )
 
@@ -872,7 +872,9 @@ class CommandsCfg:
         ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.5, 1.8), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
-    step_fr_to_block = mdp.FootstepFromHighLevelCfg()
+    step_fr_to_block = mdp.FootstepFromHighLevelCfg(
+        debug_vis = True
+    )
 
 
 
