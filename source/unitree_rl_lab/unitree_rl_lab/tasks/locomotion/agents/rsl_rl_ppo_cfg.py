@@ -356,10 +356,12 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         num_learning_epochs=5,
         # num_learning_epochs=3,
         # num_mini_batches=4,
-        num_mini_batches=32,
+        num_mini_batches=16,
+
+        # num_mini_batches=32,
         # num_mini_batches=64,
         learning_rate=1.0e-4,
-        learning_rate=1.0e-5,
+        # learning_rate=1.0e-5,
 
         schedule="adaptive",
         gamma=0.99,

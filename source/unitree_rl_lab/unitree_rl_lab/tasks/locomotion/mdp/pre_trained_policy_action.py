@@ -103,25 +103,6 @@ class FootstepPolicyAction(ActionTerm):
                 self.low_level_actions[env.episode_length_buf == 0, :] = 0
             return self.low_level_actions
 
-        # ---- ここが重要：低レベル観測の "コマンド" 部分を差し替える ----
-        # あなたの low-level ObsGroup で「足先コマンド」に相当する term 名を使う
-        # ここでは仮に "foot_commands" と呼ぶことにします。
-        # cfg.low_level_observations.actions.func = lambda dummy_env: last_action()
-        # cfg.low_level_observations.actions.params = dict()
-
-        # cfg.low_level_observations.position_commands.func = (
-        #     lambda dummy_env: self._raw_actions
-        # )
-        # cfg.low_level_observations.position_commands.params = dict()
-
-        # 1) 低レベルが使う "last_action" 観測を内部バッファで上書き
-        # cfg.low_level_observations.last_action.func = lambda dummy_env: last_action()
-        # cfg.low_level_observations.last_action.params = dict()
-
-        # # 2) 低レベルが使う "position_commands" 観測を「上位の raw_actions」で上書き
-        # #    （上位が出した 12 次元の足先コマンドを、そのまま低レベルの観測に渡すイメージ）
-        # cfg.low_level_observations.position_commands.func = lambda dummy_env: self._raw_actions
-        # cfg.low_level_observations.params = dict()
 
         low_obs = cfg.low_level_observations  # LOW_LEVEL_ENV_CFG.observations.policy
 
@@ -140,6 +121,22 @@ class FootstepPolicyAction(ActionTerm):
         )
 
         self._counter = 0
+
+
+        self.nominal_footholds_b = torch.tensor(
+            [
+                [ 0.30, 0.18, -0.22],  # FL
+                [ 0.30,  -0.18, -0.22],  # FR
+                [-0.30, 0.18, -0.22],  # RL
+                [-0.30,  -0.18, -0.22],  # RR
+            ],
+            device=env.device,
+            dtype=torch.float32,
+        )
+
+        self.delta_x_max = 0.5  # [m] 前後には ±15cm までしか動かさない
+        self.delta_y_max = 0.5  # [m] 左右には ±10cm まで
+        self.delta_z_max = 0.1  # [m] 高さ方向 ±5cm
 
     # -------- Properties --------
 
@@ -163,57 +160,26 @@ class FootstepPolicyAction(ActionTerm):
     def process_actions(self, actions: torch.Tensor):
         # もし [-1,1] を物理座標に変換したいならここでやる：
         #   e.g. self._raw_actions[:] = self._unnormalize(actions)
-        self._raw_actions[:] = actions
+        # self._raw_actions[:] = actions
 
-    # def apply_actions(self):
-    #     # low-level policy の decimation に合わせる
-    #     if self._counter % self.cfg.low_level_decimation == 0:
 
-    #         # ① 上位の raw_actions (self._raw_actions) を
-    #         #    step_fr_to_block の command バッファに書き込む
-    #         self.step_cmd_term._command[:] = self._raw_actions
+        B = self.num_envs
 
-    #         # low-level policy が訓練時と同じ観測を再構成
-    #         low_level_obs = self._low_level_obs_manager.compute_group("ll_policy")
-    #         # low-level policy 推論 → joint targets など
-    #         self.low_level_actions[:] = self.policy(low_level_obs)
-    #         self._low_level_action_term.process_actions(self.low_level_actions)
-    #         self._counter = 0
+        # [-1,1] にクリップ（保険）
+        a = torch.clamp(actions, -1.0, 1.0).view(B, 4, 3)  # [B,4,3]
 
-    #     # 最終的な low-level actions をロボットに適用
-    #     self._low_level_action_term.apply_actions()
-    #     self._counter += 1
+        # 軸ごとにスケーリング → 残差 [m]
+        dx = a[..., 0] * self.delta_x_max  # [B,4]
+        dy = a[..., 1] * self.delta_y_max
+        dz = a[..., 2] * self.delta_z_max
 
-    
-    # def apply_actions(self):
-    #     if self._counter % self.cfg.low_level_decimation == 0:
-    #         # 1) 低レベル観測（dict）を取得
-    #         low_level_obs = self._low_level_obs_manager.compute_group("ll_policy")
+        delta = torch.stack([dx, dy, dz], dim=-1)  # [B,4,3]
 
-    #         # 2) dict -> Tensor にフラット化
-    #         if isinstance(low_level_obs, dict):
-    #             obs_tensors = []
-    #             # term_cfgs は定義順が保持されている前提
-    #             for name, term_cfg in self._low_level_obs_cfg.term_cfgs.items():
-    #                 # low_level_obs[name]: [B, ....]
-    #                 t = low_level_obs[name]
-    #                 t = t.view(t.shape[0], -1)  # 各 term を [B, dim_i] に
-    #                 obs_tensors.append(t)
-    #             low_level_obs_tensor = torch.cat(obs_tensors, dim=-1)  # [B, obs_dim]
-    #         else:
-    #             # もし将来 io_descriptor を入れて Tensor で返ってくるようになったとき用
-    #             low_level_obs_tensor = low_level_obs
+        # 名目足位置 + 残差
+        foot_targets_b = self.nominal_footholds_b.unsqueeze(0) + delta  # [B,4,3]
 
-    #         # 3) 低レベルポリシーを実行
-    #         with torch.no_grad():
-    #             self.low_level_actions[:] = self.policy(low_level_obs_tensor)
+        self._raw_actions[:] = foot_targets_b.view(B, -1)
 
-    #         # 4) 関節アクションへ反映
-    #         self._low_level_action_term.process_actions(self.low_level_actions)
-    #         self._counter = 0
-
-    #     self._low_level_action_term.apply_actions()
-    #     self._counter += 1
 
     
 
@@ -232,14 +198,6 @@ class FootstepPolicyAction(ActionTerm):
             if isinstance(low_level_obs, dict):
                 B = next(iter(low_level_obs.values())).shape[0]
 
-                # print("=== low_level_obs terms and dims ===")
-                # total = 0
-                # for k, v in low_level_obs.items():
-                #     dim_k = int(v[0].numel())
-                #     print(f"{k}: {dim_k}")
-                #     total += dim_k
-                # print("total dim (flat):", total)
-                # ここで total が今 225 になっている
 
                 # 必要なら self.policy 側の期待次元も見ておく
                 # 例: norm の mean の長さを使う（構造による）

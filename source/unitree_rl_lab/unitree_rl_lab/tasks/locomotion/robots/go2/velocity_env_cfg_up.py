@@ -841,7 +841,7 @@ class RewardsCfg:
 
     # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
 
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0) 
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0) 
 
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
