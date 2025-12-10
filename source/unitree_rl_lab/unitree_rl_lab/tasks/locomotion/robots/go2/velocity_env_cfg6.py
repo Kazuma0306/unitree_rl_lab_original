@@ -1325,8 +1325,8 @@ class CurriculumCfg:
 class RobotEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
     # Scene settings
-    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
-    scene: RobotSceneCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
+    scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
+    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -1377,9 +1377,9 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         #     if self.scene.terrain.terrain_generator is not None:
         #         self.scene.terrain.terrain_generator.curriculum = False
 
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 2
-            self.scene.terrain.terrain_generator.num_cols = 2
+        # if self.scene.terrain.terrain_generator is not None:
+        #     self.scene.terrain.terrain_generator.num_rows = 2
+        #     self.scene.terrain.terrain_generator.num_cols = 2
 
 
 

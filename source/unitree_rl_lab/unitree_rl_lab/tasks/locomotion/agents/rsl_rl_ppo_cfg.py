@@ -267,9 +267,9 @@ class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
 #         # num_learning_epochs=5,
 #         num_learning_epochs=3,
 #         # num_mini_batches=4,
-#         num_mini_batches = 32, # for transformer
+#         num_mini_batches = 16, # for transformer
 #         # learning_rate=1.0e-3,
-#         learning_rate=1.0e-4, # for transformer
+#         learning_rate=1.0e-3, # for transformer
 #         # learning_rate=1.0e-5, # for finetune
 #         schedule="adaptive",
 #         # schedule="constant",
@@ -279,13 +279,13 @@ class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
 #         max_grad_norm=1.0,
 #     )
 
-#     rnd =  RslRlRndCfg(
-#         weight = 1.0,
-#         learning_rate = 1.0e-4,
-#         predictor_hidden_dims = [128,128],
-#         target_hidden_dims = [256, 256]
+#     # rnd =  RslRlRndCfg(
+#     #     weight = 1.0,
+#     #     learning_rate = 1.0e-4,
+#     #     predictor_hidden_dims = [128,128],
+#     #     target_hidden_dims = [256, 256]
 
-#     )
+#     # )
 
 
 
@@ -355,8 +355,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         entropy_coef=0.005,
         num_learning_epochs=5,
         # num_learning_epochs=3,
-        # num_mini_batches=4,
-        num_mini_batches=16,
+        num_mini_batches=4,
+        # num_mini_batches=16,
 
         # num_mini_batches=32,
         # num_mini_batches=64,

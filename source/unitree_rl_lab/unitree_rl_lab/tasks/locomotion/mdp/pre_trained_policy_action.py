@@ -18,16 +18,16 @@ if TYPE_CHECKING:
 
 
 LOW_LEVEL_OBS_ORDER = [
-    "base_lin_vel",
-    "base_ang_vel",
-    "projected_gravity",
-    "position_commands",
-    "fr_target_xy_rel",
-    "leg_position",
-    "joint_pos_rel",
-    "joint_vel_rel",
-    "last_action",
-    "ft_stack",           # ← 本当に学習時に入っていたかは要確認
+    # "base_lin_vel",
+    # "base_ang_vel",
+    # "projected_gravity",
+    # "position_commands",
+    # "fr_target_xy_rel",
+    # "leg_position",
+    # "joint_pos_rel",
+    # "joint_vel_rel",
+    # "last_action",
+    # "ft_stack",           # ← 本当に学習時に入っていたかは要確認
     # ... 実際に rsl_rl_cfg に書いてあったもの全部
 
     # "base_lin_vel", "base_ang_vel", "projected_gravity",
@@ -48,7 +48,21 @@ LOW_LEVEL_OBS_ORDER = [
     # # "height_scanner",
     # "ft_stack"
 
+    "base_lin_vel",
+    "base_ang_vel",
+    "projected_gravity",
+    "position_commands",
+    "joint_pos_rel",
+    "joint_vel_rel",
+    "last_action", 
+    "fr_target_xy_rel",
+    "leg_position",
+    "ft_stack"
+
 ]
+
+
+
 
 
 class FootstepPolicyAction(ActionTerm):
@@ -125,18 +139,25 @@ class FootstepPolicyAction(ActionTerm):
 
         self.nominal_footholds_b = torch.tensor(
             [
-                [ 0.30, 0.18, -0.22],  # FL
-                [ 0.30,  -0.18, -0.22],  # FR
-                [-0.30, 0.18, -0.22],  # RL
-                [-0.30,  -0.18, -0.22],  # RR
+                [ 0.25, 0.18, -0.22],  # FL
+                [ 0.25,  -0.18, -0.22],  # FR
+                [-0.25, 0.18, -0.22],  # RL
+                [-0.25,  -0.18, -0.22],  # RR
             ],
             device=env.device,
             dtype=torch.float32,
         )
 
-        self.delta_x_max = 0.5  # [m] 前後には ±15cm までしか動かさない
-        self.delta_y_max = 0.5  # [m] 左右には ±10cm まで
-        self.delta_z_max = 0.1  # [m] 高さ方向 ±5cm
+        self.delta_x_max = 0.2  # [m] 前後には ±15cm までしか動かさない
+        self.delta_y_max = 0.2 # [m] 左右には ±10cm まで
+        self.delta_z_max = 0.02  # [m] 高さ方向 ±5cm
+
+
+
+
+
+
+
 
     # -------- Properties --------
 
@@ -179,6 +200,20 @@ class FootstepPolicyAction(ActionTerm):
         foot_targets_b = self.nominal_footholds_b.unsqueeze(0) + delta  # [B,4,3]
 
         self._raw_actions[:] = foot_targets_b.view(B, -1)
+
+
+        # 上位の PPO を無視して、自前で simple なコマンドを入れる
+        # B = self._raw_actions.shape[0]
+        # foot_targets = torch.zeros(B, 4, 3, device=self.device)
+
+        # # FL だけ前に出す、他は名目スタンス
+        # foot_targets[:, 0, :] = torch.tensor([0.35,  0.15, -0.30], device=self.device)
+        # foot_targets[:, 1, :] = torch.tensor([0.25, -0.15, -0.30], device=self.device)
+        # foot_targets[:, 2, :] = torch.tensor([-0.15,  0.15, -0.30], device=self.device)
+        # foot_targets[:, 3, :] = torch.tensor([-0.15, -0.15, -0.30], device=self.device)
+
+        # self._raw_actions[:] = foot_targets.view(B, -1)
+
 
 
     
@@ -227,24 +262,24 @@ class FootstepPolicyAction(ActionTerm):
 
             
             # ★ ここで policy が期待する obs_dim に合わせてパディング　TODO
-            try:
-                expected_dim = int(self.policy.normalizer.mean.shape[0])
-            except Exception:
-                # 正しく取れない場合はエラーから分かっている 256 に決め打ちでもよい
-                expected_dim = 256
+            # try:
+            #     expected_dim = int(self.policy.normalizer.mean.shape[0])
+            # except Exception:
+            #     # 正しく取れない場合はエラーから分かっている 256 に決め打ちでもよい
+            #     expected_dim = 256
 
-            cur_dim = low_level_obs_tensor.shape[1]
-            if cur_dim < expected_dim:
-                pad = expected_dim - cur_dim
-                pad_zeros = torch.zeros(
-                    (low_level_obs_tensor.shape[0], pad),
-                    device=low_level_obs_tensor.device,
-                    dtype=low_level_obs_tensor.dtype,
-                )
-                low_level_obs_tensor = torch.cat([low_level_obs_tensor, pad_zeros], dim=-1)
-            elif cur_dim > expected_dim:
-                # 念のため大きすぎた場合は切り詰め（多分発生しない）
-                low_level_obs_tensor = low_level_obs_tensor[:, :expected_dim]
+            # cur_dim = low_level_obs_tensor.shape[1]
+            # if cur_dim < expected_dim:
+            #     pad = expected_dim - cur_dim
+            #     pad_zeros = torch.zeros(
+            #         (low_level_obs_tensor.shape[0], pad),
+            #         device=low_level_obs_tensor.device,
+            #         dtype=low_level_obs_tensor.dtype,
+            #     )
+            #     low_level_obs_tensor = torch.cat([low_level_obs_tensor, pad_zeros], dim=-1)
+            # elif cur_dim > expected_dim:
+            #     # 念のため大きすぎた場合は切り詰め（多分発生しない）
+            #     low_level_obs_tensor = low_level_obs_tensor[:, :expected_dim]
 
 
 
