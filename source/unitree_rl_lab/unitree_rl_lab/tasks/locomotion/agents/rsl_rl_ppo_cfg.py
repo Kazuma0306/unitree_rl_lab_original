@@ -92,18 +92,13 @@ from unitree_rl_lab.tasks.locomotion.robots.go2.locotransformer_force import Loc
 
 @configclass
 class MlpHFPCfg(RslRlPpoActorCriticCfg):
-    
-    # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
-
     # class_name: str = "LocoTransformerActorCritic"
     class_name: str = "MlpHFP"
-
 
     # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
     prop_obs_keys: list[str] = [
         # "base_lin_vel", "base_ang_vel", "projected_gravity",
         # "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
-
         "base_lin_vel",
         "base_ang_vel",
         "projected_gravity",
@@ -119,7 +114,6 @@ class MlpHFPCfg(RslRlPpoActorCriticCfg):
     # heightmap_key : str = "height_scanner"
     ft_stack_key : str = "ft_stack"
 
-
     # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
     init_noise_std: float = 1.0
     actor_hidden_dims: list[int] = [256, 128]  # 例
@@ -128,14 +122,12 @@ class MlpHFPCfg(RslRlPpoActorCriticCfg):
 
 
 
+
+
 @configclass
 class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
-    
-    # 1. class_nameを、あなたのカスタムモデルへのパスで上書きします。
-
     # class_name: str = "LocoTransformerActorCritic"
     class_name: str = "VisionHighLevelAC"
-
 
     # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
     prop_obs_keys: list[str] = [
@@ -149,13 +141,10 @@ class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
         "last_action", 
         "leg_position",
         "ft_stack"
-
-
     ]
     # vision_obs_key: str = "camera_image"
     heightmap_key : str = "heightmap"
     # ft_stack_key : str = "ft_stack"
-
 
     # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
     init_noise_std: float = 1.0
@@ -163,6 +152,39 @@ class VisionHighLevelACCfg(RslRlPpoActorCriticCfg):
     critic_hidden_dims: list[int] = [256, 128] # 例
     activation: str = "elu"
 
+
+
+
+
+
+@configclass
+class VisionHighRNNCfg(RslRlPpoActorCriticCfg):
+    
+    # class_name: str = "LocoTransformerActorCritic"
+    class_name: str = "VisionHighRNN"
+
+    # 2. RslRlPpoActorCriticCfgにはない、あなたのモデル独自の引数をここに追加します。
+    prop_obs_keys: list[str] = [
+        # "base_lin_vel", "base_ang_vel", "projected_gravity",
+        # "position_commands", "joint_pos_rel", "joint_vel_rel", "last_action"
+
+        "base_lin_vel",
+        "base_ang_vel",
+        "projected_gravity",
+        "pose_command",
+        "last_action", 
+        "leg_position",
+        "ft_stack"
+    ]
+    # vision_obs_key: str = "camera_image"
+    heightmap_key : str = "heightmap"
+    # ft_stack_key : str = "ft_stack"
+
+    # 3. RslRlPpoActorCriticCfgから継承したデフォルト値を上書きすることもできます。
+    init_noise_std: float = 1.0
+    actor_hidden_dims: list[int] = [256, 128]  # 例
+    critic_hidden_dims: list[int] = [256, 128] # 例
+    activation: str = "elu"
 
 
 
@@ -362,6 +384,89 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         # num_mini_batches=64,
         learning_rate=1.0e-4,
         # learning_rate=1.0e-5,
+
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+        # max_grad_norm=0.5,
+    )
+
+
+
+
+# High Layer　RNN
+@configclass
+class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    num_steps_per_env = 48
+    # num_steps_per_env = 100
+    max_iterations = 4000
+    save_interval = 100
+    # experiment_name = "anymal_c_navigation"
+    experiment_name = ""  # same as task name
+    # empirical_normalization = False 
+    actor_obs_normalization=False, 
+    critic_obs_normalization=False,
+
+    obs_groups =  {
+    "policy": ["base_lin_vel",
+            "base_ang_vel",
+            "projected_gravity",
+            "pose_command",
+            "last_action", 
+            "leg_position",
+            "heightmap",
+            "ft_stack"
+            # "front_depth",
+            # "front_normals",
+            # "height_scanner",
+
+            ],
+    "critic":["base_lin_vel",
+            "base_ang_vel",
+            "projected_gravity",
+            "pose_command",
+            "last_action", 
+            "leg_position",
+            "heightmap",
+            "ft_stack"
+            # "front_depth",
+            # "front_normals",
+            # "height_scanner",
+                ],
+                
+    }
+
+
+    policy: RslRlPpoActorCriticCfg =  VisionHighRNNCfg()
+
+
+
+
+    # policy = RslRlPpoActorCriticCfg(
+    #     init_noise_std=0.5,
+    #     actor_obs_normalization=False,
+    #     critic_obs_normalization=False,
+    #     actor_hidden_dims=[128, 128],
+    #     critic_hidden_dims=[128, 128],
+    #     activation="elu",
+    # )
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        # value_loss_coef=0.5,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.005,
+        num_learning_epochs=5,
+        # num_learning_epochs=3,
+        # num_mini_batches=4,
+        # num_mini_batches=16,
+
+        num_mini_batches=32,
+        # num_mini_batches=64,
+        # learning_rate=1.0e-4,
+        learning_rate=3.0e-5,
 
         schedule="adaptive",
         gamma=0.99,
