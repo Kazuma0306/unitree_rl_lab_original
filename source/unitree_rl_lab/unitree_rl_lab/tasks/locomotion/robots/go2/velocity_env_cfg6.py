@@ -336,67 +336,6 @@ def make_ring_xy4(stone_w, gap, inner_half, outer_half):
     
     return [(float(x), float(y)) for x, y in zip(xs_flat, ys_flat)]
 
-# def make_ring_xy2(
-#     stone_w: float,           # タイル一辺
-#     gap: float,               # タイル間の隙間（中心間ピッチは stone_w+gap）
-#     inner_half: float,        # 中央安全帯の「半幅」(例: 1.5m四方なら 0.75)
-#     outer_half: float,        # 外縁の「半幅」（堀の内側など）
-#     center_xy=(0.0, 0.0),     # 格子の中心（env原点と一致させるのが基本）
-#     jitter: float = 0.0,      # 角度ではなく微小な位置ランダム(<= gap/2 推奨)
-# ):
-#     """
-#     原点（center_xy）に対して左右対称な格子を作り、各タイルの「外接正方形」が
-#     ・内側境界（inner_half）に食い込まない
-#     ・外側境界（outer_half）からはみ出さない
-#     ようにフィルタします（Chebyshev距離で判定）。
-#     """
-#     pitch = stone_w + gap
-#     cx, cy = center_xy
-
-#     # 外縁に“全面が入る”最大の個数を左右対称に計算
-#     # 有効幅は outer_half*2 から「左右の余白 stone_w」を引いた長さ
-#     usable = 2.0 * outer_half - stone_w
-#     if usable < 0:
-#         return []  # outer_half が小さすぎる
-#     n_axis = int(np.floor(usable / pitch)) + 1          # 片軸方向の個数
-#     # 中心対称に並ぶように原点を決める（左右に同数だけ並ぶ）
-#     start = -0.5 * pitch * (n_axis - 1)
-#     xs = start + np.arange(n_axis) * pitch + cx
-#     ys = start + np.arange(n_axis) * pitch + cy
-
-#     # グリッド化
-#     XX, YY = np.meshgrid(xs, ys, indexing="xy")
-#     XX = XX.ravel()
-#     YY = YY.ravel()
-
-#     # 各タイル中心に対し、タイル半径（=stone_w/2）を考慮して
-#     # 外側： |x-cx| or |y-cy| <= outer_half - stone_w/2
-#     # 内側： |x-cx| or |y-cy| >= inner_half + stone_w/2
-#     # で判定（Chebyshev距離＝外接正方形で判定）
-#     dx = np.abs(XX - cx)
-#     dy = np.abs(YY - cy)
-#     cheb = np.maximum(dx, dy)
-
-#     keep_outer = cheb <= (outer_half - stone_w * 0.5 + 1e-9)
-#     keep_inner = cheb >= (inner_half + stone_w * 0.5 - 1e-9)
-#     mask = keep_outer & keep_inner
-
-#     XX, YY = XX[mask], YY[mask]
-
-#     # 軽いゆらぎ（はみ出さないよう outer/inner を再チェックして抑制）
-#     if jitter > 0.0:
-#         jx = np.random.uniform(-jitter, jitter, size=XX.shape)
-#         jy = np.random.uniform(-jitter, jitter, size=YY.shape)
-#         XX2 = XX + jx
-#         YY2 = YY + jy
-#         dx2 = np.abs(XX2 - cx)
-#         dy2 = np.abs(YY2 - cy)
-#         cheb2 = np.maximum(dx2, dy2)
-#         ok = (cheb2 <= (outer_half - stone_w * 0.5)) & (cheb2 >= (inner_half + stone_w * 0.5))
-#         XX[ok] = XX2[ok]
-#         YY[ok] = YY2[ok]
-
-#     return [(float(x), float(y)) for x, y in zip(XX, YY)]
 
 
 STONE_W, STONE_H, GAP = 0.2, 0.3, 0.004

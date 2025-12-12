@@ -871,7 +871,7 @@ class EventCfg:
             "stone_names": [f"stone{i}" for i in range(1, 10)],
             "pose_range": {
                 "x": (-0.0, 0.0),
-                "y": (-0.04, 0.04),
+                "y": (-0.05, 0.05),
                 "z": (0.0, 0.0),
             },
 
@@ -1349,12 +1349,12 @@ class RewardsCfg:
 
     distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
 
-    wrong_penalty = RewTerm(func = mdp.WrongPlacePenalty, weight = -0.005)
+    wrong_penalty = RewTerm(func = mdp.WrongPlacePenalty, weight = -0.01)
 
 
   
 
-  
+
 
     # -- base
     base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.5)

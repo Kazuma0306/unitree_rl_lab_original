@@ -124,9 +124,9 @@ def main():
     # test_cfg["policy"]["class_name"] = LocoTransformerActorCritic
     # test_cfg["policy"]["class_name"] = LocoTransformerFinetune
     # test_cfg["policy"]["class_name"] = LocoTransformerHFP
-    test_cfg["policy"]["class_name"] = MlpHFP
+    # test_cfg["policy"]["class_name"] = MlpHFP
     # test_cfg["policy"]["class_name"] = VisionHighLevelAC
-    # test_cfg["policy"]["class_name"] = VisionHighRNN
+    test_cfg["policy"]["class_name"] = VisionHighRNN
 
 
 

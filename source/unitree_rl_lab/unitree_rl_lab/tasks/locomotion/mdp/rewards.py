@@ -3387,3 +3387,58 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
                 self.paid[m]   = False
 
         return payout
+
+
+
+
+
+
+import torch
+from isaaclab.managers import ManagerTermBase, RewardTermCfg
+from isaaclab.envs import ManagerBasedRLEnv
+
+class BaseProgressToTargetRel(ManagerTermBase):
+    """
+    base座標系で表現された目標位置ベクトル des_pos_b（例: [dx, dy]）に対して、
+    目標までの距離 dist の減少量 (prev - curr) を進捗報酬として返す。ロボット自身の進捗報酬
+
+    - 近づけば +、遠ざかれば -
+    - クリップで安定化
+    - リセット時に prev を再初期化
+    """
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        P = cfg.params
+        self.command_name = P.get("command_name", "pose_command")
+        self.use_xy       = bool(P.get("use_xy", True))     # TrueならXY距離
+        self.d_clip       = float(P.get("d_clip", 0.10))    # 1ステップの進捗クリップ[m]
+
+        # prev_dist: [B]
+        self.prev_dist = torch.full((env.num_envs,), float("nan"), device=env.device)
+
+    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        # コマンド: base座標系の目標相対位置（少なくとも dx,dy を含む想定）
+        des = env.command_manager.get_command(self.command_name)
+
+        if self.use_xy:
+            des_xy = des[:, :2]
+            dist = des_xy.norm(dim=1)  # [B]
+        else:
+            # 3Dで使いたい場合（desが[dx,dy,dz]を持つ前提）
+            dist = des[:, :3].norm(dim=1)
+
+        # reset時に prev を更新（脚版と同じ思想）
+        if hasattr(env, "reset_buf"):
+            m = env.reset_buf > 0
+            if m.any():
+                self.prev_dist[m] = dist[m].detach()
+
+        # 初回は0返して prev 初期化
+        if not torch.isfinite(self.prev_dist).all():
+            self.prev_dist[:] = dist.detach()
+            return torch.zeros_like(dist)
+
+        # 進捗（前回 − 現在）：近づくほど +、遠ざかると -
+        delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
+        self.prev_dist = dist.detach()
+        return delta

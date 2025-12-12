@@ -1256,3 +1256,68 @@ def obs_near_blocks(env: ManagerBasedEnv):
     )  # [N, 4*3 + 4]
     # return near_blocks.reshape(env.num_envs, -1)
     return obs_blocks
+
+
+
+
+
+
+
+
+def get_block_top_pos_base_collection(
+    env,
+    collection_name: str = "stones",
+    block_height: float = 0.3,
+):
+    """
+    RigidObjectCollection 版:
+    各ブロック上面中心の base 座標系での位置 [N_env, N_block, 3] を返す
+    """
+    device = env.device
+    robot = env.scene.articulations["robot"]
+
+    # base の world pose
+    # すでに root_state_w を使っているならそのままでもOK
+    base_state = robot.data.root_state_w        # [N_env, 13]
+    base_pos_w  = base_state[:, 0:3]           # [N_env, 3]
+    base_quat_w = base_state[:, 3:7]           # [N_env, 4]
+
+    # コレクションからブロック一括取得
+    stones = env.scene.rigid_object_collections[collection_name]
+
+    # 位置だけで良いので object_pos_w を使う
+    block_pos_w = stones.data.object_pos_w     # [N_env, N_block, 3]
+    block_pos_w = block_pos_w.clone()
+
+    # 上面中心に補正 (z方向に半分だけ上げる)
+    block_pos_w[..., 2] += block_height * 0.5
+
+    # base 座標系へ変換（ブロードキャスト）
+    rel_w = block_pos_w - base_pos_w[:, None, :]    # [N_env, N_block, 3]
+    pos_b = quat_apply_inverse(base_quat_w[:, None, :], rel_w)
+
+    return pos_b  # [N_env, N_block, 3]
+
+
+
+
+def obs_near_blocks_col(env):
+    # コレクションから取得
+    block_pos_b = get_block_top_pos_base_collection(
+        env,
+        collection_name="stones",
+        block_height=0.3,
+    )
+    # ここから先は元のまま
+    near_blocks, near_mask = select_near_blocks(
+        block_pos_b,
+        x_max=2.5,
+        y_max=1.2,
+        max_blocks=5,
+    )
+
+    obs_blocks = torch.cat(
+        [near_blocks.reshape(env.num_envs, -1), near_mask],
+        dim=-1,
+    )
+    return obs_blocks
