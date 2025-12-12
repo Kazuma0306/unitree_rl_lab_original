@@ -464,11 +464,11 @@ z0 = 0.1  # 石の厚みに応じた天板高さ
 
 
 
-sizex = 0.16
-sizey = 0.16
+sizex = 0.2
+sizey = 0.35
 MASS_B = 1.0
 
-MASS_B = 30
+MASS_B = 100
 
 
 @configclass
@@ -870,8 +870,8 @@ class EventCfg:
         params={
             "stone_names": [f"stone{i}" for i in range(1, 10)],
             "pose_range": {
-                "x": (-0.02, 0.02),
-                "y": (-0.02, 0.02),
+                "x": (-0.0, 0.0),
+                "y": (-0.04, 0.04),
                 "z": (0.0, 0.0),
             },
 
@@ -1354,6 +1354,8 @@ class RewardsCfg:
 
   
 
+  
+
     # -- base
     base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.5)
     # base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
@@ -1370,8 +1372,6 @@ class RewardsCfg:
     #     func=mdp.dont_wait_rel, weight=-1.0, # 前回実装した自作関数 -2.0 for simple walking
     #     params={"velocity_threshold": 0.2, "distance_threshold": 1.0, "command_name": "goal_position"}
     # )
-
-
 
     # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
 
@@ -2115,8 +2115,8 @@ class CurriculumCfg:
 class RobotEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
     # Scene settings
-    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
-    scene: RobotSceneCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
+    scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
+    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -2151,9 +2151,9 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
         # this generates terrains with increasing difficulty and is useful for training
 
-        if self.scene.terrain.terrain_generator is not None:
-            self.scene.terrain.terrain_generator.num_rows = 2
-            self.scene.terrain.terrain_generator.num_cols = 2
+        # if self.scene.terrain.terrain_generator is not None:
+        #     self.scene.terrain.terrain_generator.num_rows = 2
+        #     self.scene.terrain.terrain_generator.num_cols = 2
 
 
        

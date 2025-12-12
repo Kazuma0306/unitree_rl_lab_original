@@ -574,33 +574,66 @@ def dont_wait_rel2(env,
 
 
 
+# def dont_wait_rel3(env,
+#                   command_name: str = "goal_position",
+#                   distance_threshold: float = 0.2,
+#                   max_distance: float = 0.8,
+#                   velocity_threshold: float = 0.1) -> torch.Tensor: # 閾値追加
+#     3
+#     # 1. 距離のペナルティ項 (遠いほど 1.0)
+#     des_pos_b = env.command_manager.get_command(command_name)[:, :2]
+#     dist = des_pos_b.norm(dim=1)
+    
+#     dist_factor = (dist - distance_threshold) / (max_distance - distance_threshold)
+#     dist_factor = dist_factor.clamp(0.0, 1.0)
+
+#     # 2. 速度のペナルティ項 (遅いほど 1.0)
+#     # 現在の移動速度を取得
+#     vel = env.scene["robot"].data.root_lin_vel_b[:, :2].norm(dim=1)
+    
+#     # 0.2m/s 以下ならペナルティ発生、0.0m/s で最大
+#     speed_factor = (velocity_threshold - vel) / velocity_threshold
+#     speed_factor = speed_factor.clamp(0.0, 1.0)
+
+#     # 3. 結合: 「遠い」AND「遅い」ときだけ罰を与える
+#     penalty = dist_factor * speed_factor
+
+#     return penalty
+
+
+
 def dont_wait_rel3(env,
                   command_name: str = "goal_position",
                   distance_threshold: float = 0.2,
                   max_distance: float = 0.8,
-                  velocity_threshold: float = 0.1) -> torch.Tensor: # 閾値追加
-    3
-    # 1. 距離のペナルティ項 (遠いほど 1.0)
-    des_pos_b = env.command_manager.get_command(command_name)[:, :2]
-    dist = des_pos_b.norm(dim=1)
-    
+                  velocity_threshold: float = 0.1) -> torch.Tensor:
+    # 1. ゴールまでの距離（方向はまだ無視）
+    des_pos_b = env.command_manager.get_command(command_name)[:, :2]   # [N,2]
+    dist = des_pos_b.norm(dim=1)                                       # [N]
+
     dist_factor = (dist - distance_threshold) / (max_distance - distance_threshold)
     dist_factor = dist_factor.clamp(0.0, 1.0)
 
-    # 2. 速度のペナルティ項 (遅いほど 1.0)
-    # 現在の移動速度を取得
-    vel = env.scene["robot"].data.root_lin_vel_b[:, :2].norm(dim=1)
-    
-    # 0.2m/s 以下ならペナルティ発生、0.0m/s で最大
-    speed_factor = (velocity_threshold - vel) / velocity_threshold
+    # 2. base座標の速度ベクトル
+    v = env.scene["robot"].data.root_lin_vel_b[:, :2]                  # [N,2]
+
+    # ゴール方向の単位ベクトル
+    dist_safe = dist + 1e-6                                            # 0除算防止
+    goal_dir = des_pos_b / dist_safe.unsqueeze(1)                      # [N,2]
+
+    # ゴール方向への速度成分 (前進: >0, 後退: <0)
+    v_goal = (v * goal_dir).sum(dim=1)                                 # [N]
+
+    # 「前進速度」としてマイナスは 0 に潰す（後退は "0m/s" とみなす）
+    v_forward = torch.clamp(v_goal, min=0.0)
+
+    # 0.1 m/s 以下ならペナルティ発生、0.0 で最大
+    speed_factor = (velocity_threshold - v_forward) / velocity_threshold
     speed_factor = speed_factor.clamp(0.0, 1.0)
 
-    # 3. 結合: 「遠い」AND「遅い」ときだけ罰を与える
+    # 3. 遠い & ゴール方向に遅いときにペナルティ
     penalty = dist_factor * speed_factor
-
     return penalty
-
-
 
 
 

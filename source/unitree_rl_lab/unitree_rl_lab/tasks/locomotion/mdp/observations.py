@@ -1146,3 +1146,113 @@ def depth_heightmap4(
                 pass # dump_heightmapがない場合はスキップ
     
     return obs
+
+
+
+
+
+
+
+
+
+import torch
+from isaaclab.utils.math import quat_rotate_inverse
+from isaaclab.utils.math import quat_apply_inverse  # ← こっちを使う
+
+
+def get_block_top_pos_base(env, block_names, block_height=0.3):
+    """各ブロック上面中心の base 座標系での位置 [num_envs, num_blocks, 3] を返す。"""
+    device = env.device
+    robot = env.scene.articulations["robot"]
+
+    # base の world pose
+    base_state = robot.data.root_state_w  # [num_envs, 13]
+    base_pos_w = base_state[:, 0:3]       # [N, 3]
+    base_quat_w = base_state[:, 3:7]      # [N, 4]
+
+    block_pos_list = []
+    for name in block_names:
+        block = env.scene.rigid_objects[name]
+        state = block.data.root_state_w   # [num_envs, 13]
+        pos_w = state[:, 0:3].clone()
+
+        # 上面中心に補正 (z方向に半分だけ上げる)
+        pos_w[:, 2] += block_height * 0.5
+
+        # base 座標系へ変換
+        rel_w = pos_w - base_pos_w                      # world での相対
+        # pos_b = quat_rotate_inverse(base_quat_w, rel_w) # base 系に回転
+        pos_b = quat_apply_inverse(base_quat_w, rel_w)
+
+        block_pos_list.append(pos_b)
+
+    # [num_blocks, num_envs, 3] → [num_envs, num_blocks, 3]
+    block_pos_b = torch.stack(block_pos_list, dim=1)
+    return block_pos_b
+
+
+
+
+def select_near_blocks(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=6):
+    """
+    block_pos_b: [N_env, N_block, 3] (base座標系)
+    から、前方の近いブロックだけ max_blocks 個選んで返す。
+    戻り値: [N_env, max_blocks, 3]
+    """
+    x = block_pos_b[..., 0]
+    y = block_pos_b[..., 1]
+
+    # 条件: base 前方 & ある程度近い
+    mask = (x > -0.25) & (x < x_max) & (y.abs() < y_max)  # [N_env, N_block]
+
+    # 距離でソート
+    dist2 = x**2 + y**2
+    # マスクされてるところは大きな距離にして除外
+    big = 1e6
+    dist2_masked = torch.where(mask, dist2, big * torch.ones_like(dist2))
+
+    # 距離の小さい順に index を取る
+    # topk の代わりに sort して先頭 max_blocks を取る
+    sorted_dist, sorted_idx = torch.sort(dist2_masked, dim=1)
+
+    # 先頭 max_blocks の index
+    idx = sorted_idx[:, :max_blocks]  # [N_env, max_blocks]
+    dist_top = sorted_dist[:, :max_blocks]
+
+
+    # gather で [N_env, max_blocks, 3] を作る
+    idx_expanded = idx.unsqueeze(-1).expand(-1, -1, 3)
+    near_blocks = torch.gather(block_pos_b, dim=1, index=idx_expanded)
+
+    # 「ブロックが存在しない」ケース：全部 big になっているので、
+    # sorted_dist[:, 0] > big/2 ならその env はブロックなしと見なして 0 埋め等もできる
+    # return near_blocks
+
+
+    # 「本当に有効なブロックか？」を距離で判定
+    valid = dist_top < (big * 0.5)   # [N_env, max_blocks], True ならブロックあり
+
+    # 無効なところは 0 埋め
+    near_blocks = torch.where(
+        valid.unsqueeze(-1),
+        near_blocks,
+        torch.zeros_like(near_blocks)
+    )
+
+    near_mask = valid.float()
+    return near_blocks, near_mask
+
+
+def obs_near_blocks(env: ManagerBasedEnv):
+    block_names = [f"stone{i}" for i in range(1, 17)]
+    block_pos_b = get_block_top_pos_base(env, block_names, block_height=0.3)
+    near_blocks, near_mask = select_near_blocks(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=5)
+
+    # if env.env_id == 0:   # 適当な env だけ
+    # print("blocks:", near_blocks[0])
+    # print("mask  :", near_mask[0])
+    obs_blocks = torch.cat(
+    [near_blocks.reshape(env.num_envs, -1), near_mask], dim=-1
+    )  # [N, 4*3 + 4]
+    # return near_blocks.reshape(env.num_envs, -1)
+    return obs_blocks
