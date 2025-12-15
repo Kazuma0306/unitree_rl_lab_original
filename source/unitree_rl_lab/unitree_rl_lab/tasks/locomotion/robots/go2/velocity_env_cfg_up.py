@@ -819,7 +819,7 @@ class RewardsCfg:
     )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
-        weight=-0.4,
+        weight=-0.6,
         params={"command_name": "pose_command"},
     )
 

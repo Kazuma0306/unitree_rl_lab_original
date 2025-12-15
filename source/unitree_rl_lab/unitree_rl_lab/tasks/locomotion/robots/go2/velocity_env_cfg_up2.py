@@ -313,24 +313,42 @@ def make_ring_xy4(stone_w, gap, inner_half, outer_half):
 #     inner_half=0.75, outer_half=1.75, z=0.03, mass=3.0
 # )
 
-def make_stone_cfg(i, pos_xyz):
+# def make_stone_cfg(i, pos_xyz):
+#     return RigidObjectCfg(
+#         prim_path=f"{{ENV_REGEX_NS}}/Stone_{i:04d}",
+#         spawn=sim_utils.CuboidCfg(
+#             size=(0.2, 0.2, 0.3),
+#             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+#             mass_props=sim_utils.MassPropertiesCfg(mass=100),
+#             collision_props=sim_utils.CollisionPropertiesCfg(
+
+#                 collision_enabled=True,
+               
+#             ),
+#             physics_material=sim_utils.RigidBodyMaterialCfg(
+#                 static_friction=0.9, dynamic_friction=0.8, restitution=0.0
+#             ),
+#             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+#         ),
+#         init_state=RigidObjectCfg.InitialStateCfg(pos=pos_xyz)  # ここで初期配置
+#     )
+
+
+def make_stone_cfg(i, pos_xyz, size_xy=(0.2, 0.2), size_z=0.3):
+    sx, sy = size_xy
     return RigidObjectCfg(
         prim_path=f"{{ENV_REGEX_NS}}/Stone_{i:04d}",
         spawn=sim_utils.CuboidCfg(
-            size=(0.2, 0.2, 0.3),
+            size=(float(sx), float(sy), float(size_z)),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
             mass_props=sim_utils.MassPropertiesCfg(mass=100),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-
-                collision_enabled=True,
-               
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=0.9, dynamic_friction=0.8, restitution=0.0
             ),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=pos_xyz)  # ここで初期配置
+        init_state=RigidObjectCfg.InitialStateCfg(pos=pos_xyz)
     )
 
 
@@ -830,6 +848,9 @@ stone_xy_list, meta = stepping_stones_xy_front_half_pixelwise(
     max_points=None,            # num_stonesに合わせるなら apply 側で切る/退避が安全
 )
 
+
+actual_stone_width = meta['stone_w_eff_m']
+
 # 床が z=0 で、石を床の上に置くなら
 # z_center = STONE_H * 0.5   # 中心 = 高さの半分
 z_center = z0 - STONE_H * 0.5
@@ -838,6 +859,8 @@ stones_dict = {
     f"stone{i:04d}": make_stone_cfg(
         i,
         pos_xyz=(x, y, z_center),
+        size_xy = (actual_stone_width, actual_stone_width)
+
     )
     for i, (x, y) in enumerate(stone_xy_list, start=1)
 }
