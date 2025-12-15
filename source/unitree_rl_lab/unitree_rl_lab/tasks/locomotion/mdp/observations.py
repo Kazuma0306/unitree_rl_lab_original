@@ -1215,6 +1215,8 @@ def select_near_blocks(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=6):
     # topk の代わりに sort して先頭 max_blocks を取る
     sorted_dist, sorted_idx = torch.sort(dist2_masked, dim=1)
 
+
+
     # 先頭 max_blocks の index
     idx = sorted_idx[:, :max_blocks]  # [N_env, max_blocks]
     dist_top = sorted_dist[:, :max_blocks]
@@ -1264,39 +1266,137 @@ def obs_near_blocks(env: ManagerBasedEnv):
 
 
 
-def get_block_top_pos_base_collection(
-    env,
-    collection_name: str = "stones",
-    block_height: float = 0.3,
-):
-    """
-    RigidObjectCollection 版:
-    各ブロック上面中心の base 座標系での位置 [N_env, N_block, 3] を返す
-    """
-    device = env.device
+# def get_block_top_pos_base_collection(
+#     env,
+#     collection_name: str = "stones",
+#     block_height: float = 0.3,
+# ):
+#     """
+#     RigidObjectCollection 版:
+#     各ブロック上面中心の base 座標系での位置 [N_env, N_block, 3] を返す
+#     """
+#     device = env.device
+#     robot = env.scene.articulations["robot"]
+
+#     # base の world pose
+#     # すでに root_state_w を使っているならそのままでもOK
+#     base_state = robot.data.root_state_w        # [N_env, 13]
+#     base_pos_w  = base_state[:, 0:3]           # [N_env, 3]
+#     base_quat_w = base_state[:, 3:7]           # [N_env, 4]
+
+#     # コレクションからブロック一括取得
+#     stones = env.scene.rigid_object_collections[collection_name]
+
+#     # 位置だけで良いので object_pos_w を使う
+#     block_pos_w = stones.data.object_pos_w     # [N_env, N_block, 3]
+#     block_pos_w = block_pos_w.clone()
+
+#     # 上面中心に補正 (z方向に半分だけ上げる)
+#     block_pos_w[..., 2] += block_height * 0.5
+
+#     # base 座標系へ変換（ブロードキャスト）
+#     rel_w = block_pos_w - base_pos_w[:, None, :]    # [N_env, N_block, 3]
+#     pos_b = quat_apply_inverse(base_quat_w[:, None, :], rel_w)
+
+#     return pos_b  # [N_env, N_block, 3]
+
+
+
+
+def get_block_top_pos_base_collection(env, collection_name="stones", block_height=0.3):
+    """RigidObjectCollection 版: [N_env, N_block, 3] を返す"""
     robot = env.scene.articulations["robot"]
-
-    # base の world pose
-    # すでに root_state_w を使っているならそのままでもOK
-    base_state = robot.data.root_state_w        # [N_env, 13]
-    base_pos_w  = base_state[:, 0:3]           # [N_env, 3]
-    base_quat_w = base_state[:, 3:7]           # [N_env, 4]
-
-    # コレクションからブロック一括取得
     stones = env.scene.rigid_object_collections[collection_name]
 
-    # 位置だけで良いので object_pos_w を使う
-    block_pos_w = stones.data.object_pos_w     # [N_env, N_block, 3]
-    block_pos_w = block_pos_w.clone()
+    # base の world pose
+    base_state = robot.data.root_state_w            # [N_env, 13]
+    base_pos_w  = base_state[:, 0:3]                # [N_env, 3]
+    base_quat_w = base_state[:, 3:7]                # [N_env, 4]
 
-    # 上面中心に補正 (z方向に半分だけ上げる)
+    # ブロック位置 [N_env, N_block, 3] と仮定
+    block_pos_w = stones.data.object_pos_w.clone()  # [N_env, N_block, 3]
+
+    # 上面中心に補正
     block_pos_w[..., 2] += block_height * 0.5
 
-    # base 座標系へ変換（ブロードキャスト）
+    # base 基準に平行移動
     rel_w = block_pos_w - base_pos_w[:, None, :]    # [N_env, N_block, 3]
-    pos_b = quat_apply_inverse(base_quat_w[:, None, :], rel_w)
 
-    return pos_b  # [N_env, N_block, 3]
+    n_env, n_block, _ = rel_w.shape
+
+    # クォータニオンをブロック数ぶん複製して flatten
+    quat_flat = base_quat_w[:, None, :].expand(-1, n_block, -1).reshape(-1, 4)  # [N_env*N_block, 4]
+    vec_flat  = rel_w.reshape(-1, 3)                                            # [N_env*N_block, 3]
+
+    # まとめて base 座標系へ
+    pos_b_flat = quat_apply_inverse(quat_flat, vec_flat)                        # [N_env*N_block, 3]
+    pos_b = pos_b_flat.view(n_env, n_block, 3)                                  # [N_env, N_block, 3]
+
+    return pos_b
+
+
+
+def select_near_blocks2(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=6):
+    """
+    block_pos_b: [N_env, N_block, 3] (base座標系)
+    戻り値:
+      near_blocks: [N_env, max_blocks, 3]
+      near_mask  : [N_env, max_blocks] (1=有効, 0=ダミー)
+    """
+    x = block_pos_b[..., 0]
+    y = block_pos_b[..., 1]
+
+    N_env, N_block = x.shape
+
+    # 条件フィルタ
+    mask = (x > -0.25) & (x < x_max) & (y.abs() < y_max)  # [N_env, N_block]
+
+    dist2 = x**2 + y**2
+    big = 1e6
+    dist2_masked = torch.where(mask, dist2, big * torch.ones_like(dist2))
+
+    # 距離小さい順にソート
+    sorted_dist, sorted_idx = torch.sort(dist2_masked, dim=1)
+
+    # 実際に使えるのは max_blocks か N_block の小さい方
+    k = min(max_blocks, N_block)
+
+    idx_k = sorted_idx[:, :k]       # [N_env, k]
+    dist_k = sorted_dist[:, :k]     # [N_env, k]
+
+    idx_expanded = idx_k.unsqueeze(-1).expand(-1, -1, 3)
+    near_k = torch.gather(block_pos_b, dim=1, index=idx_expanded)   # [N_env, k, 3]
+
+    # 有効フラグ
+    valid_k = dist_k < (big * 0.5)  # [N_env, k]
+
+    # ここからパディングして [N_env, max_blocks, ...] にそろえる
+    if k < max_blocks:
+        pad_blocks = torch.zeros(
+            (N_env, max_blocks - k, 3),
+            device=block_pos_b.device,
+            dtype=block_pos_b.dtype,
+        )
+        pad_mask = torch.zeros(
+            (N_env, max_blocks - k),
+            device=block_pos_b.device,
+            dtype=valid_k.dtype,
+        )
+        near_blocks = torch.cat([near_k, pad_blocks], dim=1)  # [N_env, max_blocks, 3]
+        near_mask = torch.cat([valid_k.float(), pad_mask], dim=1)  # [N_env, max_blocks]
+    else:
+        near_blocks = near_k
+        near_mask = valid_k.float()
+
+    # 無効なところは 0 埋め（念のため）
+    near_blocks = torch.where(
+        near_mask.unsqueeze(-1) > 0.5,
+        near_blocks,
+        torch.zeros_like(near_blocks),
+    )
+
+    return near_blocks, near_mask
+
 
 
 
@@ -1309,7 +1409,7 @@ def obs_near_blocks_col(env):
         block_height=0.3,
     )
     # ここから先は元のまま
-    near_blocks, near_mask = select_near_blocks(
+    near_blocks, near_mask = select_near_blocks2(
         block_pos_b,
         x_max=2.5,
         y_max=1.2,

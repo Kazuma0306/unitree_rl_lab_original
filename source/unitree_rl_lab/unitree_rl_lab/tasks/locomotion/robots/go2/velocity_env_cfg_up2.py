@@ -243,6 +243,64 @@ def make_ring_xy4(stone_w, gap, inner_half, outer_half):
 
 
 
+
+# def make_ring_xy5(stone_w, inner_half, outer_half, gap=1e-4, margin=1e-3, y_limit=1.55):
+#     """
+#     - stone_w: ブロックの一辺
+#     - inner_half: 中央台の半サイズ（ここでは 0.5）
+#     - outer_half: 外側の半径（どこまで石を敷き詰めるか）
+#     - gap: ブロック同士の間隔（ほぼ 0）
+#     - margin: 台の縁からブロックまでのすき間（ほぼ 0）
+#     """
+#     pitch = stone_w + gap
+#     half_w = stone_w / 2.0
+
+#     # 台の縁 (inner_half) から見て
+#     # 「ブロック内側の縁」がほぼ接する位置にブロック中心を置きたい：
+#     #   inner_edge ≒ inner_half + margin
+#     #   center = inner_edge + half_w
+#     # => r0: 最初のリングの中心半径
+#     r0 = inner_half + margin + half_w  # 0.5 + margin + 0.15 ≒ 0.65
+
+#     # 正の側の中心座標を r0 から pitch 間隔で生成
+#     # ブロックの外側までが outer_half を越えない範囲で。
+#     max_center = outer_half - half_w
+#     if r0 > max_center:
+#         return []
+
+#     coords_pos = np.arange(r0, max_center + 1e-6, pitch)
+#     coords_neg = -coords_pos[::-1]  # 原点対称に
+
+#     if coords_pos.size == 0:
+#         return []
+
+#     xs = np.concatenate((coords_neg, coords_pos))
+#     ys = np.concatenate((coords_neg, coords_pos))
+
+#     xs_grid, ys_grid = np.meshgrid(xs, ys, indexing="xy")
+
+#     # L∞ノルム（チェビシェフ距離）でリング帯を取る
+#     max_dist_center = np.maximum(np.abs(xs_grid), np.abs(ys_grid))
+
+#     # 中央台＋マージンより外側
+#     m_inner = (max_dist_center >= r0 - half_w)   # だいたい inner_half + margin
+
+#     # outer_half からはみ出さない
+#     m_outer = (max_dist_center <= outer_half - half_w)
+
+#     # 前方（+x）側だけ使うなら：
+#     m_positive_x = (xs_grid - half_w > 0.0)
+
+#     # y 範囲制限（必要なら調整）
+#     m_y_upper = (ys_grid + half_w < y_limit)
+#     m_y_lower = (ys_grid - half_w > -y_limit)
+
+#     m = m_inner & m_outer & m_positive_x & m_y_upper & m_y_lower
+
+#     xs_flat, ys_flat = xs_grid[m], ys_grid[m]
+#     return [(float(x), float(y)) for x, y in zip(xs_flat, ys_flat)]
+
+
 # STONE_W, STONE_H, GAP = 0.2, 0.3, 0.004
 # stone_xy_list = make_ring_xy4(STONE_W, GAP, inner_half=0.7, outer_half=3.37)
 
@@ -261,7 +319,7 @@ def make_stone_cfg(i, pos_xyz):
         spawn=sim_utils.CuboidCfg(
             size=(0.2, 0.2, 0.3),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
+            mass_props=sim_utils.MassPropertiesCfg(mass=100),
             collision_props=sim_utils.CollisionPropertiesCfg(
 
                 collision_enabled=True,
@@ -282,11 +340,298 @@ z0 = 0.3  # 石の厚みに応じた天板高さ
 
 STONE_W, STONE_H, GAP = 0.2, 0.3, 0.004
 
+
+# STONE_W = 0.3       # 0.3 x 0.3 のブロック
+# STONE_H = 0.3
+# GAP     = 0.01      # ピッチ = 0.31m → そこそこ詰めて並ぶ
+
+# CENTER_HALF = 0.5   # 中央の台の半分の大きさ
+# MARGIN      = 0.05  # 台の縁からブロックまでの隙間 (~5cm)
+
+# INNER_HALF  = CENTER_HALF + MARGIN  # = 0.55
+# OUTER_HALF  = 1.5                   # 好きな広さに調整
+
 stone_xy_list = make_ring_xy4(
     stone_w=STONE_W,
     gap=GAP,
     inner_half=0.7,
     outer_half=3.37,
+)
+
+
+# 中央の台
+# PLATFORM_SIZE = 1.0          # 1.0 x 1.0
+# PLATFORM_HALF = PLATFORM_SIZE * 0.5
+
+# # Go2 のサイズ感（大雑把）
+# GO2_LENGTH = 0.70            # だいたい 70 cm
+# GO2_WIDTH  = 0.31            # だいたい 31 cm
+
+# # 石幅のレンジ [m]（例：簡単な時は 0.35、大変になると 0.22 まで細く）
+# STONE_WIDTH_RANGE = (0.22, 0.35)     # (min, max)
+
+# # 石同士のギャップのレンジ [m]（例：最初ほぼ 0、難しくなると ~0.3）
+# STONE_GAP_RANGE   = (0.0, 0.30)      # (min, max)
+
+# # リングの内側半径（台の縁+数 mm）
+# INNER_MARGIN = 0.01                  # 台とのギャップほぼ 0
+# INNER_HALF   = PLATFORM_HALF + INNER_MARGIN   # ≒ 0.51
+
+# # リングの厚さ（どこまで外側に石を置くか）
+# RING_WIDTH   = GO2_LENGTH * 2     # 体長の8割くらい外に広げる
+# OUTER_HALF   = INNER_HALF + RING_WIDTH
+# OUTER_HALF   = 5
+
+
+# Y_LIMIT      = 1.2                   # 左右にどこまで石を出すか
+# STONE_H      = 0.30                  # 高さは一定
+
+
+
+
+# def generate_stepping_stone_ring_xy(
+#     stone_w: float,
+#     inner_half: float,
+#     outer_half: float,
+#     gap: float = 1e-4,
+#     margin: float = 1e-3,
+#     y_limit: float = 1.5,
+#     front_only: bool = True,
+# ):
+#     """
+#     - stone_w   : ブロック一辺
+#     - inner_half: 中央台の半サイズ＋α (この内側には石を置かない)
+#     - outer_half: リングの外側半径
+#     - gap       : ブロック同士の隙間
+#     - margin    : inner_half から石までの隙間（ほぼ0でOK）
+#     - y_limit   : |y| <= y_limit の範囲だけ使う
+#     - front_only: True なら +x 側だけ（ロボット前方だけ）石を置く
+#     戻り値: [(x, y), ...]  （env原点基準のローカル座標）
+#     """
+#     pitch = stone_w + gap
+#     half_w = stone_w * 0.5
+
+#     # 台の縁 inner_half から margin だけ外側に、
+#     # ブロックの内側がほぼ接するように中心半径 r0 を決める
+#     #   inner_edge ≒ inner_half + margin
+#     #   center    = inner_edge + half_w
+#     r0 = inner_half + margin + half_w
+
+#     max_center = outer_half - half_w
+#     if r0 > max_center:
+#         return []
+
+#     # 正側の中心位置を r0 から pitch ごとに並べる
+#     coords_pos = np.arange(r0, max_center + 1e-6, pitch)
+#     if coords_pos.size == 0:
+#         return []
+
+#     coords_neg = -coords_pos[::-1]
+
+#     xs = np.concatenate((coords_neg, coords_pos))
+#     ys = np.concatenate((coords_neg, coords_pos))
+
+#     xs_grid, ys_grid = np.meshgrid(xs, ys, indexing="xy")
+
+#     # L∞ノルムでリング判定
+#     max_dist_center = np.maximum(np.abs(xs_grid), np.abs(ys_grid))
+
+#     m_inner = (max_dist_center >= r0 - half_w)   # 中央台＋margin から外側
+#     m_outer = (max_dist_center <= outer_half - half_w)
+
+#     # 前方だけにするかどうか
+#     if front_only:
+#         m_x = (xs_grid - half_w > 0.0)
+#     else:
+#         m_x = np.ones_like(xs_grid, dtype=bool)
+
+#     # y 範囲制限
+#     m_y_upper = (ys_grid + half_w < y_limit)
+#     m_y_lower = (ys_grid - half_w > -y_limit)
+
+#     m = m_inner & m_outer & m_x & m_y_upper & m_y_lower
+
+#     xs_flat, ys_flat = xs_grid[m], ys_grid[m]
+#     return [(float(x), float(y)) for x, y in zip(xs_flat, ys_flat)]
+
+
+
+
+
+
+
+# def resolve_stone_params(difficulty: float):
+#     """
+#     IsaacLab公式 stepping_stones_terrain と同じ補間で
+#     石幅とギャップを決める。
+#     difficulty: 0.0(易) ～ 1.0(難)
+#     """
+#     d = float(np.clip(difficulty, 0.0, 1.0))
+
+#     w_min, w_max = STONE_WIDTH_RANGE
+#     g_min, g_max = STONE_GAP_RANGE
+
+#     # stone_width = max - d*(max-min)
+#     stone_w = w_max - d * (w_max - w_min)
+#     # stone_distance = min + d*(max-min)
+#     stone_gap = g_min + d * (g_max - g_min)
+
+#     return stone_w, stone_gap
+
+
+
+
+# def generate_ring_xy_isaac(
+#     difficulty: float,
+#     inner_half: float = INNER_HALF,
+#     outer_half: float = OUTER_HALF,
+#     y_limit: float = Y_LIMIT,
+#     front_only: bool = True,
+# ):
+#     """
+#     IsaacLab公式と同じ difficulty 補間で
+#     stone_w / gap を決めてリング座標を返す。
+#     戻り値: [(x, y), ...] （env原点基準）
+#     """
+#     stone_w, stone_gap = resolve_stone_params(difficulty)
+#     return generate_stepping_stone_ring_xy(
+#         stone_w=stone_w,
+#         inner_half=inner_half,
+#         outer_half=outer_half,
+#         gap=stone_gap,
+#         margin=1e-4,      # 台との隙間ほぼ0
+#         y_limit=y_limit,
+#         front_only=front_only,
+#     )
+
+
+
+# difficulty = 0.1   # カリキュラム等で決める [0,1]
+
+# stone_xy_list = generate_ring_xy_isaac(difficulty)
+
+
+
+# stone_xy_list = make_ring_xy5(
+#     stone_w=STONE_W,
+#     inner_half=CENTER_HALF,
+#     outer_half=OUTER_HALF,
+#     gap=1e-4,     # ブロック同士のギャップ ≒ 0
+#     margin=1e-3,  # 台の縁とのギャップ ≒ 0
+# )
+
+
+
+
+
+import numpy as np
+
+def quantize(v: float, h: float) -> float:
+    """horizontal_scale の格子に合わせて丸める"""
+    return round(v / h) * h
+
+def rects_intersect(ax0, ax1, ay0, ay1, bx0, bx1, by0, by1) -> bool:
+    return (ax0 < bx1) and (ax1 > bx0) and (ay0 < by1) and (ay1 > by0)
+
+
+
+def generate_xy_list_front_isaac(
+    terrain_size_xy=(8.0, 8.0),     # (Lx, Ly) [m] そのタイルの大きさ
+    horizontal_scale=0.05,          # [m] Terrain HF と揃えたい格子
+    stone_size_xy=(0.35, 0.25),     # (sx, sy) [m] ブロック天板サイズ（XY）
+    gap_xy=(0.15, 0.15),            # (gx, gy) [m] ブロック間ギャップ
+    platform_size=1.2,              # 中央台の一辺 [m]（正方形を仮定）
+    platform_center=(0.0, 0.0),     # 台中心（普通は (0,0)）
+    x_front_ratio=0.5,              # 前半のみ = 0.5（x>0 側）
+    margin=0.10,                    # 端からの余白 [m]
+    clearance=0.02,                 # 台との追加クリアランス [m]
+    per_row_phase=True,             # 行ごとに位相ずらし（stepping-stones風）
+    jitter_xy=(0.0, 0.0),           # (jx, jy) [m] 追加ランダム
+    seed=0,
+):
+    rng = np.random.default_rng(seed)
+
+    Lx, Ly = terrain_size_xy
+    sx, sy = stone_size_xy
+    gx, gy = gap_xy
+    jx, jy = jitter_xy
+
+    # ピッチ（中心間距離）
+    px = sx + gx
+    py = sy + gy
+
+    # 台（platform）のAABB
+    pcx, pcy = platform_center
+    half_p = platform_size * 0.5
+    plat_x0 = pcx - half_p - clearance
+    plat_x1 = pcx + half_p + clearance
+    plat_y0 = pcy - half_p - clearance
+    plat_y1 = pcy + half_p + clearance
+
+    # 配置領域（中心座標で安全に収まる範囲）
+    x_min = 0.0 + margin + sx * 0.5
+    x_max = (Lx * x_front_ratio) - margin - sx * 0.5  # x>0 側だけ使う想定（原点が中心なら Lx/2 が前端）
+    y_min = -Ly * 0.5 + margin + sy * 0.5
+    y_max = +Ly * 0.5 - margin - sy * 0.5
+
+    # 格子に量子化（HFと揃えるなら推奨）
+    x_min = quantize(x_min, horizontal_scale)
+    x_max = quantize(x_max, horizontal_scale)
+    y_min = quantize(y_min, horizontal_scale)
+    y_max = quantize(y_max, horizontal_scale)
+    px_q  = max(horizontal_scale, quantize(px, horizontal_scale))
+    py_q  = max(horizontal_scale, quantize(py, horizontal_scale))
+
+    points = []
+
+    # y の帯（row）を走査
+    y = y_min
+    row = 0
+    while y <= y_max + 1e-9:
+        # 行ごとに x の開始位相をずらす（完全格子にしたいなら 0 に固定）
+        phase = rng.uniform(0.0, sx) if per_row_phase else 0.0
+        x = x_min + quantize(phase, horizontal_scale)
+
+        while x <= x_max + 1e-9:
+            # ジッター（必要なら）
+            xx = x + (rng.uniform(-jx, jx) if jx > 0 else 0.0)
+            yy = y + (rng.uniform(-jy, jy) if jy > 0 else 0.0)
+
+            # 格子に戻す（HFと揃える）
+            xx = quantize(xx, horizontal_scale)
+            yy = quantize(yy, horizontal_scale)
+
+            # 石のAABB（中心から）
+            stone_x0 = xx - sx * 0.5
+            stone_x1 = xx + sx * 0.5
+            stone_y0 = yy - sy * 0.5
+            stone_y1 = yy + sy * 0.5
+
+            # 中央台と交差する石は除外
+            if not rects_intersect(stone_x0, stone_x1, stone_y0, stone_y1,
+                                   plat_x0, plat_x1, plat_y0, plat_y1):
+                points.append((xx, yy))
+
+            x += px_q
+
+        y += py_q
+        row += 1
+
+    return np.asarray(points, dtype=np.float32)
+
+
+
+stone_xy_list = generate_xy_list_front_half(
+    terrain_size_xy=(8.0, 8.0),
+    horizontal_scale=0.05,
+    stone_size_xy=(0.3, 0.3),
+    gap_xy=(0.1, 0.1),
+    platform_size=1.0,
+    x_front_ratio=0.5,     # 前半（x>0 側）だけ
+    margin=0.10,
+    clearance=0.0,
+    per_row_phase=False,
+    # seed=42,
 )
 
 # 床が z=0 で、石を床の上に置くなら
@@ -303,9 +648,10 @@ stones_dict = {
 
 
 stones = RigidObjectCollectionCfg(
-        prim_path="{ENV_REGEX_NS}/Stones",  # コレクションの親
+        # prim_path="{ENV_REGEX_NS}/Stones",  # コレクションの親
         rigid_objects=stones_dict,
 )
+from dataclasses import field
 
 
 
@@ -815,7 +1161,7 @@ class HighLevelPolicyObsCfg(ObsGroup):
     # )
 
     heightmap = ObsTerm(
-        func = mdp.obs_near_blocks
+        func = mdp.obs_near_blocks_col
 
     )
 
@@ -1061,10 +1407,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
     # environment settings
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
 
     actions: ActionsCfg = ActionsCfg()
@@ -1083,6 +1429,8 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
         self.decimation = LOW_LEVEL_ENV_CFG.decimation * 5#TODO　５Hz 10Hz
         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
+        self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
+
 
        
         if self.scene.contact_forces is not None:
