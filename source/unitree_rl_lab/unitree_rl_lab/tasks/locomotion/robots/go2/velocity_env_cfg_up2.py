@@ -540,116 +540,294 @@ def snap_down(v, h): return np.floor(v / h) * h
 def snap_near(v, h): return np.round(v / h) * h
 
 
+def lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * t
 
-def generate_xy_list_front_isaac(
-    terrain_size_xy=(8.0, 8.0),     # (Lx, Ly) [m] そのタイルの大きさ
-    horizontal_scale=0.05,          # [m] Terrain HF と揃えたい格子
-    stone_size_xy=(0.35, 0.25),     # (sx, sy) [m] ブロック天板サイズ（XY）
-    gap_xy=(0.15, 0.15),            # (gx, gy) [m] ブロック間ギャップ
-    platform_size=1.2,              # 中央台の一辺 [m]（正方形を仮定）
-    platform_center=(0.0, 0.0),     # 台中心（普通は (0,0)）
-    x_front_ratio=0.5,              # 前半のみ = 0.5（x>0 側）
-    margin=0.10,                    # 端からの余白 [m]
-    clearance=0.02,                 # 台との追加クリアランス [m]
-    per_row_phase=True,             # 行ごとに位相ずらし（stepping-stones風）
-    jitter_xy=(0.0, 0.0),           # (jx, jy) [m] 追加ランダム
-    seed=0,
-):
-    rng = np.random.default_rng(seed)
+def clamp01(x: float) -> float:
+    return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
 
-    Lx, Ly = terrain_size_xy
-    sx, sy = stone_size_xy
-    gx, gy = gap_xy
-    jx, jy = jitter_xy
+def params_from_difficulty(
+    difficulty: float,
+    horizontal_scale: float,
+    stone_width_range_m: tuple[float, float],      # (max, min) 例: (0.40, 0.20)
+    stone_distance_range_m: tuple[float, float],   # (min, max) 例: (0.10, 0.35)
+) -> tuple[int, int, float, float]:
+    """
+    IsaacLab の stepping-stones と同じ発想:
+      - 幅は difficulty↑で小さく: max -> min
+      - 距離は difficulty↑で大きく: min -> max
+    その後 int(.../h) でピクセル化（切り捨て）する。
+    """
+    d = clamp01(float(difficulty))
+    w_max, w_min = stone_width_range_m
+    dist_min, dist_max = stone_distance_range_m
 
-    # ピッチ（中心間距離）
-    px = sx + gx
-    py = sy + gy
+    w_m    = lerp(w_max,  w_min,  d)      # 幅は減る
+    dist_m = lerp(dist_min, dist_max, d)  # 距離は増える
 
-    # 台（platform）のAABB
-    pcx, pcy = platform_center
-    half_p = platform_size * 0.5
-    plat_x0 = pcx - half_p - clearance
-    plat_x1 = pcx + half_p + clearance
-    plat_y0 = pcy - half_p - clearance
-    plat_y1 = pcy + half_p + clearance
+    w_px    = max(1, int(w_m / horizontal_scale))
+    dist_px = max(0, int(dist_m / horizontal_scale))
 
-    # 配置領域（中心座標で安全に収まる範囲）
-    x_min = 0.0 + margin + sx * 0.5
-    x_max = (Lx * x_front_ratio) - margin - sx * 0.5  # x>0 側だけ使う想定（原点が中心なら Lx/2 が前端）
-    y_min = -Ly * 0.5 + margin + sy * 0.5
-    y_max = +Ly * 0.5 - margin - sy * 0.5
+    # “実際に使われる（=ピクセルに落ちた）”メートル値
+    w_eff_m    = w_px * horizontal_scale
+    dist_eff_m = dist_px * horizontal_scale
+    return w_px, dist_px, w_eff_m, dist_eff_m
 
-    # 格子に量子化（HFと揃えるなら推奨）
-    # x_min = quantize(x_min, horizontal_scale)
-    # x_max = quantize(x_max, horizontal_scale)
-    # y_min = quantize(y_min, horizontal_scale)
-    # y_max = quantize(y_max, horizontal_scale)
 
-    # スナップは min=ceil / max=floor
-    x_min = snap_up(x_min, horizontal_scale)
-    x_max = snap_down(x_max, horizontal_scale)
-    y_min = snap_up(y_min, horizontal_scale)
-    y_max = snap_down(y_max, horizontal_scale)
 
-    # px_q  = max(horizontal_scale, quantize(px, horizontal_scale))
-    # py_q  = max(horizontal_scale, quantize(py, horizontal_scale))
 
-    px_q = max(horizontal_scale, snap_near(px, horizontal_scale))
-    py_q = max(horizontal_scale, snap_near(py, horizontal_scale))
+# def generate_xy_list_front_isaac(
+#     terrain_size_xy=(8.0, 8.0),     # (Lx, Ly) [m] そのタイルの大きさ
+#     horizontal_scale=0.05,          # [m] Terrain HF と揃えたい格子
+#     stone_size_xy=(0.35, 0.25),     # (sx, sy) [m] ブロック天板サイズ（XY）
+#     gap_xy=(0.15, 0.15),            # (gx, gy) [m] ブロック間ギャップ
+#     platform_size=1.2,              # 中央台の一辺 [m]（正方形を仮定）
+#     platform_center=(0.0, 0.0),     # 台中心（普通は (0,0)）
+#     x_front_ratio=0.5,              # 前半のみ = 0.5（x>0 側）
+#     margin=0.10,                    # 端からの余白 [m]
+#     clearance=0.02,                 # 台との追加クリアランス [m]
+#     per_row_phase=True,             # 行ごとに位相ずらし（stepping-stones風）
+#     jitter_xy=(0.0, 0.0),           # (jx, jy) [m] 追加ランダム
+#     seed=0,
+# ):
+#     rng = np.random.default_rng(seed)
 
-    points = []
+#     Lx, Ly = terrain_size_xy
+#     sx, sy = stone_size_xy
+#     gx, gy = gap_xy
+#     jx, jy = jitter_xy
 
-    # y の帯（row）を走査
-    y = y_min
+#     # ピッチ（中心間距離）
+#     px = sx + gx
+#     py = sy + gy
+
+#     # 台（platform）のAABB
+#     pcx, pcy = platform_center
+#     half_p = platform_size * 0.5
+#     plat_x0 = pcx - half_p - clearance
+#     plat_x1 = pcx + half_p + clearance
+#     plat_y0 = pcy - half_p - clearance
+#     plat_y1 = pcy + half_p + clearance
+
+#     # 配置領域（中心座標で安全に収まる範囲）
+#     x_min = 0.0 + margin + sx * 0.5
+#     x_max = (Lx * x_front_ratio) - margin - sx * 0.5  # x>0 側だけ使う想定（原点が中心なら Lx/2 が前端）
+#     y_min = -Ly * 0.5 + margin + sy * 0.5
+#     y_max = +Ly * 0.5 - margin - sy * 0.5
+
+#     # 格子に量子化（HFと揃えるなら推奨）
+#     # x_min = quantize(x_min, horizontal_scale)
+#     # x_max = quantize(x_max, horizontal_scale)
+#     # y_min = quantize(y_min, horizontal_scale)
+#     # y_max = quantize(y_max, horizontal_scale)
+
+#     # スナップは min=ceil / max=floor
+#     x_min = snap_up(x_min, horizontal_scale)
+#     x_max = snap_down(x_max, horizontal_scale)
+#     y_min = snap_up(y_min, horizontal_scale)
+#     y_max = snap_down(y_max, horizontal_scale)
+
+#     # px_q  = max(horizontal_scale, quantize(px, horizontal_scale))
+#     # py_q  = max(horizontal_scale, quantize(py, horizontal_scale))
+
+#     px_q = max(horizontal_scale, snap_near(px, horizontal_scale))
+#     py_q = max(horizontal_scale, snap_near(py, horizontal_scale))
+
+#     points = []
+
+#     # y の帯（row）を走査
+#     y = y_min
+#     row = 0
+#     while y <= y_max + 1e-9:
+#         # 行ごとに x の開始位相をずらす（完全格子にしたいなら 0 に固定）
+#         phase = rng.uniform(0.0, sx) if per_row_phase else 0.0
+#         x = x_min + quantize(phase, horizontal_scale)
+
+#         while x <= x_max + 1e-9:
+#             # ジッター（必要なら）
+#             xx = x + (rng.uniform(-jx, jx) if jx > 0 else 0.0)
+#             yy = y + (rng.uniform(-jy, jy) if jy > 0 else 0.0)
+
+#             # 格子に戻す（HFと揃える）
+#             xx = quantize(xx, horizontal_scale)
+#             yy = quantize(yy, horizontal_scale)
+
+#             # 石のAABB（中心から）
+#             stone_x0 = xx - sx * 0.5
+#             stone_x1 = xx + sx * 0.5
+#             stone_y0 = yy - sy * 0.5
+#             stone_y1 = yy + sy * 0.5
+
+#             # 中央台と交差する石は除外
+#             if not rects_intersect(stone_x0, stone_x1, stone_y0, stone_y1,
+#                                    plat_x0, plat_x1, plat_y0, plat_y1):
+#                 points.append((xx, yy))
+
+#             x += px_q
+
+#         y += py_q
+#         row += 1
+
+#     # return np.asarray(points, dtype=np.float32)
+
+#     return points
+
+
+
+import math
+import random
+from typing import List, Tuple, Optional
+
+def rect_intersect_1d(a0: int, a1: int, b0: int, b1: int) -> bool:
+    return (a0 < b1) and (a1 > b0)
+
+def stepping_stones_xy_front_half_pixelwise(
+    size_x_m: float,
+    size_y_m: float,
+    horizontal_scale: float,
+    platform_width_m: float,
+    difficulty: float,
+    stone_width_range_m: tuple[float, float] = (0.40, 0.20),     # (max, min)
+    stone_distance_range_m: tuple[float, float] = (0.10, 0.35),  # (min, max)
+    margin_m: float = 0.00,              # 外周の安全マージン
+    platform_clearance_m: float = 0.00,  # 台からさらに離したいなら +（0で“IsaacLabの台境界ぴったり”）
+    per_row_phase: bool = True,          # 行ごとに開始位相をランダム化（IsaacLab風）
+    seed: int = 0,
+    max_points: Optional[int] = None,    # 石数を固定したいなら指定（足りない場合は返り値が少なくなる）
+) -> tuple[List[Tuple[float, float]], dict]:
+    """
+    返り値:
+      - xy: [(x_local, y_local), ...]  ※すべて Python float（OmegaConfでも安全）
+      - meta: 実効 stone_size/gap などデバッグ情報
+    """
+    h = float(horizontal_scale)
+    rng = random.Random(seed)
+
+    # --- 1) IsaacLab と同じくピクセルで実効サイズを決める（intで切り捨て）
+    W = int(size_x_m / h)   # x方向ピクセル数
+    H = int(size_y_m / h)   # y方向ピクセル数
+    size_x_eff = W * h
+    size_y_eff = H * h
+
+    cx = W // 2
+    cy = H // 2
+
+    # --- 2) difficulty から stone_width / stone_distance を決めてピクセル化
+    w_px, dist_px, w_eff_m, dist_eff_m = params_from_difficulty(
+        difficulty, h, stone_width_range_m, stone_distance_range_m
+    )
+    pitch_px = max(1, w_px + dist_px)
+
+    # --- 3) platform も IsaacLab と同じピクセル境界で切る
+    pf_px = int(platform_width_m / h)
+    # IsaacLabっぽい中心切り出し（整数境界）
+    px1 = (W - pf_px) // 2
+    px2 = (W + pf_px) // 2
+    py1 = (H - pf_px) // 2
+    py2 = (H + pf_px) // 2
+
+    # clearance を “ピクセル” で拡張（台を避けすぎるのが嫌なら 0 推奨）
+    clear_px = int(platform_clearance_m / h)
+    px1c, px2c = px1 - clear_px, px2 + clear_px
+    py1c, py2c = py1 - clear_px, py2 + clear_px
+
+    # --- 4) 外周マージンもピクセルで（はみ出しゼロを保証するため）
+    margin_px = int(margin_m / h)
+
+    # --- 5) まず「石パッチ左下(x0,y0)」をピクセルで走査
+    #   y0 は下から上へ、x0 は “前半(x>=0)” 側だけ
+    #
+    # 重要: RigidObject は欠けられないので、パッチが完全に入る範囲だけにする
+    #
+    # ピクセルiのx座標(m) は (i - cx)*h とする（cxがx=0近辺）
+    # “前半”は中心より右（i >= cx）だが、パッチ幅があるので中心側を少し避ける
+    #
+    # パッチが完全に入る条件: x0 >= 0側境界 かつ x0+w_px <= W-margin_px
+    y0_min = margin_px
+    y0_max = H - margin_px - w_px
+    x0_min = max(cx, margin_px)          # x>=0側へ
+    x0_max = W - margin_px - w_px
+
+    xy: List[Tuple[float, float]] = []
+
+    y0 = y0_min
     row = 0
-    while y <= y_max + 1e-9:
-        # 行ごとに x の開始位相をずらす（完全格子にしたいなら 0 に固定）
-        phase = rng.uniform(0.0, sx) if per_row_phase else 0.0
-        x = x_min + quantize(phase, horizontal_scale)
+    while y0 <= y0_max:
+        # 行ごとに “開始位相” をランダムにズラす（0〜w_px-1）
+        phase = rng.randrange(0, w_px) if (per_row_phase and w_px > 1) else 0
+        x0 = x0_min + phase
 
-        while x <= x_max + 1e-9:
-            # ジッター（必要なら）
-            xx = x + (rng.uniform(-jx, jx) if jx > 0 else 0.0)
-            yy = y + (rng.uniform(-jy, jy) if jy > 0 else 0.0)
+        while x0 <= x0_max:
+            # --- 台との交差（ピクセル矩形で判定）
+            sx0, sx1 = x0, x0 + w_px
+            sy0, sy1 = y0, y0 + w_px
+            hit_platform = rect_intersect_1d(sx0, sx1, px1c, px2c) and rect_intersect_1d(sy0, sy1, py1c, py2c)
 
-            # 格子に戻す（HFと揃える）
-            xx = quantize(xx, horizontal_scale)
-            yy = quantize(yy, horizontal_scale)
+            if not hit_platform:
+                # 石の中心（ピクセル）→ メートル
+                # ここは “ピクセル中心”に寄せておくと分かりやすい
+                xc = x0 + w_px * 0.5
+                yc = y0 + w_px * 0.5
+                x_m = (xc - cx) * h
+                y_m = (yc - cy) * h
 
-            # 石のAABB（中心から）
-            stone_x0 = xx - sx * 0.5
-            stone_x1 = xx + sx * 0.5
-            stone_y0 = yy - sy * 0.5
-            stone_y1 = yy + sy * 0.5
+                # --- 最終安全チェック（メートルAABBで “はみ出しゼロ”）
+                # 前半のみ: x - w/2 >= 0
+                if (x_m - w_eff_m * 0.5) >= 0.0 + margin_px * h and \
+                   (x_m + w_eff_m * 0.5) <= (size_x_eff * 0.5 - margin_px * h) and \
+                   (abs(y_m) + w_eff_m * 0.5) <= (size_y_eff * 0.5 - margin_px * h):
+                    xy.append((float(x_m), float(y_m)))
+                    if max_points is not None and len(xy) >= max_points:
+                        meta = dict(
+                            W=W, H=H, size_x_eff=size_x_eff, size_y_eff=size_y_eff,
+                            stone_w_px=w_px, stone_dist_px=dist_px, pitch_px=pitch_px,
+                            stone_w_eff_m=w_eff_m, stone_dist_eff_m=dist_eff_m,
+                            platform_pf_px=pf_px, platform_bbox_px=(px1c, px2c, py1c, py2c),
+                        )
+                        return xy, meta
 
-            # 中央台と交差する石は除外
-            if not rects_intersect(stone_x0, stone_x1, stone_y0, stone_y1,
-                                   plat_x0, plat_x1, plat_y0, plat_y1):
-                points.append((xx, yy))
+            x0 += pitch_px
 
-            x += px_q
-
-        y += py_q
+        y0 += pitch_px
         row += 1
 
-    # return np.asarray(points, dtype=np.float32)
+    meta = dict(
+        W=W, H=H, size_x_eff=size_x_eff, size_y_eff=size_y_eff,
+        stone_w_px=w_px, stone_dist_px=dist_px, pitch_px=pitch_px,
+        stone_w_eff_m=w_eff_m, stone_dist_eff_m=dist_eff_m,
+        platform_pf_px=pf_px, platform_bbox_px=(px1c, px2c, py1c, py2c),
+    )
+    return xy, meta
 
-    return points
 
 
+# stone_xy_list = generate_xy_list_front_isaac(
+#     terrain_size_xy=(8.0, 8.0),
+#     horizontal_scale=0.05,
+#     stone_size_xy=(0.3, 0.3),
+#     gap_xy=(0.1, 0.1),
+#     platform_size=1.0,
+#     x_front_ratio=0.5,     # 前半（x>0 側）だけ
+#     margin=0.10,
+#     clearance=0.0,
+#     per_row_phase=False,
+#     # seed=42,
+# )
 
-stone_xy_list = generate_xy_list_front_isaac(
-    terrain_size_xy=(8.0, 8.0),
+
+stone_xy_list, meta = stepping_stones_xy_front_half_pixelwise(
+    size_x_m=8.0,
+    size_y_m=8.0,
     horizontal_scale=0.05,
-    stone_size_xy=(0.3, 0.3),
-    gap_xy=(0.1, 0.1),
-    platform_size=1.0,
-    x_front_ratio=0.5,     # 前半（x>0 側）だけ
-    margin=0.10,
-    clearance=0.0,
+    platform_width_m=1.0,
+    difficulty=0.3,
+    stone_width_range_m=(0.40, 0.20),
+    stone_distance_range_m=(0.10, 0.35),
+    margin_m=0.05,
+    platform_clearance_m=0.0,   # まずは 0 推奨（避けすぎを防ぐ）
     per_row_phase=False,
-    # seed=42,
+    # seed=123,
+    max_points=None,            # num_stonesに合わせるなら apply 側で切る/退避が安全
 )
 
 # 床が z=0 で、石を床の上に置くなら
