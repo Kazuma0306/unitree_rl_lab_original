@@ -535,6 +535,12 @@ def rects_intersect(ax0, ax1, ay0, ay1, bx0, bx1, by0, by1) -> bool:
 
 
 
+def snap_up(v, h):   return np.ceil(v / h) * h
+def snap_down(v, h): return np.floor(v / h) * h
+def snap_near(v, h): return np.round(v / h) * h
+
+
+
 def generate_xy_list_front_isaac(
     terrain_size_xy=(8.0, 8.0),     # (Lx, Ly) [m] そのタイルの大きさ
     horizontal_scale=0.05,          # [m] Terrain HF と揃えたい格子
@@ -575,12 +581,22 @@ def generate_xy_list_front_isaac(
     y_max = +Ly * 0.5 - margin - sy * 0.5
 
     # 格子に量子化（HFと揃えるなら推奨）
-    x_min = quantize(x_min, horizontal_scale)
-    x_max = quantize(x_max, horizontal_scale)
-    y_min = quantize(y_min, horizontal_scale)
-    y_max = quantize(y_max, horizontal_scale)
-    px_q  = max(horizontal_scale, quantize(px, horizontal_scale))
-    py_q  = max(horizontal_scale, quantize(py, horizontal_scale))
+    # x_min = quantize(x_min, horizontal_scale)
+    # x_max = quantize(x_max, horizontal_scale)
+    # y_min = quantize(y_min, horizontal_scale)
+    # y_max = quantize(y_max, horizontal_scale)
+
+    # スナップは min=ceil / max=floor
+    x_min = snap_up(x_min, horizontal_scale)
+    x_max = snap_down(x_max, horizontal_scale)
+    y_min = snap_up(y_min, horizontal_scale)
+    y_max = snap_down(y_max, horizontal_scale)
+
+    # px_q  = max(horizontal_scale, quantize(px, horizontal_scale))
+    # py_q  = max(horizontal_scale, quantize(py, horizontal_scale))
+
+    px_q = max(horizontal_scale, snap_near(px, horizontal_scale))
+    py_q = max(horizontal_scale, snap_near(py, horizontal_scale))
 
     points = []
 
@@ -617,7 +633,9 @@ def generate_xy_list_front_isaac(
         y += py_q
         row += 1
 
-    return np.asarray(points, dtype=np.float32)
+    # return np.asarray(points, dtype=np.float32)
+
+    return points
 
 
 

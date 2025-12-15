@@ -809,12 +809,12 @@ class RewardsCfg:
     # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
     position_tracking = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.5,
+        weight=0.3,
         params={"std": 0.2, "command_name": "pose_command"},
     )
     position_tracking_fine_grained = RewTerm(
         func=mdp.position_command_error_tanh,
-        weight=0.5,
+        weight=0.3,
         params={"std": 1.6, "command_name": "pose_command"},
     )
     orientation_tracking = RewTerm(
