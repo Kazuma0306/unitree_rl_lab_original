@@ -1587,7 +1587,7 @@ class VisionHighRNN(ActorCriticRecurrent):
         # hm_shape: tuple[int, int] = (64, 64),
         # hm_channels: int = 2,  # Height + Mask なら 2。Heightだけなら 1 にする
         prop_encoder_dims: list[int] = [256, 256],
-        hm_mlp_dims: list[int] = [256, 256],
+        hm_mlp_dims: list[int] = [512, 256],
         projection_head_dims: list[int] = [256, 128],
         actor_hidden_dims=[128, 256],
         critic_hidden_dims=[128, 256],

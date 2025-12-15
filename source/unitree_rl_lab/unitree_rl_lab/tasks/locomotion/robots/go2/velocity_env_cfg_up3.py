@@ -1,4 +1,4 @@
-#Upper Model  Environment
+#Upper Model  Environment (Heightmap)
 
 import math
 
@@ -102,13 +102,13 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     border_width=20.0,
     num_rows=10,
     num_cols=20,
-    horizontal_scale=0.05,
+    horizontal_scale=0.02,
     vertical_scale=0.005,
     slope_threshold=0.75,
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        # "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
+        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
         # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
         #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # ),
@@ -119,7 +119,7 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
         # ),
 
         "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.7, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (0.7, 1.5), stone_distance_range = (0.05, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+             proportion=0.9, border_width=0.25,  horizontal_scale = 0.02, stone_height_max = 0.00, stone_width_range = (0.7, 1.5), stone_distance_range = (0.02, 0.09),  holes_depth = -3.0, platform_width = 1.0,
 
         ),
 
@@ -871,10 +871,10 @@ stones_dict = {
 }
 
 
-stones = RigidObjectCollectionCfg(
-        # prim_path="{ENV_REGEX_NS}/Stones",  # コレクションの親
-        rigid_objects=stones_dict,
-)
+# stones = RigidObjectCollectionCfg(
+#         # prim_path="{ENV_REGEX_NS}/Stones",  # コレクションの親
+#         rigid_objects=stones_dict,
+# )
 from dataclasses import field
 
 
@@ -890,8 +890,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
-        # terrain_generator= STEPPING_STONES_CFG, 
-        terrain_generator= MOAT_CFG, # proposed env
+        terrain_generator= STEPPING_STONES_CFG, 
+        # terrain_generator= MOAT_CFG, # proposed env
         # terrain_generator= BLOCK_CFG,
         max_init_terrain_level=0,
         collision_group=-1,
@@ -917,9 +917,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
     #     )
 
 
-    stones: RigidObjectCollectionCfg = field(
-        default_factory=lambda: stones   # 上で作った stones を渡す
-    )
+    # stones: RigidObjectCollectionCfg = field(
+    #     default_factory=lambda: stones   # 上で作った stones を渡す
+    # )
 
 
 
@@ -1259,14 +1259,15 @@ class RobotSceneCfg(InteractiveSceneCfg):
     
 
     # sensors
-    # height_scanner = RayCasterCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/base",
-    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-    #     attach_yaw_only=True,
-    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
-    #     debug_vis=True,
-    #     mesh_prim_paths=["/World/ground"],
-    # )
+    height_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        attach_yaw_only=True,
+        # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.02, size=[1.2, 1.2]),
+        debug_vis=True,
+        mesh_prim_paths=["/World/ground"],
+    )
 
     # camera = TiledCameraCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
@@ -1384,9 +1385,14 @@ class HighLevelPolicyObsCfg(ObsGroup):
     #     flatten_history_dim=True,   # (B,4,H,W,C) → (B, 4*H*W*C)にflatten
     # )
 
-    heightmap = ObsTerm(
-        func = mdp.obs_near_blocks_col
+    # heightmap = ObsTerm(
+    #     func = mdp.obs_near_blocks_col
 
+    # )
+
+    heightmap = ObsTerm(func=mdp.height_scan,
+        params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+        clip=(-1.0, 5.0),
     )
 
     ft_stack = ObsTerm(
@@ -1679,6 +1685,10 @@ class CurriculumCfg:
     )
 
 
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_nav) 
+
+
+
 
 
 
@@ -1688,10 +1698,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
     # environment settings
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)

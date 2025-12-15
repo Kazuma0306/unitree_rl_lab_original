@@ -128,7 +128,7 @@ def terrain_levels_nav(
     env_ids,
     goal_key: str = "goal_position",
     success_radius: float = 0.3,          # 到達半径[m]
-    demote_radius: float = 1.3,           # まだこれより遠ければ降格（地形/タイルに合わせ調整）
+    demote_radius: float = 0.8,           # まだこれより遠ければ降格（地形/タイルに合わせ調整）
     check_after_frac: float = 0.5,        # エピソード半分経過で降格判定を許可
     ):
     terrain = env.scene.terrain
