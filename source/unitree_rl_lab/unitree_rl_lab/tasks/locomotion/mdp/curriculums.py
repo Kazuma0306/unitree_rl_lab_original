@@ -126,7 +126,7 @@ def ang_vel_cmd_levels(
 def terrain_levels_nav(
     env,
     env_ids,
-    goal_key: str = "goal_position",
+    goal_key: str = "pose_command",
     success_radius: float = 0.3,          # 到達半径[m]
     demote_radius: float = 0.8,           # まだこれより遠ければ降格（地形/タイルに合わせ調整）
     check_after_frac: float = 0.5,        # エピソード半分経過で降格判定を許可
@@ -151,8 +151,20 @@ def terrain_levels_nav(
 
     move_down = (~move_up) & elapsed_enough & (dist > demote_radius)
 
+
+    print("before:", terrain.terrain_levels[env_ids].tolist())
+
+
     # 公式と同じAPI
     terrain.update_env_origins(env_ids, move_up, move_down)
+
+
+    print("after :", terrain.terrain_levels[env_ids].tolist())
+
+
+
+    print("up/down:", int(move_up.sum()), int(move_down.sum()))
+
     return terrain.terrain_levels.float().mean()
 
 
