@@ -843,7 +843,7 @@ stone_xy_list, meta = stepping_stones_xy_front_half_pixelwise(
     size_y_m=8.0,
     horizontal_scale=0.02,
     platform_width_m=1.0,
-    difficulty=0,
+    difficulty=0.67,
     stone_width_range_m=(0.50, 0.20),
     stone_distance_range_m=(0.02, 0.05),
     margin_m=0.2,
@@ -1332,7 +1332,7 @@ class ActionsCfg:
     pre_trained_policy_action: mdp.FootstepPolicyActionCfg = mdp.FootstepPolicyActionCfg(
         asset_name="robot",
         # policy_path=f"{ISAACLAB_NUCLEUS_DIR}/Policies/ANYmal-C/Blind/policy.pt", #TODO
-        policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed4/2025-12-12_13-10-05/exported/policy.pt",
+        policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed4/2025-12-12_10-36-24/exported/policy.pt",
         low_level_decimation=4,
         low_level_actions=LOW_LEVEL_ENV_CFG.actions.JointPositionAction, #lower's action
         low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy, # lower's observation
@@ -1573,7 +1573,7 @@ class RewardsCfg:
     )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
-        weight=-0.6,
+        weight=-0.8,
         params={"command_name": "pose_command"},
     )
 
@@ -1583,7 +1583,7 @@ class RewardsCfg:
 
     # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
     # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
     # # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
     # energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
@@ -1691,9 +1691,9 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
 
     actions: ActionsCfg = ActionsCfg()
@@ -1712,7 +1712,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
         self.decimation = LOW_LEVEL_ENV_CFG.decimation * 5#TODO　５Hz 10Hz
         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
-        self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
+        self.sim.physx.gpu_max_rigid_patch_count = 1000000 # 例：約100万 (1,048,576) に設定
 
 
        

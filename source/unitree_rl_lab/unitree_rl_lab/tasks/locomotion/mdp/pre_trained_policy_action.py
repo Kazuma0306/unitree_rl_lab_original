@@ -139,17 +139,17 @@ class FootstepPolicyAction(ActionTerm):
 
         self.nominal_footholds_b = torch.tensor(
             [
-                [ 0.25, 0.18, -0.35],  # FL
-                [ 0.25,  -0.18, -0.35],  # FR
-                [-0.25, 0.18, -0.35],  # RL
-                [-0.25,  -0.18, -0.35],  # RR
+                [ 0.25, 0.15, -0.35],  # FL
+                [ 0.25,  -0.15, -0.35],  # FR
+                [-0.25, 0.15, -0.35],  # RL
+                [-0.25,  -0.15, -0.35],  # RR
             ],
             device=env.device,
             dtype=torch.float32,
         )
 
         self.delta_x_max = 0.2  # [m] 前後には ±15cm までしか動かさない
-        self.delta_y_max = 0.2 # [m] 左右には ±10cm まで
+        self.delta_y_max = 0.12 # [m] 左右には ±10cm まで
         self.delta_z_max = 0.01  # [m] 高さ方向 ±5cm
 
 

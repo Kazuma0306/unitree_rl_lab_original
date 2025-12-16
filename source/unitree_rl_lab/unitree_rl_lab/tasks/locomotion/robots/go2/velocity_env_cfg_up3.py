@@ -119,7 +119,7 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
         # ),
 
         "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.9, border_width=0.25,  horizontal_scale = 0.02, stone_height_max = 0.00, stone_width_range = (0.7, 1.5), stone_distance_range = (0.02, 0.09),  holes_depth = -3.0, platform_width = 1.0,
+             proportion=0.9, border_width=0.25,  horizontal_scale = 0.02, stone_height_max = 0.00, stone_width_range = (0.7, 1.5), stone_distance_range = (0.03, 0.09),  holes_depth = -3.0, platform_width = 1.0,
 
         ),
 
@@ -860,15 +860,15 @@ actual_stone_width = meta['stone_w_eff_m']
 # z_center = STONE_H * 0.5   # 中心 = 高さの半分
 z_center = z0 - STONE_H * 0.5
 
-stones_dict = {
-    f"stone{i:04d}": make_stone_cfg(
-        i,
-        pos_xyz=(x, y, z_center),
-        size_xy = (actual_stone_width, actual_stone_width)
+# stones_dict = {
+#     f"stone{i:04d}": make_stone_cfg(
+#         i,
+#         pos_xyz=(x, y, z_center),
+#         size_xy = (actual_stone_width, actual_stone_width)
 
-    )
-    for i, (x, y) in enumerate(stone_xy_list, start=1)
-}
+#     )
+#     for i, (x, y) in enumerate(stone_xy_list, start=1)
+# }
 
 
 # stones = RigidObjectCollectionCfg(
@@ -1259,15 +1259,15 @@ class RobotSceneCfg(InteractiveSceneCfg):
     
 
     # sensors
-    height_scanner = RayCasterCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        attach_yaw_only=True,
-        # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.02, size=[1.2, 1.2]),
-        debug_vis=True,
-        mesh_prim_paths=["/World/ground"],
-    )
+    # height_scanner = RayCasterCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/base",
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+    #     attach_yaw_only=True,
+    #     # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.3, size=[1.2, 1.2]),
+    #     debug_vis=True,
+    #     mesh_prim_paths=["/World/ground"],
+    # )
 
     # camera = TiledCameraCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
@@ -1390,10 +1390,10 @@ class HighLevelPolicyObsCfg(ObsGroup):
 
     # )
 
-    heightmap = ObsTerm(func=mdp.height_scan,
-        params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-        clip=(-1.0, 5.0),
-    )
+    # heightmap = ObsTerm(func=mdp.height_scan,
+    #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+    #     clip=(-1.0, 5.0),
+    # )
 
     ft_stack = ObsTerm(
             func=mdp.contact_ft_stack,   # 下の関数
@@ -1698,9 +1698,9 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
     # environment settings
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
 
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)

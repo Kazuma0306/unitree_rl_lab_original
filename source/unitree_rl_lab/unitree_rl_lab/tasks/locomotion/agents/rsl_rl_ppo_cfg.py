@@ -403,7 +403,7 @@ class VisionHighRNNCfg(RslRlPpoActorCriticCfg):
 
 
 
-# High Layer　RNN
+# # High Layer　RNN
 @configclass
 class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
