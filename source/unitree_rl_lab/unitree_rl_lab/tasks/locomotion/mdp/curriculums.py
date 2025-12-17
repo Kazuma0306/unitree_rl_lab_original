@@ -127,9 +127,9 @@ def terrain_levels_nav(
     env,
     env_ids,
     goal_key: str = "pose_command",
-    success_radius: float = 0.3,          # 到達半径[m]
-    demote_radius: float = 0.8,           # まだこれより遠ければ降格（地形/タイルに合わせ調整）
-    check_after_frac: float = 0.5,        # エピソード半分経過で降格判定を許可
+    success_radius: float = 0.2,          # 到達半径[m]
+    demote_radius: float = 0.6,           # まだこれより遠ければ降格（地形/タイルに合わせ調整）
+    check_after_frac: float = 0.7,        # エピソード半分経過で降格判定を許可
     ):
     terrain = env.scene.terrain
     if len(env_ids) == 0:
@@ -166,6 +166,76 @@ def terrain_levels_nav(
     print("up/down:", int(move_up.sum()), int(move_down.sum()))
 
     return terrain.terrain_levels.float().mean()
+
+
+
+
+
+
+def terrain_levels_nav2(
+    env,
+    env_ids,
+    goal_key: str = "pose_command",
+    success_radius: float = 0.2,          # 到達半径[m]
+    demote_radius: float = 0.6,           # まだこれより遠ければ降格
+    check_after_frac: float = 0.7,        # エピソード何割経過で降格判定を許可
+    cooldown_len: int = 2,                # ★ レベル変更後、何エピソードは固定するか
+):
+    terrain = env.scene.terrain
+    # if len(env_ids) == 0:
+    #     return terrain.terrain_levels.float().mean()
+
+    # env_ids を tensor 化
+    env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
+
+    # ★ クールダウンバッファ（なければ作る）
+    if not hasattr(env, "level_cooldown"):
+        env.level_cooldown = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
+
+    # 対象envのクールダウンを1減らす（0未満にはしない）
+    cd = env.level_cooldown[env_ids]
+    cd = torch.clamp(cd - 1, min=0)
+    env.level_cooldown[env_ids] = cd
+
+    # 変更可能なenv（クールダウンが0）
+    can_change = cd == 0
+
+    # --- 残距離 ---
+    cmd  = env.command_manager.get_command(goal_key)[env_ids]
+    dist = torch.norm(cmd[:, :3], dim=1)          # 残距離 d_t
+
+    # 成功判定（到達）
+    is_success = dist < success_radius
+
+    # 降格判定の時間条件
+    max_steps = getattr(env, "max_episode_length", None)
+    if max_steps is None:
+        ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
+        max_steps = int(env.cfg.episode_length_s / ctrl_dt)
+    elapsed_enough = env.episode_length_buf[env_ids] > int(check_after_frac * max_steps)
+
+    # 失敗（未達 & 十分時間経過 & まだ遠い）
+    is_fail = (~is_success) & elapsed_enough & (dist > demote_radius)
+
+    # --- クールダウンを考慮した昇格/降格 ---
+    move_up   = can_change & is_success
+    move_down = can_change & is_fail
+
+    print("before:", terrain.terrain_levels[env_ids].tolist())
+
+    # 公式と同じAPI
+    terrain.update_env_origins(env_ids, move_up, move_down)
+
+    print("after :", terrain.terrain_levels[env_ids].tolist())
+    print("up/down:", int(move_up.sum()), int(move_down.sum()))
+
+    # ★ レベルが変わった env にクールダウンをセット
+    changed = move_up | move_down
+    if torch.any(changed):
+        env.level_cooldown[env_ids[changed]] = cooldown_len
+
+    return terrain.terrain_levels.float().mean()
+
 
 
 # def terrain_levels_vel_proj(

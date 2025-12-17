@@ -1856,7 +1856,7 @@ class CurriculumCfg:
     #     }
     # )
     
-    terrain_levels = CurrTerm(func=mdp.terrain_levels_nav) 
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_nav2) 
 
 
     schedule_lin = CurrTerm(

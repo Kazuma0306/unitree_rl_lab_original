@@ -105,6 +105,22 @@ class EpisodeLogger:
 
 
 
+def _rot3_from_quat_wxyz(q): # [B,3,3]
+    w,x,y,z = q.unbind(-1)
+    xx,yy,zz = x*x, y*y, z*z
+    xy,xz,yz = x*y, x*z, y*z
+    wx,wy,wz = w*x, w*y, w*z
+    r00 = 1 - 2*(yy+zz); r01 = 2*(xy-wz);   r02 = 2*(xz+wy)
+    r10 = 2*(xy+wz);     r11 = 1 - 2*(xx+zz); r12 = 2*(yz-wx)
+    r20 = 2*(xz-wy);     r21 = 2*(yz+wx);   r22 = 1 - 2*(xx+yy)
+    return torch.stack([torch.stack([r00,r01,r02], -1),
+                        torch.stack([r10,r11,r12], -1),
+                        torch.stack([r20,r21,r22], -1)], -2)
+
+
+
+
+
 
 def main():
     """Play with RSL-RL agent."""
@@ -213,6 +229,8 @@ def main():
 
     timestep = 0
 
+    unwrapped =  env.unwrapped
+
 
     # 累積バッファ（envごと）
     B = unwrapped.num_envs
@@ -221,7 +239,8 @@ def main():
     final_err = torch.zeros(B, device=unwrapped.device)
 
     # --- playのメインループの近くで ---
-    csv_path = Path(args.csv)
+    csv_path = Path("eval_logs") / "out.csv"
+
     csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     # with csv_path.open("w", newline="") as f:
@@ -230,12 +249,20 @@ def main():
     #     ])
     #     writer.writeheader()
 
-    unwrapped = env.unwrapped  # RslRlVecEnvWrapperでもOK
     robot = unwrapped.scene.articulations["robot"]
-    moving_leg = args.moving_leg
+    moving_leg = "FL_foot"
+    LEG_ORDER = ("FL_foot","FR_foot","RL_foot","RR_foot")
     leg_i = LEG_ORDER.index(moving_leg)
 
-    logger = EpisodeLogger(unwrapped.num_envs, unwrapped.device, leg_i, tol=args.tol)
+    logger = EpisodeLogger(unwrapped.num_envs, unwrapped.device, leg_i)
+
+
+    start_wall = time.perf_counter()
+    last_wall = start_wall
+    last_step = 0
+
+    log_every = 1000  # 好きに
+    timestep2 = 0
 
 
     # simulate environment
@@ -257,6 +284,22 @@ def main():
         sleep_time = dt - (time.time() - start_time)
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
+
+
+
+        timestep2 += 1
+
+        if timestep2 % log_every == 0:
+            now = time.perf_counter()
+            elapsed = now - start_wall
+            interval = now - last_wall
+            sps = (timestep2 - last_step) / max(interval, 1e-9)  # steps/sec
+            sim_time = timestep2 * dt  # dt = env.unwrapped.step_dt
+
+            print(f"[EVAL] step={timestep2:,}  sim_time={sim_time:.2f}s  "
+                f"elapsed={elapsed/60:.1f}min  sps={sps:.1f}")
+            last_wall = now
+            last_step = timestep2
 
         
         # ---- 目標（base）----
