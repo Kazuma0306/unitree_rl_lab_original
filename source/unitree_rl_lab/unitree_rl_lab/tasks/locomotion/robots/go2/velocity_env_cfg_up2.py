@@ -1027,13 +1027,13 @@ def stepping_stones_xy_front_half_pixelwise2(
 stone_xy_list, meta = stepping_stones_xy_front_half_pixelwise(
     size_x_m=8.0,
     size_y_m=8.0,
-    horizontal_scale=0.02,
+    horizontal_scale=0.005,
     platform_width_m=1.0,
     difficulty=1,
     stone_width_range_m=(0.25, 0.25),
-    stone_distance_range_m=(0.02, 0.05),
+    stone_distance_range_m=(0.02, 0.06),
     margin_m=0.2,
-    outer_slack_m = 0.2,
+    outer_slack_m = 0.4,
     platform_clearance_m=0.0,   # まずは 0 推奨（避けすぎを防ぐ）
     per_row_phase=False,
     # seed=123,
@@ -1926,16 +1926,18 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=128, env_spacing=2.5)
+
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
 
     actions: ActionsCfg = ActionsCfg()
     observations: ObservationsCfg = ObservationsCfg()
-    # events: EventCfg = EventCfg()
+    events: EventCfg = EventCfg()
     commands: CommandsCfg = CommandsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
-    # curriculum: CurriculumCfg = CurriculumCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
 
 
     def __post_init__(self):
