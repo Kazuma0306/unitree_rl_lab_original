@@ -254,6 +254,9 @@ def main():
     LEG_ORDER = ("FL_foot","FR_foot","RL_foot","RR_foot")
     leg_i = LEG_ORDER.index(moving_leg)
 
+    foot_id = robot.body_names.index(moving_leg)  # ★ループ外
+
+
     logger = EpisodeLogger(unwrapped.num_envs, unwrapped.device, leg_i)
 
 
@@ -310,12 +313,12 @@ def main():
         base_p = robot.data.root_pos_w
         base_q = robot.data.root_quat_w
         R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)
-        foot_id = robot.body_names.index(moving_leg)
+        # foot_id = robot.body_names.index(moving_leg)
         foot_w = robot.data.body_pos_w[:, foot_id, :]
         foot_b = (R_wb3 @ (foot_w - base_p).unsqueeze(-1)).squeeze(-1)
 
         err = torch.norm(foot_b - target_b, dim=-1)
-        logger.update(err)
+        # logger.update(err)
 
         # エピソードが終わったら吐く（固定長なら最後にまとめてでOK）
         if torch.any(dones):
@@ -324,7 +327,9 @@ def main():
             pass
 
     # 最終ステップの err を final_err にして書き出し
-    final_err = err
+    # final_err = err
+    final_err = err.detach().cpu().numpy()
+
     # rows = logger.finalize_rows(target_b, final_err, moving_leg)
     # writer.writerows(rows)
 
