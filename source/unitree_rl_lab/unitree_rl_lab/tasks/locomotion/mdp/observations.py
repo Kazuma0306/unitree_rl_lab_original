@@ -1336,7 +1336,7 @@ def get_block_top_pos_base_collection(env, collection_name="stones", block_heigh
 
 
 
-def select_near_blocks2(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=6):
+def select_near_blocks2(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=7):
     """
     block_pos_b: [N_env, N_block, 3] (base座標系)
     戻り値:
@@ -1349,26 +1349,42 @@ def select_near_blocks2(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=6):
     N_env, N_block = x.shape
 
     # 条件フィルタ
-    mask = (x > -0.25) & (x < x_max) & (y.abs() < y_max)  # [N_env, N_block]
+    mask = (x > -0.3) & (x < x_max) & (y.abs() < y_max)  # [N_env, N_block]
+
 
     dist2 = x**2 + y**2
     big = 1e6
     dist2_masked = torch.where(mask, dist2, big * torch.ones_like(dist2))
 
-    # 距離小さい順にソート
+
+    # # 距離小さい順にソート
     sorted_dist, sorted_idx = torch.sort(dist2_masked, dim=1)
+
+    # ソートキー: x が小さいほど手前（ベースに近い前方）
+    # sort_key = torch.where(mask, x, big * torch.ones_like(x))
+    # sorted_key, sorted_idx = torch.sort(sort_key, dim=1)
+
+
 
     # 実際に使えるのは max_blocks か N_block の小さい方
     k = min(max_blocks, N_block)
 
     idx_k = sorted_idx[:, :k]       # [N_env, k]
     dist_k = sorted_dist[:, :k]     # [N_env, k]
+    # key_k = sorted_key[:, :k]      # [N_env, k]
+
 
     idx_expanded = idx_k.unsqueeze(-1).expand(-1, -1, 3)
     near_k = torch.gather(block_pos_b, dim=1, index=idx_expanded)   # [N_env, k, 3]
 
     # 有効フラグ
     valid_k = dist_k < (big * 0.5)  # [N_env, k]
+
+    # idx_expanded = idx_k.unsqueeze(-1).expand(-1, -1, 3)
+    # near_k = torch.gather(block_pos_b, dim=1, index=idx_expanded)   # [N_env, k, 3]
+
+    # 有効フラグ（big じゃないもの）
+    # valid_k = key_k < (big * 0.5)
 
     # ここからパディングして [N_env, max_blocks, ...] にそろえる
     if k < max_blocks:
@@ -1399,6 +1415,36 @@ def select_near_blocks2(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=6):
 
 
 
+def blocks_to_features_with_edges(
+    near_blocks: torch.Tensor,
+    stone_size_x: float = 0.25,
+    stone_size_y: float = 0.25,
+) -> torch.Tensor:
+    """
+    near_blocks: [N_env, max_blocks, 3] (base座標系での石中心 x,y,z)
+    返り値:
+      feats: [N_env, max_blocks, 7]
+        [x_center, y_center, z_top,
+         x_front, x_back, y_left, y_right]
+    """
+    x = near_blocks[..., 0]
+    y = near_blocks[..., 1]
+    z = near_blocks[..., 2]
+
+    hx = stone_size_x * 0.5
+    hy = stone_size_y * 0.5
+
+    x_front = x + hx
+    x_back  = x - hx
+    y_left  = y + hy
+    y_right = y - hy
+
+    feats = torch.stack(
+        [x, y, z, x_front, x_back, y_left, y_right],
+        dim=-1,  # → [..., 7]
+    )
+    return feats
+
 
 
 def obs_near_blocks_col(env):
@@ -1416,8 +1462,33 @@ def obs_near_blocks_col(env):
         max_blocks=5,
     )
 
+    # 3) 中心＋固定サイズ → エッジ座標を含む特徴に変換
+    #   ※ stone_size_x, stone_size_y はあなたの環境の石サイズに合わせて
+    # stone_size_x = 0.25  # 例: 25cm
+    # stone_size_y = 0.25  # 例: 25cm
+    feats = blocks_to_features_with_edges(
+        near_blocks,
+        # stone_size_x=stone_size_x,
+        # stone_size_y=stone_size_y,
+    )
+    # feats: [N_env, 5, 7]
+
+    # 4) flatten + mask を concat して最終観測に
     obs_blocks = torch.cat(
-        [near_blocks.reshape(env.num_envs, -1), near_mask],
+        [
+            feats.reshape(env.num_envs, -1),  # [N_env, 5*7]
+            near_mask,                        # [N_env, 5]
+        ],
         dim=-1,
     )
+
+
+    # if torch.rand(1).item() < 0.001:  # たまにだけ表示
+    print("near_blocks[0]:", near_blocks[0])
+    print("near_mask[0]:  ", near_mask[0])
+
+    # obs_blocks = torch.cat(
+    #     [near_blocks.reshape(env.num_envs, -1), near_mask],
+    #     dim=-1,
+    # )
     return obs_blocks

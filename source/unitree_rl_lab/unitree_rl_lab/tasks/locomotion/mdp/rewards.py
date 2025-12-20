@@ -3442,3 +3442,246 @@ class BaseProgressToTargetRel(ManagerTermBase):
         delta = (self.prev_dist - dist).clamp(-self.d_clip, self.d_clip)
         self.prev_dist = dist.detach()
         return delta
+
+
+
+
+
+
+# def feet_on_stones_col(
+#     env,
+#     feet_names=("FL_foot", "FR_foot", "RL_foot", "RR_foot"),
+#     collection_name="stones",
+#     stone_size_x=0.25,
+#     stone_size_y=0.25,
+#     stone_height=0.3,
+#     z_tol=0.05,
+# ):
+#     """
+#     返り値:
+#       on_block_mask: [B, N_foot]  (その足がど irgende 石の上にいるか)
+#       block_idx:     [B, N_foot]  (乗っている石の index。いないなら0など + maskで無視)
+#       dx, dy:        [B, N_foot]  (選ばれた石中心とのオフセット)
+#       margin:        [B, N_foot]  (エッジまでの最小余裕 [m]。いないなら0)
+#     """
+#     device = env.device
+#     scene  = env.scene
+#     robot  = scene.articulations["robot"]
+#     stones = scene.rigid_object_collections[collection_name]
+
+#     # 目標足位置 (base) [B,4,3]
+#     high_cmd = env.command_manager.get_command("step_fr_to_block")
+#     cmd_b = high_cmd.reshape(B, 4, 3)
+
+#     B = env.num_envs
+#     dev = device
+
+#     # --- 足先の world 位置 [B, N_foot, 3] ---
+#     idxs = [robot.body_names.index(n) for n in feet_names]
+
+#     if hasattr(robot.data, "body_link_pose_w"):
+#         pose = robot.data.body_link_pose_w[:, idxs]   # [B, N_foot, 7]
+#         foot_pos_w = pose[..., 0:3]
+#     else:
+#         print("No foot found ")
+#         foot_pos_w = robot.data.body_pos_w[:, idxs, 0:3]  # だいたいこんな感じ
+
+#     # --- 石の中心 world 位置 [B, N_stone, 3] ---
+#     stone_pos_w = stones.data.object_pos_w  # [B, N_stone, 3]
+#     # 上面 z
+#     stone_top_z = stone_pos_w[..., 2] + stone_height * 0.5  # [B, N_stone]
+
+#     # --- ブロードキャストして「足 vs 石」の相対位置 ---
+#     # foot: [B, N_foot,   1,      3]
+#     # stone:[B,    1,   N_stone,  3]
+#     fp = foot_pos_w[:, :, None, :]    # [B, F, 1, 3]
+#     sp = stone_pos_w[:, None, :, :]   # [B, 1, S, 3]
+
+#     dx = fp[..., 0] - sp[..., 0]   # [B, F, S]
+#     dy = fp[..., 1] - sp[..., 1]   # [B, F, S]
+#     dz = fp[..., 2] - stone_top_z[:, None, :]  # [B, F, S]
+
+#     hx = stone_size_x * 0.5
+#     hy = stone_size_y * 0.5
+
+#     inside_xy = (dx.abs() <= hx) & (dy.abs() <= hy)
+#     close_z   = dz.abs() <= z_tol
+
+#     on_block_bs = inside_xy & close_z        # [B, F, S] 足Fが石Sの上にいるか
+
+#     # その足が少なくとも1つの石の上か？
+#     on_block_mask = on_block_bs.any(dim=-1)  # [B, F]
+
+#     # どの石に乗っているか: とりあえず「いちばん |dz| が小さい石」を選ぶ
+#     # （エッジ複数ヒットしても一つに決めるため）
+#     big = 1e6
+#     dz_abs = dz.abs() + (~on_block_bs) * big  # ブロック外は巨大値
+#     block_idx = dz_abs.argmin(dim=-1)  # [B, F]
+
+#     # 選ばれた石との dx,dy を取り出す
+#     gather_idx = block_idx.unsqueeze(-1)  # [B, F, 1]
+
+#     dx_sel = torch.gather(dx, dim=-1, index=gather_idx).squeeze(-1)  # [B,F]
+#     dy_sel = torch.gather(dy, dim=-1, index=gather_idx).squeeze(-1)  # [B,F]
+
+#     # エッジまでの余裕
+#     margin_x = hx - dx_sel.abs()
+#     margin_y = hy - dy_sel.abs()
+#     margin = torch.minimum(margin_x, margin_y)  # [B,F]
+
+#     # 石の上にいない足は margin=0 に潰す
+#     margin = torch.where(on_block_mask, margin, torch.zeros_like(margin))
+
+#     return on_block_mask, block_idx, dx_sel, dy_sel, margin
+
+
+
+def get_block_top_pos_base_collection(env, collection_name="stones", block_height=0.3):
+    """RigidObjectCollection 版: [N_env, N_block, 3] を返す"""
+    robot = env.scene.articulations["robot"]
+    stones = env.scene.rigid_object_collections[collection_name]
+
+    # base の world pose
+    base_state = robot.data.root_state_w            # [N_env, 13]
+    base_pos_w  = base_state[:, 0:3]                # [N_env, 3]
+    base_quat_w = base_state[:, 3:7]                # [N_env, 4]
+
+    # ブロック位置 [N_env, N_block, 3] と仮定
+    block_pos_w = stones.data.object_pos_w.clone()  # [N_env, N_block, 3]
+
+    # 上面中心に補正
+    block_pos_w[..., 2] += block_height * 0.5
+
+    # base 基準に平行移動
+    rel_w = block_pos_w - base_pos_w[:, None, :]    # [N_env, N_block, 3]
+
+    n_env, n_block, _ = rel_w.shape
+
+    # クォータニオンをブロック数ぶん複製して flatten
+    quat_flat = base_quat_w[:, None, :].expand(-1, n_block, -1).reshape(-1, 4)  # [N_env*N_block, 4]
+    vec_flat  = rel_w.reshape(-1, 3)                                            # [N_env*N_block, 3]
+
+    # まとめて base 座標系へ
+    pos_b_flat = quat_apply_inverse(quat_flat, vec_flat)                        # [N_env*N_block, 3]
+    pos_b = pos_b_flat.view(n_env, n_block, 3)                                  # [N_env, N_block, 3]
+
+    return pos_b
+
+
+
+def cmd_on_stones(
+    env,
+    collection_name: str = "stones",
+    command_name: str = "step_fr_to_block",
+    stone_size_x: float = 0.25,
+    stone_size_y: float = 0.25,
+    stone_height: float = 0.3,
+):
+    """
+    高位コマンド step_fr_to_block が指している「目標足位置 (base座標)」が、
+    どの石の上にあり、エッジからどれだけ余裕があるかを計算する。
+
+    返り値:
+      on_block_mask: [B, 4]      その脚の目標位置がど irgende 石の矩形内にあるか
+      block_idx:     [B, 4]      対応する石の index（いなければ0など。maskで無視）
+      dx, dy:        [B, 4]      選ばれた石中心とのオフセット (base座標)
+      margin:        [B, 4]      エッジまでの最小余裕 [m]。いなければ0
+    """
+    device = env.device
+    scene  = env.scene
+    stones = scene.rigid_object_collections[collection_name]
+
+    B = env.num_envs
+
+    # --- 1) 高位コマンド (base座標) を取得 ---
+    # step_fr_to_block: [B, 12] = [FL(3), FR(3), RL(3), RR(3)] (base frame)
+    high_cmd = env.command_manager.get_command(command_name)  # [B, 12]
+    cmd_b = high_cmd.view(B, 4, 3)  # [B, 4, 3] (脚順は LEG_ORDER に合わせること)
+
+    # 脚ごとの目標位置 (base)
+    fx_b = cmd_b[..., 0]  # [B, 4]
+    fy_b = cmd_b[..., 1]  # [B, 4]
+    fz_b = cmd_b[..., 2]  # [B, 4]
+
+    # --- 2) 石の中心位置を base座標系で取得 ---
+    # すでに持っているヘルパーを使う: [B, N_stone, 3] (base frame)
+    stone_pos_b = get_block_top_pos_base_collection(
+        env,
+        collection_name=collection_name,
+        block_height=stone_height,
+    )  # [B, S, 3]
+
+    sx_b = stone_pos_b[..., 0]  # [B, S]
+    sy_b = stone_pos_b[..., 1]  # [B, S]
+    sz_b = stone_pos_b[..., 2]  # [B, S]  (top面の高さ in base)
+
+    # --- 3) 「目標足位置 vs 石」の相対位置 (base frame) ---
+    # foot:  [B, 4, 1]
+    # stone: [B, 1, S]
+    fx = fx_b[:, :, None]  # [B, 4, 1]
+    fy = fy_b[:, :, None]  # [B, 4, 1]
+    fz = fz_b[:, :, None]  # [B, 4, 1]
+
+    sx = sx_b[:, None, :]  # [B, 1, S]
+    sy = sy_b[:, None, :]  # [B, 1, S]
+    sz = sz_b[:, None, :]  # [B, 1, S]
+
+    dx = fx - sx   # [B, 4, S]
+    dy = fy - sy   # [B, 4, S]
+    dz = fz - sz   # [B, 4, S]
+
+    hx = stone_size_x * 0.5
+    hy = stone_size_y * 0.5
+
+    # 矩形内判定（コマンドが石の天板上に落ちているか）
+    inside_xy = (dx.abs() <= hx) & (dy.abs() <= hy)  # [B, 4, S]
+    # z方向はだいたい一致していればOK（少しズレてても許すなら省略してもよい）
+    # ここでは ±stone_height 程度まで許容する例（ゆるめ）
+    # z_tol = stone_height
+    # close_z = dz.abs() <= z_tol
+
+    on_block_bfs = inside_xy #& close_z  # [B, 4, S]
+
+    # 各脚が少なくとも1つの石の上に「目標を置いているか」
+    on_block_mask = on_block_bfs.any(dim=-1)  # [B, 4]
+
+    # どの石を採用するか: 「中心に一番近い石」を選ぶ
+    big = 1e6
+    dist = dx.abs() + dy.abs() + (~on_block_bfs) * big  # [B, 4, S]
+    block_idx = dist.argmin(dim=-1)  # [B, 4]
+
+    # 選ばれた石との dx,dy を取り出す
+    gather_idx = block_idx.unsqueeze(-1)  # [B, 4, 1]
+    dx_sel = torch.gather(dx, dim=-1, index=gather_idx).squeeze(-1)  # [B, 4]
+    dy_sel = torch.gather(dy, dim=-1, index=gather_idx).squeeze(-1)  # [B, 4]
+
+    # エッジまでの余裕（margin）
+    margin_x = hx - dx_sel.abs()
+    margin_y = hy - dy_sel.abs()
+    margin = torch.minimum(margin_x, margin_y)  # [B, 4]
+
+    # 石の上に目標がない脚は margin=0
+    margin = torch.where(on_block_mask, margin, torch.zeros_like(margin))
+
+    return on_block_mask, block_idx, dx_sel, dy_sel, margin
+
+
+
+
+
+# def reward_cmd_center_on_blocks(env, m_safe=0.03):
+#     on_block_mask, block_idx, dx_sel, dy_sel, margin = cmd_on_stones(env)
+#     margin_clipped = torch.clamp(margin / m_safe, 0.0, 1.0)  # [B,4]
+#     r = margin_clipped.mean(dim=-1)  # [B]
+#     return r
+
+
+def penalty_cmd_near_edge(env, m_safe=0.03):
+    on_block_mask, block_idx, dx_sel, dy_sel, margin = cmd_on_stones(env)
+    # 危険度: margin が小さいほど大きい
+    danger = torch.clamp((m_safe - margin) / m_safe, 0.0, 1.0)  # [B,4]
+    # 石に乗ってないコマンドは「端判定の対象外」にするなら：
+    danger = danger * on_block_mask.float()
+    # 平均
+    p = danger.mean(dim=-1)  # [B]
+    return p

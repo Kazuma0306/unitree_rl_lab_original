@@ -1029,11 +1029,11 @@ stone_xy_list, meta = stepping_stones_xy_front_half_pixelwise(
     size_y_m=8.0,
     horizontal_scale=0.005,
     platform_width_m=1.0,
-    difficulty=1,
+    difficulty=0,
     stone_width_range_m=(0.25, 0.25),
-    stone_distance_range_m=(0.02, 0.06),
+    stone_distance_range_m=(0.00, 0.06),
     margin_m=0.2,
-    outer_slack_m = 0.4,
+    outer_slack_m = 0.8,
     platform_clearance_m=0.0,   # まずは 0 推奨（避けすぎを防ぐ）
     per_row_phase=False,
     # seed=123,
@@ -1766,11 +1766,13 @@ class RewardsCfg:
 
     distance_progress = RewTerm(func= mdp.BaseProgressToTargetRel, weight = 15)#ベース座標系での進捗, all legs weighted sum
 
+    cmd_on_stones = RewTerm(func = mdp.penalty_cmd_near_edge, weight = -0.2)
+
 
 
     # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
     # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.001)
     # # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
     # energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
@@ -1856,7 +1858,7 @@ class CurriculumCfg:
     #     }
     # )
     
-    terrain_levels = CurrTerm(func=mdp.terrain_levels_nav2) 
+    # terrain_levels = CurrTerm(func=mdp.terrain_levels_nav2) 
 
 
     schedule_lin = CurrTerm(
@@ -1926,8 +1928,8 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=128, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=128, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
 
@@ -1945,7 +1947,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
-        self.decimation = LOW_LEVEL_ENV_CFG.decimation * 5#TODO　５Hz 10Hz
+        self.decimation = LOW_LEVEL_ENV_CFG.decimation * 2#TODO　５Hz 10Hz
         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
         self.sim.physx.gpu_max_rigid_patch_count = 1000000 # 例：約100万 (1,048,576) に設定
 

@@ -177,9 +177,9 @@ def terrain_levels_nav2(
     env_ids,
     goal_key: str = "pose_command",
     success_radius: float = 0.2,          # 到達半径[m]
-    demote_radius: float = 0.6,           # まだこれより遠ければ降格
+    demote_radius: float = 0.8,           # まだこれより遠ければ降格
     check_after_frac: float = 0.7,        # エピソード何割経過で降格判定を許可
-    cooldown_len: int = 2,                # ★ レベル変更後、何エピソードは固定するか
+    cooldown_len: int = 3,                # ★ レベル変更後、何エピソードは固定するか
 ):
     terrain = env.scene.terrain
     # if len(env_ids) == 0:
