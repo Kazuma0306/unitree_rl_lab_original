@@ -368,7 +368,7 @@ class FootstepPolicyAction(ActionTerm):
             dtype=torch.float32,
         )
 
-        self.delta_x_max = 0.2  # [m] 前後には ±15cm までしか動かさない
+        self.delta_x_max = 0.12  # [m] 前後には ±15cm までしか動かさない
         self.delta_y_max = 0.12 # [m] 左右には ±10cm まで
         self.delta_z_max = 0.01  # [m] 高さ方向 ±5cm
 
@@ -437,7 +437,12 @@ class FootstepPolicyAction(ActionTerm):
         # 閾値＆ガード（要調整）
         self.F_ON, self.F_OFF = 15.0, 8.0
         self.MIN_INTERVAL = 2
-        self.MAX_HOLD = 20
+        self.MAX_HOLD = 60
+
+
+        self._dbg_count = 0
+        self._dbg_every = 50   # 50Hzなら約10秒おき（適宜100〜1000で調整）
+
 
 
 
@@ -605,9 +610,12 @@ class FootstepPolicyAction(ActionTerm):
             self._latched_actions[update_mask] = self._pending_actions[update_mask]
             self._since_update[update_mask] = 0
 
+        self.step_cmd_term.set_foot_targets_base(self._latched_actions)
+
+
         # ---- 低位 decimation 部分は “latched” を使う以外そのまま ----
         if self._counter % self.cfg.low_level_decimation == 0:
-            self.step_cmd_term.set_foot_targets_base(self._latched_actions)  # ★ここが latched
+            # self.step_cmd_term.set_foot_targets_base(self._latched_actions)  # ★ここが latched
 
             low_level_obs = self._low_level_obs_manager.compute_group("ll_policy")
 
@@ -629,6 +637,29 @@ class FootstepPolicyAction(ActionTerm):
 
         self._low_level_action_term.apply_actions()
         self._counter += 1
+
+
+
+        self._dbg_count += 1
+        if (self._dbg_count % self._dbg_every) == 0:
+            # スカラー
+            upd_mean = update_mask.float().mean().item()
+            since_max = int(self._since_update.max().item())
+
+            # 脚ごと [4]
+            c_mean = contact_now.float().mean(dim=0)   # [4]
+            l_mean = liftoff.float().mean(dim=0)       # [4]
+            force_mean = force.float().mean().item()
+            since_mean = self._since_update.float().mean().item()
+
+            # tensor を Python list にして見やすくする
+            print(
+                f"[HL dbg] upd_mean={upd_mean:.3f} since_max={since_max} "
+                f"contact_mean={c_mean.detach().cpu().tolist()} "
+                f"liftoff_mean={l_mean.detach().cpu().tolist()}"
+                f"force_mean={force_mean:.3f} since_mean={since_mean:.1f}"
+            )
+
 
 
     

@@ -177,9 +177,10 @@ def terrain_levels_nav2(
     env_ids,
     goal_key: str = "pose_command",
     success_radius: float = 0.2,          # 到達半径[m]
-    demote_radius: float = 0.8,           # まだこれより遠ければ降格
-    check_after_frac: float = 0.7,        # エピソード何割経過で降格判定を許可
-    cooldown_len: int = 3,                # ★ レベル変更後、何エピソードは固定するか
+    demote_radius: float = 0.7,           # まだこれより遠ければ降格
+    check_after_frac: float = 0.85,        # エピソード何割経過で降格判定を許可
+    cooldown_len: int = 8,                # ★ レベル変更後、何エピソードは固定するか
+
 ):
     terrain = env.scene.terrain
     # if len(env_ids) == 0:
@@ -235,6 +236,82 @@ def terrain_levels_nav2(
         env.level_cooldown[env_ids[changed]] = cooldown_len
 
     return terrain.terrain_levels.float().mean()
+
+
+
+
+def terrain_levels_nav3(
+    env,
+    env_ids,
+    goal_key: str = "pose_command",
+    success_radius: float = 0.25,
+    demote_radius: float = 0.8,
+    check_after_frac: float = 0.85,
+    cooldown_len: int = 8,
+    p_keep0: float = 0.3,          # ★追加：常にレベル0に固定する割合
+):
+    terrain = env.scene.terrain
+    env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
+
+    # --- 0) keep-level0 マスクを一度だけ作る（固定メンバー方式） ---
+    if not hasattr(env, "keep_level0_mask"):
+        B = env.num_envs
+        n_keep = max(1, int(B * p_keep0))
+        perm = torch.randperm(B, device=env.device)
+        keep_ids = perm[:n_keep]
+        mask = torch.zeros(B, device=env.device, dtype=torch.bool)
+        mask[keep_ids] = True
+        env.keep_level0_mask = mask
+
+    keep0_mask_local = env.keep_level0_mask[env_ids]        # [len(env_ids)]
+    keep_env_ids = env_ids[keep0_mask_local]
+    var_env_ids  = env_ids[~keep0_mask_local]               # カリキュラム対象
+
+    # --- 1) keep0 env はレベル0固定＆origin同期 ---
+    if keep_env_ids.numel() > 0:
+        terrain.terrain_levels[keep_env_ids] = 0
+        zeros = torch.zeros_like(keep_env_ids, dtype=torch.bool)
+        terrain.update_env_origins(keep_env_ids, zeros, zeros)  # env_origins を level0 に同期 :contentReference[oaicite:2]{index=2}
+
+    # --- 2) 以降は通常カリキュラム（var_env_ids だけ） ---
+    if var_env_ids.numel() == 0:
+        return terrain.terrain_levels.float().mean()
+
+    # cooldown buffer
+    if not hasattr(env, "level_cooldown"):
+        env.level_cooldown = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
+
+    cd = env.level_cooldown[var_env_ids]
+    cd = torch.clamp(cd - 1, min=0)
+    env.level_cooldown[var_env_ids] = cd
+    can_change = cd == 0
+
+    # 残距離
+    cmd  = env.command_manager.get_command(goal_key)[var_env_ids]
+    dist = torch.norm(cmd[:, :3], dim=1)
+
+    is_success = dist < success_radius
+
+    max_steps = getattr(env, "max_episode_length", None)
+    if max_steps is None:
+        ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
+        max_steps = int(env.cfg.episode_length_s / ctrl_dt)
+
+    elapsed_enough = env.episode_length_buf[var_env_ids] > int(check_after_frac * max_steps)
+    is_fail = (~is_success) & elapsed_enough & (dist > demote_radius)
+
+    move_up   = can_change & is_success
+    move_down = can_change & is_fail
+
+    # ここでenv_originsも更新される :contentReference[oaicite:3]{index=3}
+    terrain.update_env_origins(var_env_ids, move_up, move_down)
+
+    changed = move_up | move_down
+    if torch.any(changed):
+        env.level_cooldown[var_env_ids[changed]] = cooldown_len
+
+    return terrain.terrain_levels.float().mean()
+
 
 
 
@@ -755,3 +832,27 @@ def apply_mass_curriculum(env: ManagerBasedEnv, env_ids: torch.Tensor, asset_cfg
     #         f"stage={ctx.stage} range=({current_lo:.2f},{current_hi:.2f}) "
     #         f"sampled={sampled_mass:.2f} in_sim={sim_mass:.2f}"
         # )
+
+
+    
+
+
+    def expand_goal_x_range(
+        env, env_ids, old_value,
+        start=(0.5, 1.5),
+        end=(0.5, 3.0),
+        start_step=0,
+        end_step=300000,
+    ):
+        """commands.pose_command.ranges.pos_x をステップに応じて拡大する"""
+        step = env.common_step_counter
+        if step < start_step:
+            return mdp.modify_term_cfg.NO_CHANGE
+
+        # 線形に補間（0→1にクランプ）
+        t = (step - start_step) / float(max(1, end_step - start_step))
+        t = max(0.0, min(1.0, t))
+
+        new_min = start[0] + t * (end[0] - start[0])
+        new_max = start[1] + t * (end[1] - start[1])
+        return (new_min, new_max)

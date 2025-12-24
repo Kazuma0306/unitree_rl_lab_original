@@ -3676,12 +3676,397 @@ def cmd_on_stones(
 #     return r
 
 
-def penalty_cmd_near_edge(env, m_safe=0.03):
+# def penalty_cmd_near_edge(env, m_safe=0.03):
+#     on_block_mask, block_idx, dx_sel, dy_sel, margin = cmd_on_stones(env)
+#     # 危険度: margin が小さいほど大きい
+#     danger = torch.clamp((m_safe - margin) / m_safe, 0.0, 1.0)  # [B,4]
+#     # 石に乗ってないコマンドは「端判定の対象外」にするなら：
+#     danger = danger * on_block_mask.float()
+#     # 平均
+#     p = danger.mean(dim=-1)  # [B]
+#     return p
+
+
+def penalty_cmd_near_edge(env, m_safe=0.03, normalize_by_inside=True):
     on_block_mask, block_idx, dx_sel, dy_sel, margin = cmd_on_stones(env)
-    # 危険度: margin が小さいほど大きい
+
     danger = torch.clamp((m_safe - margin) / m_safe, 0.0, 1.0)  # [B,4]
-    # 石に乗ってないコマンドは「端判定の対象外」にするなら：
-    danger = danger * on_block_mask.float()
-    # 平均
-    p = danger.mean(dim=-1)  # [B]
+    danger = danger * on_block_mask.float()                     # outside は 0 にする
+
+    if normalize_by_inside:
+        denom = on_block_mask.float().sum(dim=-1).clamp_min(1.0)  # [B]
+        p = danger.sum(dim=-1) / denom                            # [B]
+    else:
+        p = danger.mean(dim=-1)                                   # [B]（今の挙動）
+
     return p
+
+
+
+
+import torch
+
+@torch.no_grad()
+def cmd_inside_outside_mask(
+    env,
+    collection_name: str = "stones",
+    command_name: str = "step_fr_to_block",
+    stone_size_x: float = 0.25,
+    stone_size_y: float = 0.25,
+    stone_height: float = 0.3,
+    use_z_gate: bool = False,
+    z_tol: float = 0.3,
+):
+    """
+    returns:
+      inside_any: [B,4]  その脚のコマンド(xy)が「どれか1つの石の天板矩形内」に入っている
+      outside:    [B,4]  inside_any の否定
+    """
+    B = env.num_envs
+
+    # コマンド（base座標）: [B,12] -> [B,4,3]
+    cmd_b = env.command_manager.get_command(command_name).view(B, 4, 3)
+    fx, fy, fz = cmd_b[..., 0], cmd_b[..., 1], cmd_b[..., 2]  # [B,4]
+
+    # 石中心（base座標）: [B,S,3]
+    stone_pos_b = get_block_top_pos_base_collection(
+        env, collection_name=collection_name, block_height=stone_height
+    )
+    sx, sy, sz = stone_pos_b[..., 0], stone_pos_b[..., 1], stone_pos_b[..., 2]  # [B,S]
+
+    # ブロードキャストして差分: [B,4,S]
+    dx = fx[:, :, None] - sx[:, None, :]
+    dy = fy[:, :, None] - sy[:, None, :]
+    if use_z_gate:
+        dz = (fz[:, :, None] - sz[:, None, :]).abs()
+
+    hx = stone_size_x * 0.5
+    hy = stone_size_y * 0.5
+
+    inside_xy = (dx.abs() <= hx) & (dy.abs() <= hy)  # [B,4,S]
+    if use_z_gate:
+        inside = inside_xy & (dz <= z_tol)
+    else:
+        inside = inside_xy
+
+    inside_any = inside.any(dim=-1)   # [B,4]
+    outside = ~inside_any             # [B,4]
+    return inside_any, outside
+
+
+
+
+@torch.no_grad()
+def penalty_cmd_outside_hard(
+    env,
+    collection_name: str = "stones",
+    command_name: str = "step_fr_to_block",
+    stone_size_x: float = 0.25,
+    stone_size_y: float = 0.25,
+    stone_height: float = 0.3,
+    # ---- ゲート（スタート台で罰しない） ----
+    warmup_steps: int = 5,         # 例: 上位25Hzなら 25〜50、5Hzなら 5〜10 くらい
+    gate_by_visible_stone: bool = True,
+    x_gate: tuple[float, float] = (-0.3, 2.5),
+    y_gate: float = 1.2,
+):
+    """
+    returns: pen [B] in [0,1]
+      0: 4足すべて inside（=外踏み指示なし）
+      1: 4足すべて outside
+    """
+    B = env.num_envs
+
+    # inside/outside (per foot)
+    _, outside = cmd_inside_outside_mask(
+        env,
+        collection_name=collection_name,
+        command_name=command_name,
+        stone_size_x=stone_size_x,
+        stone_size_y=stone_size_y,
+        stone_height=stone_height,
+        use_z_gate=False,
+    )  # outside: [B,4]
+
+    pen = outside.float().mean(dim=-1)  # [B]
+
+    # --- warmup gate ---
+    if warmup_steps > 0:
+        pen = pen * (env.episode_length_buf >= warmup_steps).float()
+
+    # --- “石が見えてから” gate ---
+    if gate_by_visible_stone:
+        stone_pos_b = get_block_top_pos_base_collection(
+            env, collection_name=collection_name, block_height=stone_height
+        )  # [B,S,3]
+        sx = stone_pos_b[..., 0]
+        sy = stone_pos_b[..., 1]
+        has_stone = ((sx > x_gate[0]) & (sx < x_gate[1]) & (sy.abs() < y_gate)).any(dim=1)  # [B]
+        pen = torch.where(has_stone, pen, torch.zeros_like(pen))
+
+    # envローカルのbase位置（originが動くので worldのままは危険）
+    base_pos_w = env.scene.articulations["robot"].data.root_state_w[:, 0:3]
+    base_pos_e = base_pos_w - env.scene.env_origins  # env frame
+    base_x = base_pos_e[:, 0]
+
+    # ゲート：x_on 付近から滑らかに 0→1
+    x_on = 0.3
+    k = 0.05  # 小さいほど急峻
+    gate = torch.sigmoid((base_x - x_on) / k)  # [B] 0..1
+
+    pen = pen * gate
+
+
+
+    return pen
+
+
+
+
+
+
+
+
+def get_hit_z_bhw(env, sensor_name="height_scanner", *, fill_value=-1.0):
+    sensor = env.scene.sensors[sensor_name]
+    hit_z_flat = sensor.data.ray_hits_w[..., 2]
+    hit_z_flat = torch.where(torch.isfinite(hit_z_flat),
+                             hit_z_flat,
+                             torch.as_tensor(fill_value, device=hit_z_flat.device, dtype=hit_z_flat.dtype))
+    cfg = sensor.cfg.pattern_cfg
+    res = float(cfg.resolution)
+    nx = int(float(cfg.size[0]) / res + 1e-6) + 1
+    ny = int(float(cfg.size[1]) / res + 1e-6) + 1
+    ordering = getattr(cfg, "ordering", "xy")
+    B = hit_z_flat.shape[0]
+    return hit_z_flat.view(B, ny, nx) if ordering == "xy" else hit_z_flat.view(B, nx, ny).transpose(1, 2)
+
+
+def swing_mask_from_contact_forces(
+    env,
+    sensor_cfg: SceneEntityCfg,   # 例: SceneEntityCfg("contact_forces", body_names=[...])
+    min_contact_time: float = 0.04,
+    force_z_thresh: float = 10.0, # N くらいから適当に（mg/足の数でもOK）
+) -> torch.Tensor:
+    sensor = env.scene.sensors[sensor_cfg.name]
+    # (B, Nbodies, 3) のはず（net_forces_w 等。環境により名前が違う場合あり）
+    f_w = sensor.data.net_forces_w[:, sensor_cfg.body_ids, :]  # (B,F,3)
+    contact_now = (f_w[..., 2] > force_z_thresh)               # (B,F)
+
+    # 連続接触時間を使いたいなら、簡易に“ヒステリシス”を自前で持つ必要あり。
+    # ここでは最小実装として「瞬間接触」のみ返す。
+    return ~contact_now  # swing_mask
+
+
+
+import torch
+import torch.nn.functional as F
+from typing import Tuple, Optional
+
+def _xy_to_ij(xy_b: torch.Tensor,
+              x_range: Tuple[float, float],
+              y_range: Tuple[float, float],
+              H: int, W: int):
+    x = xy_b[..., 0]
+    y = xy_b[..., 1]
+    ix = ((x - x_range[0]) / (x_range[1] - x_range[0]) * (W - 1)).round().long()
+    iy = ((y - y_range[0]) / (y_range[1] - y_range[0]) * (H - 1)).round().long()
+    return iy.clamp(0, H - 1), ix.clamp(0, W - 1)
+
+
+
+# def planned_foothold_unsafe_penalty_minpool(
+#     *,
+#     env,
+#     x_range: Tuple[float, float],        # 例: (-0.6, +0.6)
+#     y_range: Tuple[float, float],        # 例: (-0.6, +0.6)
+
+#     safe_z_thresh: float = -0.15,        # これ未満が混じると危険扱い
+#     sigma: float = 0.03,                # 連続化（0.02〜0.05推奨）
+#     footprint_radius_m: float = 0.06,   # Go2なら 0.06〜0.08 くらいから
+#     foot_z_b: Optional[torch.Tensor] = None,    # (B,F) 足先z（base frame）
+#     z_gate: Optional[float] = 0.08,             # 接地直前だけ殴る（Noneで無効）
+
+#     normalize_by_feet: bool = True,
+# ) -> torch.Tensor:
+
+#     heightmap_bhw = get_hit_z_bhw(env)
+#     des_foot_pos_b = env.command_manager.get_command("Step_fr_to_block")  # 例
+#     swing_mask = swing_mask_from_contact_forces(env, sensor_cfg, min_contact_time=0.03, force_z_thresh=None)  # (B,F)
+
+
+
+#     assert heightmap_bhw.dim() == 3
+#     B, H, W = heightmap_bhw.shape
+#     B2, F_, _ = des_foot_pos_b.shape
+#     assert B == B2
+
+#     # ピクセル解像度[m/px]
+#     dx = (x_range[1] - x_range[0]) / max(1, (W - 1))
+#     dy = (y_range[1] - y_range[0]) / max(1, (H - 1))
+#     r_px = int(round(footprint_radius_m / max(1e-9, min(dx, dy))))
+#     k = max(1, 2 * r_px + 1)  # kernel size（奇数）
+#     pad = k // 2
+
+#     # ローカル最小値マップを作る：minpool = -maxpool(-hm)
+#     hm = heightmap_bhw.unsqueeze(1)  # (B,1,H,W)
+#     hm_min = -F.max_pool2d(-hm, kernel_size=k, stride=1, padding=pad).squeeze(1)  # (B,H,W)
+
+#     # 予定接地点でサンプル
+#     iy, ix = _xy_to_ij(des_foot_pos_b[..., :2], x_range, y_range, H, W)  # (B,F)
+#     b_idx = torch.arange(B, device=hm.device)[:, None].expand(B, F_)
+#     h_at = hm_min[b_idx, iy, ix]  # (B,F)
+
+#     # 危険度：hが低いほど unsafe→1
+#     unsafe = torch.sigmoid((safe_z_thresh - h_at) / max(1e-6, sigma))  # (B,F)
+
+#     # マスク（swingのみ + 接地直前のみ推奨）
+#     mask = torch.ones_like(unsafe, dtype=torch.bool)
+#     if swing_mask is not None:
+#         mask &= swing_mask
+#     if (z_gate is not None) and (foot_z_b is not None):
+#         mask &= (foot_z_b < z_gate)
+
+#     if normalize_by_feet:
+#         denom = mask.float().sum(dim=1).clamp(min=1.0)
+#         p = (unsafe * mask.float()).sum(dim=1) / denom
+#     else:
+#         p = (unsafe * mask.float()).sum(dim=1)
+
+#     return p  # (B,)
+
+
+
+
+
+import torch
+import torch.nn.functional as F
+from typing import Tuple, Optional
+
+def planned_foothold_unsafe_penalty_minpool(
+    env,
+    sensor_cfg,                         # ★追加：接触センサ
+    command_name: str = "step_fr_to_block",
+    x_range: Tuple[float, float] = (-0.6, 0.6),
+    y_range: Tuple[float, float] = (-0.6, 0.6),
+    safe_z_thresh: float = -0.15,
+    sigma: float = 0.03,
+    footprint_radius_m: float = 0.06,
+    foot_z_b: Optional[torch.Tensor] = None,  # (B,F)
+    z_gate: Optional[float] = 0.08,
+    force_z_thresh: float = 15.0,             # ★Noneにしないの推奨
+    normalize_by_feet: bool = True,
+) -> torch.Tensor:
+
+    # ★inf対策済みの hit_z を取ること（get_hit_z_bhw側で fill_value=-1.0 等にする）
+    heightmap_bhw = get_hit_z_bhw(env)       
+    B, H, W = heightmap_bhw.shape
+                # (B,H,W) 地形のZ（平地0、穴-0.3など）
+    des_raw = env.command_manager.get_command(command_name)  # (B,F,3) を想定
+
+    des_foot_pos_b = des_raw.view(B, 4, 3)  # (B,4,3)
+
+    # # 接触→Swingマスク（True=swing）
+    # swing_mask = swing_mask_from_contact_forces(
+    #     env, sensor_cfg, min_contact_time=0.03, force_z_thresh=force_z_thresh
+    # )  # (B,F_contact)
+
+    assert heightmap_bhw.dim() == 3
+    B, H, W = heightmap_bhw.shape
+    B2, F_cmd, _ = des_foot_pos_b.shape
+    assert B == B2
+
+    # # ★足数が一致しない場合のケア（FRだけコマンド等）
+    # if swing_mask.shape[1] != F_cmd:
+    #     # 例：コマンドがFRだけなら、swing_maskのFR列だけ抜く必要あり
+    #     # 足順が [FL,FR,RL,RR] の場合は index=1
+    #     # ここはあなたの実装に合わせて index を変えてください
+    #     if F_cmd == 1 and swing_mask.shape[1] >= 2:
+    #         swing_mask = swing_mask[:, 1:2]
+    #     else:
+    #         raise RuntimeError(f"Foot dim mismatch: command F={F_cmd}, swing F={swing_mask.shape[1]}")
+
+    # ピクセル解像度[m/px]
+    dx = (x_range[1] - x_range[0]) / max(1, (W - 1))
+    dy = (y_range[1] - y_range[0]) / max(1, (H - 1))
+    r_px = int(round(footprint_radius_m / max(1e-9, min(dx, dy))))
+    k = max(1, 2 * r_px + 1)
+    pad = k // 2
+
+    # ローカル最小値マップ（足裏半径ぶん、穴/溝/エッジを“膨張”させる）
+    hm = heightmap_bhw.unsqueeze(1)  # (B,1,H,W)
+    hm_min = -F.max_pool2d(-hm, kernel_size=k, stride=1, padding=pad).squeeze(1)  # (B,H,W)
+
+    # 予定接地点でサンプル
+    iy, ix = _xy_to_ij(des_foot_pos_b[..., :2], x_range, y_range, H, W)  # (B,F)
+    b_idx = torch.arange(B, device=hm.device)[:, None].expand(B, F_cmd)
+    h_at = hm_min[b_idx, iy, ix]  # (B,F)
+
+    # 危険度：hが低いほど unsafe→1
+    unsafe = torch.sigmoid((safe_z_thresh - h_at) / max(1e-6, sigma))  # (B,F)
+
+    # マスク（swingのみ + 接地直前のみ）
+    # mask = swing_mask
+    # if (z_gate is not None) and (foot_z_b is not None):
+    #     assert foot_z_b.shape == (B, F_cmd)
+    #     mask = mask & (foot_z_b < z_gate)
+
+    # if normalize_by_feet:
+    #     denom = mask.float().sum(dim=1).clamp(min=1.0)
+    #     p = (unsafe * mask.float()).sum(dim=1) / denom
+    # else:
+    #     p = (unsafe * mask.float()).sum(dim=1)
+    p = (unsafe).mean(dim=1)
+
+    return p  # (B,)  正のペナルティ
+
+
+
+
+
+
+import torch
+from isaaclab.managers import SceneEntityCfg
+import isaaclab.utils.math as math_utils
+
+def alive_reward_gated(
+    env,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    *,
+    alive_bonus: float = 1.0,     # 1 stepあたり（あとで weight で調整）
+    min_base_height: float = 0.22, # Go2なら0.20〜0.25あたりから開始
+    max_tilt_deg: float = 35.0,    # roll/pitchの許容
+) -> torch.Tensor:
+    robot = env.scene[asset_cfg.name]
+    base_pos_w  = robot.data.root_pos_w            # (B,3)
+    base_quat_w = robot.data.root_quat_w           # (B,4) (wxyz)
+
+    # 高さゲート
+    ok_h = base_pos_w[:, 2] > min_base_height
+
+    # 傾きゲート（重力ベクトルをbaseに回してz成分を見ると簡単）
+    # worldの上方向(0,0,1)をbaseに回して、z成分がcos(theta)以上ならOK
+    up_w = torch.tensor([0.0, 0.0, 1.0], device=base_quat_w.device).view(1, 3).repeat(base_quat_w.shape[0], 1)
+    up_b = math_utils.quat_rotate_inverse(base_quat_w, up_w)   # (B,3)
+    cos_th = torch.cos(torch.deg2rad(torch.tensor(max_tilt_deg, device=up_b.device)))
+    ok_tilt = up_b[:, 2] > cos_th
+
+    alive = (ok_h & ok_tilt).float() * alive_bonus
+    return alive
+
+
+
+
+
+
+
+def alive_reward_when_progress(
+    env,
+    *,
+    alive_bonus: float = 1.0,
+    min_fwd_vel: float = 0.04,
+):
+    robot = env.scene.articulations["robot"]
+    v_b = robot.data.root_com_lin_vel_b   # (B,3) base frame forward is x
+    ok = (v_b[:, 0] > min_fwd_vel).float()
+    return ok * alive_bonus

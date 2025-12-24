@@ -98,28 +98,25 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
 
 STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     curriculum=True,
-    size=(8.0, 8.0),
-    border_width=20.0,
+    size=(4.0, 4.0),
+    border_width=0.050,
     num_rows=10,
-    num_cols=20,
-    horizontal_scale=0.05,
+    num_cols=10,
+    horizontal_scale=0.02,
     vertical_scale=0.005,
     slope_threshold=0.75,
     difficulty_range=(0.0, 1.0),
-    use_cache=False,
+    use_cache=True,
+    seed = 123,
     sub_terrains={
-        # "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
+        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.3),
         # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
         #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # ),
 
-        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-        #      proportion=0.2, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (1.0, 1.5), stone_distance_range = (0.05, 0.08),  holes_depth = -5.0, platform_width = 1.5,
-
-        # ),
 
         "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.7, border_width=0.25,  horizontal_scale = 0.01, stone_height_max = 0.01, stone_width_range = (0.7, 1.5), stone_distance_range = (0.05, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+             proportion=0.7, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.25), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
 
         ),
 
@@ -713,6 +710,8 @@ def stepping_stones_xy_front_half_pixelwise(
     seed: int = 0,
     outer_slack_m: float = 0.2,            # ★外側だけ余白（台側には入れない）
     max_points: Optional[int] = None,    # 石数を固定したいなら指定（足りない場合は返り値が少なくなる）
+    y_band_m: float = 0.35  # 例：中央±0.35m だけに石を置く
+
 ) -> tuple[List[Tuple[float, float]], dict]:
     """
     返り値:
@@ -764,10 +763,33 @@ def stepping_stones_xy_front_half_pixelwise(
     # パッチが完全に入る条件: x0 >= 0側境界 かつ x0+w_px <= W-margin_px
     outer_slack_px = int(outer_slack_m / h)
 
-    y0_min = margin_px+ outer_slack_px
-    y0_max = H - margin_px - w_px- outer_slack_px
-    # x0_min = max(cx, margin_px)          # x>=0側へ
-    # x0_max = W - margin_px - w_px
+    # y0_min = margin_px+ outer_slack_px
+    # y0_max = H - margin_px - w_px- outer_slack_px
+  
+
+
+    y0_min_base = margin_px + outer_slack_px
+    y0_max_base = H - margin_px - w_px - outer_slack_px
+
+    # 中央帯 |y| <= y_band_m に制限（石が帯からはみ出さないようにする）
+    y_band_px = int(y_band_m / h)
+
+    # 石中心 yc = y0 + w_px/2 が満たすべき条件：
+    #   |(yc - cy)*h| + (w_eff_m/2) <= y_band_m
+    # ピクセルで書くと：
+    #   |yc - cy| <= (y_band_m - w_eff_m/2)/h
+    yc_band_px = (y_band_m - 0.5 * w_eff_m) / h
+    yc_band_px = max(0.0, yc_band_px)  # 帯が狭すぎる場合の保険
+
+    yc_min = cy - yc_band_px
+    yc_max = cy + yc_band_px
+
+    # y0 = yc - w_px/2 なので
+    y0_min_band = int(math.ceil(yc_min - 0.5 * w_px))
+    y0_max_band = int(math.floor(yc_max - 0.5 * w_px))
+
+    y0_min = max(y0_min_base, y0_min_band)
+    y0_max = min(y0_max_base, y0_max_band)
 
     # x0_min = max(px2c, cx, margin_px)
     x0_min = max(px2c + 1, cx, margin_px)
@@ -828,168 +850,168 @@ def stepping_stones_xy_front_half_pixelwise(
 
 
 
-def stepping_stones_xy_front_half_pixelwise2(
-    size_x_m: float,
-    size_y_m: float,
-    horizontal_scale: float,
-    platform_width_m: float,
-    difficulty: float,
-    stone_width_range_m: tuple[float, float] = (0.25, 0.25),      # サイズ固定なら (w,w)
-    stone_distance_range_m: tuple[float, float] = (0.10, 0.35),
-    margin_m: float = 0.2,
-    outer_slack_m: float = 0.2,            # ★外側だけ余白（台側には入れない）
-    platform_clearance_m: float = 0.0,
-    per_row_phase: bool = True,
-    seed: int = 0,
-    max_points: Optional[int] = None,      # ★石数固定したいなら必ず指定
-    platform_gap_px: int = 0,              # ★台と石の最小ギャップ（0=隙間なし狙い）
-):
-    h = float(horizontal_scale)
-    rng = random.Random(seed)
+# def stepping_stones_xy_front_half_pixelwise2(
+#     size_x_m: float,
+#     size_y_m: float,
+#     horizontal_scale: float,
+#     platform_width_m: float,
+#     difficulty: float,
+#     stone_width_range_m: tuple[float, float] = (0.25, 0.25),      # サイズ固定なら (w,w)
+#     stone_distance_range_m: tuple[float, float] = (0.10, 0.35),
+#     margin_m: float = 0.2,
+#     outer_slack_m: float = 0.2,            # ★外側だけ余白（台側には入れない）
+#     platform_clearance_m: float = 0.0,
+#     per_row_phase: bool = True,
+#     seed: int = 0,
+#     max_points: Optional[int] = None,      # ★石数固定したいなら必ず指定
+#     platform_gap_px: int = 0,              # ★台と石の最小ギャップ（0=隙間なし狙い）
+# ):
+#     h = float(horizontal_scale)
+#     rng = random.Random(seed)
 
-    W = int(size_x_m / h)
-    H = int(size_y_m / h)
-    cx = W // 2
-    cy = H // 2
+#     W = int(size_x_m / h)
+#     H = int(size_y_m / h)
+#     cx = W // 2
+#     cy = H // 2
 
-    # difficulty で pitch
-    w_px, dist_px, w_eff_m, dist_eff_m = params_from_difficulty(
-        difficulty, h, stone_width_range_m, stone_distance_range_m
-    )
-    pitch_px = max(1, w_px + dist_px)
+#     # difficulty で pitch
+#     w_px, dist_px, w_eff_m, dist_eff_m = params_from_difficulty(
+#         difficulty, h, stone_width_range_m, stone_distance_range_m
+#     )
+#     pitch_px = max(1, w_px + dist_px)
 
-    # 最難pitch（石数固定用）
-    w_px_max, dist_px_max, _, _ = params_from_difficulty(
-        1.0, h, stone_width_range_m, stone_distance_range_m
-    )
-    pitch_px_max = max(1, w_px_max + dist_px_max)
+#     # 最難pitch（石数固定用）
+#     w_px_max, dist_px_max, _, _ = params_from_difficulty(
+#         1.0, h, stone_width_range_m, stone_distance_range_m
+#     )
+#     pitch_px_max = max(1, w_px_max + dist_px_max)
 
-    # platform bbox (px)
-    pf_px = int(platform_width_m / h)
-    px1 = (W - pf_px) // 2
-    px2 = (W + pf_px) // 2
-    py1 = (H - pf_px) // 2
-    py2 = (H + pf_px) // 2
+#     # platform bbox (px)
+#     pf_px = int(platform_width_m / h)
+#     px1 = (W - pf_px) // 2
+#     px2 = (W + pf_px) // 2
+#     py1 = (H - pf_px) // 2
+#     py2 = (H + pf_px) // 2
 
-    clear_px = int(platform_clearance_m / h)
-    px1c, px2c = px1 - clear_px, px2 + clear_px
-    py1c, py2c = py1 - clear_px, py2 + clear_px
+#     clear_px = int(platform_clearance_m / h)
+#     px1c, px2c = px1 - clear_px, px2 + clear_px
+#     py1c, py2c = py1 - clear_px, py2 + clear_px
 
-    margin_px = int(margin_m / h)
-    outer_slack_px = int(outer_slack_m / h)
+#     margin_px = int(margin_m / h)
+#     outer_slack_px = int(outer_slack_m / h)
 
-    # ---- ★台側アンカー（x方向）----
-    # 「隙間なし」を狙って px2c ちょうどに置く。衝突するなら1pxずつ右へ逃がす。
-    x0_start = max(px2c + platform_gap_px, cx, margin_px)
+#     # ---- ★台側アンカー（x方向）----
+#     # 「隙間なし」を狙って px2c ちょうどに置く。衝突するなら1pxずつ右へ逃がす。
+#     x0_start = max(px2c + platform_gap_px, cx, margin_px)
 
-    # もし台と交差する定義（rect_intersect_1dの仕様）だと当たる場合があるので、最小で交差しない位置にする
-    def intersects_platform_x(sx0, sx1):
-        return rect_intersect_1d(sx0, sx1, px1c, px2c)
+#     # もし台と交差する定義（rect_intersect_1dの仕様）だと当たる場合があるので、最小で交差しない位置にする
+#     def intersects_platform_x(sx0, sx1):
+#         return rect_intersect_1d(sx0, sx1, px1c, px2c)
 
-    # x方向だけ先にチェック（yは後でチェック）
-    while intersects_platform_x(x0_start, x0_start + w_px):
-        x0_start += 1  # どうしてもダメなら 1px だけ隙間ができるが、最小に抑える
+#     # x方向だけ先にチェック（yは後でチェック）
+#     while intersects_platform_x(x0_start, x0_start + w_px):
+#         x0_start += 1  # どうしてもダメなら 1px だけ隙間ができるが、最小に抑える
 
-    # ---- 外側端（+x側）には余白を残す ----
-    x0_max = W - margin_px - w_px - outer_slack_px
+#     # ---- 外側端（+x側）には余白を残す ----
+#     x0_max = W - margin_px - w_px - outer_slack_px
 
-    # y方向も上下端に余白
-    y0_min = margin_px + outer_slack_px
-    y0_max = H - margin_px - w_px - outer_slack_px
+#     # y方向も上下端に余白
+#     y0_min = margin_px + outer_slack_px
+#     y0_max = H - margin_px - w_px - outer_slack_px
 
-    # ---- ★石数固定：最難pitchで rows/cols を決める ----
-    # phaseは「2個目以降」にしか掛けないが、最大phaseがあると右端に寄るので見込みで控える
-    phase_max = (w_px - 1) if (per_row_phase and w_px > 1) else 0
+#     # ---- ★石数固定：最難pitchで rows/cols を決める ----
+#     # phaseは「2個目以降」にしか掛けないが、最大phaseがあると右端に寄るので見込みで控える
+#     phase_max = (w_px - 1) if (per_row_phase and w_px > 1) else 0
 
-    # 右端までに入る列数（最難pitch基準）
-    # 1列目は x0_start 固定、2列目以降は x0_start + phase + (c-1)*pitch
-    # 最後の列の左下: x0_start + phase_max + (n_cols-2)*pitch_px_max
-    # その右端が x0_max+w_px を超えない必要
-    if x0_start > x0_max:
-        return [], {"reason": "no_space_x"}
+#     # 右端までに入る列数（最難pitch基準）
+#     # 1列目は x0_start 固定、2列目以降は x0_start + phase + (c-1)*pitch
+#     # 最後の列の左下: x0_start + phase_max + (n_cols-2)*pitch_px_max
+#     # その右端が x0_max+w_px を超えない必要
+#     if x0_start > x0_max:
+#         return [], {"reason": "no_space_x"}
 
-    usable_w = x0_max - (x0_start + phase_max)
-    # n_cols >=1
-    n_cols_max = 1 if usable_w < 0 else (2 + (usable_w // pitch_px_max))  # 2列目以降の分を数える
-    usable_h = y0_max - y0_min
-    n_rows_max = 1 if usable_h < 0 else (1 + (usable_h // pitch_px_max))
+#     usable_w = x0_max - (x0_start + phase_max)
+#     # n_cols >=1
+#     n_cols_max = 1 if usable_w < 0 else (2 + (usable_w // pitch_px_max))  # 2列目以降の分を数える
+#     usable_h = y0_max - y0_min
+#     n_rows_max = 1 if usable_h < 0 else (1 + (usable_h // pitch_px_max))
 
-    if n_cols_max <= 0 or n_rows_max <= 0:
-        return [], {"reason": "no_space"}
+#     if n_cols_max <= 0 or n_rows_max <= 0:
+#         return [], {"reason": "no_space"}
 
-    if max_points is not None:
-        n_cols = min(n_cols_max, max_points)
-        n_rows = (max_points + n_cols - 1) // n_cols
-        if n_rows > n_rows_max:
-            n_rows = n_rows_max
-            n_cols = (max_points + n_rows - 1) // n_rows
-        if n_cols > n_cols_max or n_rows > n_rows_max or (n_rows * n_cols) < max_points:
-            return [], {
-                "reason": "cannot_fit_max_points_at_max_pitch",
-                "n_cols_max": int(n_cols_max),
-                "n_rows_max": int(n_rows_max),
-                "requested": int(max_points),
-                "pitch_px_max": int(pitch_px_max),
-            }
-    else:
-        n_cols, n_rows = int(n_cols_max), int(n_rows_max)
+#     if max_points is not None:
+#         n_cols = min(n_cols_max, max_points)
+#         n_rows = (max_points + n_cols - 1) // n_cols
+#         if n_rows > n_rows_max:
+#             n_rows = n_rows_max
+#             n_cols = (max_points + n_rows - 1) // n_rows
+#         if n_cols > n_cols_max or n_rows > n_rows_max or (n_rows * n_cols) < max_points:
+#             return [], {
+#                 "reason": "cannot_fit_max_points_at_max_pitch",
+#                 "n_cols_max": int(n_cols_max),
+#                 "n_rows_max": int(n_rows_max),
+#                 "requested": int(max_points),
+#                 "pitch_px_max": int(pitch_px_max),
+#             }
+#     else:
+#         n_cols, n_rows = int(n_cols_max), int(n_rows_max)
 
-    # ---- 配置 ----
-    xy = []
-    for r in range(n_rows):
-        y0 = y0_min + r * pitch_px
-        if y0 > y0_max:
-            continue
+#     # ---- 配置 ----
+#     xy = []
+#     for r in range(n_rows):
+#         y0 = y0_min + r * pitch_px
+#         if y0 > y0_max:
+#             continue
 
-        phase = rng.randrange(0, w_px) if (per_row_phase and w_px > 1) else 0
+#         phase = rng.randrange(0, w_px) if (per_row_phase and w_px > 1) else 0
 
-        for c in range(n_cols):
-            # ★1個目は台にアンカー。2個目以降のみphaseを適用
-            if c == 0:
-                x0 = x0_start
-            else:
-                x0 = x0_start + phase + (c - 1) * pitch_px
+#         for c in range(n_cols):
+#             # ★1個目は台にアンカー。2個目以降のみphaseを適用
+#             if c == 0:
+#                 x0 = x0_start
+#             else:
+#                 x0 = x0_start + phase + (c - 1) * pitch_px
 
-            if x0 > x0_max:
-                continue
+#             if x0 > x0_max:
+#                 continue
 
-            sx0, sx1 = x0, x0 + w_px
-            sy0, sy1 = y0, y0 + w_px
+#             sx0, sx1 = x0, x0 + w_px
+#             sy0, sy1 = y0, y0 + w_px
 
-            hit_platform = (
-                rect_intersect_1d(sx0, sx1, px1c, px2c)
-                and rect_intersect_1d(sy0, sy1, py1c, py2c)
-            )
-            if hit_platform:
-                continue
+#             hit_platform = (
+#                 rect_intersect_1d(sx0, sx1, px1c, px2c)
+#                 and rect_intersect_1d(sy0, sy1, py1c, py2c)
+#             )
+#             if hit_platform:
+#                 continue
 
-            xc = x0 + w_px * 0.5
-            yc = y0 + w_px * 0.5
-            x_m = (xc - cx) * h
-            y_m = (yc - cy) * h
-            xy.append((float(x_m), float(y_m)))
+#             xc = x0 + w_px * 0.5
+#             yc = y0 + w_px * 0.5
+#             x_m = (xc - cx) * h
+#             y_m = (yc - cy) * h
+#             xy.append((float(x_m), float(y_m)))
 
-            if max_points is not None and len(xy) >= max_points:
-                return xy, {
-                    "pitch_px": int(pitch_px),
-                    "pitch_px_max": int(pitch_px_max),
-                    "n_rows": int(n_rows),
-                    "n_cols": int(n_cols),
-                    "x0_start_px": int(x0_start),
-                    "outer_slack_px": int(outer_slack_px),
-                    "platform_gap_px": int(platform_gap_px),
-                }
+#             if max_points is not None and len(xy) >= max_points:
+#                 return xy, {
+#                     "pitch_px": int(pitch_px),
+#                     "pitch_px_max": int(pitch_px_max),
+#                     "n_rows": int(n_rows),
+#                     "n_cols": int(n_cols),
+#                     "x0_start_px": int(x0_start),
+#                     "outer_slack_px": int(outer_slack_px),
+#                     "platform_gap_px": int(platform_gap_px),
+#                 }
 
-    return xy, {
-        "pitch_px": int(pitch_px),
-        "pitch_px_max": int(pitch_px_max),
-        "n_rows": int(n_rows),
-        "n_cols": int(n_cols),
-        "produced": int(len(xy)),
-        "x0_start_px": int(x0_start),
-        "outer_slack_px": int(outer_slack_px),
-        "platform_gap_px": int(platform_gap_px),
-    }
+#     return xy, {
+#         "pitch_px": int(pitch_px),
+#         "pitch_px_max": int(pitch_px_max),
+#         "n_rows": int(n_rows),
+#         "n_cols": int(n_cols),
+#         "produced": int(len(xy)),
+#         "x0_start_px": int(x0_start),
+#         "outer_slack_px": int(outer_slack_px),
+#         "platform_gap_px": int(platform_gap_px),
+#     }
 
 
 
@@ -1038,6 +1060,7 @@ stone_xy_list, meta = stepping_stones_xy_front_half_pixelwise(
     per_row_phase=False,
     # seed=123,
     max_points=None,            # num_stonesに合わせるなら apply 側で切る/退避が安全
+    y_band_m = 0.8
 )
 
 # actual_stone_width = meta['stone_w_eff_m']
@@ -1077,8 +1100,8 @@ class RobotSceneCfg(InteractiveSceneCfg):
         # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
-        # terrain_generator= STEPPING_STONES_CFG, 
-        terrain_generator= MOAT_CFG, # proposed env
+        terrain_generator= STEPPING_STONES_CFG, 
+        # terrain_generator= MOAT_CFG, # proposed env
         # terrain_generator= BLOCK_CFG,
         max_init_terrain_level=0,
         collision_group=-1,
@@ -1104,9 +1127,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
     #     )
 
 
-    stones: RigidObjectCollectionCfg = field(
-        default_factory=lambda: stones   # 上で作った stones を渡す
-    )
+    # stones: RigidObjectCollectionCfg = field(
+    #     default_factory=lambda: stones   # 上で作った stones を渡す
+    # )
 
 
 
@@ -1455,6 +1478,19 @@ class RobotSceneCfg(InteractiveSceneCfg):
     #     mesh_prim_paths=["/World/ground"],
     # )
 
+     # sensors
+    height_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 10.0)),
+        # attach_yaw_only=True,
+        ray_alignment="yaw", 
+        # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.02, size=[1.2, 1.2]),
+        # debug_vis=True,
+        debug_vis=False,
+        mesh_prim_paths=["/World/ground"],
+    )
+
     # camera = TiledCameraCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
     #     debug_vis = True,
@@ -1567,13 +1603,19 @@ class HighLevelPolicyObsCfg(ObsGroup):
     #         "normalize": True,      # depthの inf を0にするなどの処理をしてくれる
     #     },
     #     # ↓ここがキモ：このtermだけ履歴を持たせる
-    #     history_length=2,           # 4フレーム分スタック
+    #     history_length=1,           # 4フレーム分スタック
     #     flatten_history_dim=True,   # (B,4,H,W,C) → (B, 4*H*W*C)にflatten
     # )
 
-    heightmap = ObsTerm(
-        func = mdp.obs_near_blocks_col
+    # heightmap = ObsTerm(
+    #     func = mdp.obs_near_blocks_col
 
+    # )
+
+
+    heightmap = ObsTerm(func=mdp.height_scan,
+        params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+        clip=(-1.0, 5.0),
     )
 
     ft_stack = ObsTerm(
@@ -1766,7 +1808,28 @@ class RewardsCfg:
 
     distance_progress = RewTerm(func= mdp.BaseProgressToTargetRel, weight = 15)#ベース座標系での進捗, all legs weighted sum
 
-    cmd_on_stones = RewTerm(func = mdp.penalty_cmd_near_edge, weight = -0.2)
+    # gap_penalty = RewTerm(func=mdp.planned_foothold_unsafe_penalty_minpool, 
+    #      weight = -1.0,
+    #      params={
+    #         "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            
+    #     },
+    # )
+
+#     cmd_on_stones = RewTerm(func = mdp.penalty_cmd_near_edge, weight = -0.5)
+
+#     outside_pen = RewTerm(
+#     func=mdp.penalty_cmd_outside_hard,
+#     weight=-1.0,  # まずは -1〜-5 くらいで様子見
+#     params={
+#         "warmup_steps": 5,
+#         "gate_by_visible_stone": True,
+#         "x_gate": (-0.3, 2.5),
+#         "y_gate": 1.2,
+    
+#     },
+# )
+
 
 
 
@@ -1783,7 +1846,7 @@ class RewardsCfg:
     # )
 
     dont_wait = RewTerm(
-        func=mdp.dont_wait_rel3, weight=-1, 
+        func=mdp.dont_wait_rel3, weight=-2, 
         params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
     )
 
@@ -1803,6 +1866,27 @@ class RewardsCfg:
         },
     )
 
+
+    feet_gap_pen = RewTerm(
+        func=mdp.feet_gap_contact_penalty,
+        weight=-2.0,   # まずはこのくらいから
+        params={
+            "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
+            "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "hole_z":           -3.0,   # 固定
+            "gap_tol":          2.9,   # 穴面+4.7 以内で接地→減点
+            "min_contact_time": 0.02,
+            "force_z_thresh":   None,   # 任意（無ければ None）
+            "foot_sole_offset": 0.0,
+            "normalize_by_feet": False,
+        },
+    )
+    
+
+    alive = RewTerm(
+        func = mdp.alive_reward_when_progress,
+        weight = 0.005
+    )
 
 
 
@@ -1858,7 +1942,7 @@ class CurriculumCfg:
     #     }
     # )
     
-    # terrain_levels = CurrTerm(func=mdp.terrain_levels_nav2) 
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_nav2) 
 
 
     schedule_lin = CurrTerm(
@@ -1868,6 +1952,23 @@ class CurriculumCfg:
             "weight": 1,
             "num_steps": 25000
         }
+    )
+
+
+
+    goal_x_range = CurrTerm(
+        func=mdp.modify_term_cfg,
+        params={
+            # commands.<あなたのterm名>...  ← term名は CommandsCfg で付けた変数名
+            "address": "commands.pose_command.ranges.pos_x",
+            "modify_fn": expand_goal_x_range,
+            "modify_params": {
+                "start": (0.5, 1.5),
+                "end": (0.5, 3.0),
+                "start_step": 0,
+                "end_step": 300_000,
+            },
+        },
     )
 
 
@@ -1908,10 +2009,10 @@ class EventCfg:
 
     #proposed
 
-    reset_objects = EventTerm(
-        func = mdp.reset_collection_to_default,
-        mode = "reset",
-    )
+    # reset_objects = EventTerm(
+    #     func = mdp.reset_collection_to_default,
+    #     mode = "reset",
+    # )
 
 
 
@@ -1925,10 +2026,10 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
 
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=128, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
@@ -1947,7 +2048,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
-        self.decimation = LOW_LEVEL_ENV_CFG.decimation * 2#TODO　５Hz 10Hz
+        self.decimation = LOW_LEVEL_ENV_CFG.decimation * 10#TODO　５Hz 10Hz
         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
         self.sim.physx.gpu_max_rigid_patch_count = 1000000 # 例：約100万 (1,048,576) に設定
 
@@ -1980,4 +2081,6 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         # disable randomization for play
         self.observations.policy.enable_corruption = False
 
+        # self.scene.terrain.terrain_generator.curriculum = False
         self.scene.terrain.terrain_generator.curriculum = True
+

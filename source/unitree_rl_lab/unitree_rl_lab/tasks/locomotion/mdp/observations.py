@@ -1358,7 +1358,7 @@ def select_near_blocks2(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=7):
 
 
     # # 距離小さい順にソート
-    sorted_dist, sorted_idx = torch.sort(dist2_masked, dim=1)
+    sorted_dist, sorted_idx = torch.sort(dist2_masked, dim=1, stable=True)
 
     # ソートキー: x が小さいほど手前（ベースに近い前方）
     # sort_key = torch.where(mask, x, big * torch.ones_like(x))
@@ -1415,6 +1415,81 @@ def select_near_blocks2(block_pos_b, x_max=2.5, y_max=1.2, max_blocks=7):
 
 
 
+
+
+
+
+import torch
+
+def select_near_blocks3(
+    block_pos_b, x_max=2.5, y_max=1.2, max_blocks=7
+):
+    """
+    block_pos_b: [N_env, N_block, 3] (base)
+    sort: dist2 (primary) + angle (secondary) で順序安定化
+    """
+    x = block_pos_b[..., 0]
+    y = block_pos_b[..., 1]
+    N_env, N_block = x.shape
+
+    # 条件
+    mask = (x > -0.3) & (x < x_max) & (y.abs() < y_max)  # [N_env, N_block]
+
+    big = 1e6
+    dist2 = x**2 + y**2
+    angle = torch.atan2(y, x)  # [-pi, pi]
+
+    # 無効は big に飛ばす（角度も同様に big）
+    dist2_m = torch.where(mask, dist2, torch.full_like(dist2, big))
+    angle_m = torch.where(mask, angle, torch.full_like(angle, big))
+
+    # ---- lexsort( dist2, angle ) を stable sort 2回で再現 ----
+    # 1) まず第2キー angle で stable sort（同じ angle のときは元の順＝IDを維持）
+    _, idx2 = torch.sort(angle_m, dim=1, stable=True)  # [N_env, N_block]
+
+    # 2) angle順に並んだ dist2 を取り出し、第1キー dist2 で stable sort
+    dist2_ord = torch.gather(dist2_m, dim=1, index=idx2)
+    _, idx1_in_ord = torch.sort(dist2_ord, dim=1, stable=True)
+
+    # 3) 最終インデックス（元のblock indexに戻す）
+    sorted_idx = torch.gather(idx2, dim=1, index=idx1_in_ord)          # [N_env, N_block]
+    sorted_dist = torch.gather(dist2_m, dim=1, index=sorted_idx)       # [N_env, N_block]
+
+    # top-k 取得
+    k = min(max_blocks, N_block)
+    idx_k = sorted_idx[:, :k]
+    dist_k = sorted_dist[:, :k]
+
+    idx_expanded = idx_k.unsqueeze(-1).expand(-1, -1, 3)
+    near_k = torch.gather(block_pos_b, dim=1, index=idx_expanded)
+
+    valid_k = dist_k < (big * 0.5)
+
+    # padding
+    if k < max_blocks:
+        pad_blocks = torch.zeros((N_env, max_blocks - k, 3),
+                                 device=block_pos_b.device, dtype=block_pos_b.dtype)
+        pad_mask = torch.zeros((N_env, max_blocks - k),
+                               device=block_pos_b.device, dtype=valid_k.dtype)
+        near_blocks = torch.cat([near_k, pad_blocks], dim=1)
+        near_mask = torch.cat([valid_k.float(), pad_mask], dim=1)
+    else:
+        near_blocks = near_k
+        near_mask = valid_k.float()
+
+    # 無効は0埋め
+    near_blocks = torch.where(
+        near_mask.unsqueeze(-1) > 0.5,
+        near_blocks,
+        torch.zeros_like(near_blocks),
+    )
+
+    return near_blocks, near_mask
+
+
+
+
+
 def blocks_to_features_with_edges(
     near_blocks: torch.Tensor,
     stone_size_x: float = 0.25,
@@ -1455,7 +1530,7 @@ def obs_near_blocks_col(env):
         block_height=0.3,
     )
     # ここから先は元のまま
-    near_blocks, near_mask = select_near_blocks2(
+    near_blocks, near_mask = select_near_blocks3(
         block_pos_b,
         x_max=2.5,
         y_max=1.2,
@@ -1484,8 +1559,8 @@ def obs_near_blocks_col(env):
 
 
     # if torch.rand(1).item() < 0.001:  # たまにだけ表示
-    print("near_blocks[0]:", near_blocks[0])
-    print("near_mask[0]:  ", near_mask[0])
+    # print("near_blocks[0]:", near_blocks[0])
+    # print("near_mask[0]:  ", near_mask[0])
 
     # obs_blocks = torch.cat(
     #     [near_blocks.reshape(env.num_envs, -1), near_mask],

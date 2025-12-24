@@ -474,8 +474,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
 
         # num_mini_batches=32,
         # num_mini_batches=64,
-        learning_rate=1.0e-4,
-        # learning_rate=3.0e-5,
+        # learning_rate=1.0e-4,
+        learning_rate=7.0e-5,
 
         schedule="adaptive",
         # gamma=0.99,
