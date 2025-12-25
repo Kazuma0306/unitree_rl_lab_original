@@ -606,7 +606,7 @@ def dont_wait_rel3(env,
                   command_name: str = "goal_position",
                   distance_threshold: float = 0.2,
                   max_distance: float = 0.8,
-                  velocity_threshold: float = 0.1) -> torch.Tensor:
+                  velocity_threshold: float = 0.3) -> torch.Tensor:
     # 1. ゴールまでの距離（方向はまだ無視）
     des_pos_b = env.command_manager.get_command(command_name)[:, :2]   # [N,2]
     dist = des_pos_b.norm(dim=1)                                       # [N]
@@ -1070,6 +1070,49 @@ class FROnBlockBonusOnce(ManagerTermBase):
 
 
 
+
+# def feet_gap_contact_penalty_v2(
+#     env,
+#     sensor_cfg,
+#     asset_cfg=SceneEntityCfg("robot"),
+#     *,
+#     ground_z: float = 0.0,          # 通常地面の高さ
+#     hole_depth: float = 0.3,        # 穴の深さ（底は ground_z - hole_depth）
+#     enter_depth: float = 0.02,      # これ以上“地面より下”に入ったら罰が立ち上がる
+#     smooth_depth: float = 0.05,     # 立ち上がりの滑らかさ（小さいほど急峻）
+#     min_contact_time: float = 0.06, # ノイズ接触を減らす（50Hzなら3step相当）
+#     force_z_thresh: float | None = None,
+#     foot_sole_offset: float = 0.0,
+#     normalize_by_feet: bool = True,
+#     power: float = 2.0,             # 深く踏むほど強く（1=線形,2=二乗）
+# ) -> torch.Tensor:
+#     contact = _contacts_bool(env, sensor_cfg, min_contact_time, force_z_thresh)  # (B,F) bool
+#     robot   = env.scene[asset_cfg.name]
+
+#     pos_w  = robot.data.body_pos_w[:, asset_cfg.body_ids, :]   # (B,F,3)
+#     foot_z = pos_w[..., 2] - foot_sole_offset                  # (B,F)
+
+#     # 地面よりどれだけ下にあるか（+が“穴側”）
+#     below = (ground_z - foot_z)                                # (B,F), >0 で穴に入っている
+
+#     # “穴に入った度合い”を 0〜1 に正規化（底まで行くと 1 付近）
+#     depth01 = (below - enter_depth) / (hole_depth - enter_depth + 1e-6)
+#     depth01 = depth01.clamp(0.0, 1.0)
+
+#     # 滑らかに立ち上げ（ReLUより学習が速いことが多い）
+#     # smooth_depth が小さいほど急峻。0にしたいなら ReLU に戻してOK
+#     depth01 = depth01 / (depth01 + smooth_depth)
+
+#     pen = (depth01 ** power) * contact.float()                 # (B,F)
+#     r = pen.sum(dim=1)
+#     return r / pen.shape[1] if normalize_by_feet else r
+
+
+
+def feet_gap_contact_penalty_5hz(env) -> torch.Tensor:
+    if hasattr(env, "_gap_pen_last"):
+        return env._gap_pen_last
+    return torch.zeros(env.num_envs, device=env.device)
 
 
 

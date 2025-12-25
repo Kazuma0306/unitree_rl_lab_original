@@ -224,7 +224,7 @@ def terrain_levels_nav2(
 
     print("before:", terrain.terrain_levels[env_ids].tolist())
 
-    # 公式と同じAPI
+    # 公式API
     terrain.update_env_origins(env_ids, move_up, move_down)
 
     print("after :", terrain.terrain_levels[env_ids].tolist())
@@ -837,22 +837,22 @@ def apply_mass_curriculum(env: ManagerBasedEnv, env_ids: torch.Tensor, asset_cfg
     
 
 
-    def expand_goal_x_range(
-        env, env_ids, old_value,
-        start=(0.5, 1.5),
-        end=(0.5, 3.0),
-        start_step=0,
-        end_step=300000,
-    ):
-        """commands.pose_command.ranges.pos_x をステップに応じて拡大する"""
-        step = env.common_step_counter
-        if step < start_step:
-            return mdp.modify_term_cfg.NO_CHANGE
+def expand_goal_x_range(
+    env, env_ids, old_value,
+    start=(0.5, 1.5),
+    end=(0.5, 3.0),
+    start_step=0,
+    end_step=300000,
+):
+    """commands.pose_command.ranges.pos_x をステップに応じて拡大する"""
+    step = env.common_step_counter
+    if step < start_step:
+        return mdp.modify_term_cfg.NO_CHANGE
 
-        # 線形に補間（0→1にクランプ）
-        t = (step - start_step) / float(max(1, end_step - start_step))
-        t = max(0.0, min(1.0, t))
+    # 線形に補間（0→1にクランプ）
+    t = (step - start_step) / float(max(1, end_step - start_step))
+    t = max(0.0, min(1.0, t))
 
-        new_min = start[0] + t * (end[0] - start[0])
-        new_max = start[1] + t * (end[1] - start[1])
-        return (new_min, new_max)
+    new_min = start[0] + t * (end[0] - start[0])
+    new_max = start[1] + t * (end[1] - start[1])
+    return (new_min, new_max)

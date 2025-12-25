@@ -1587,7 +1587,7 @@ class VisionHighRNN(ActorCriticRecurrent):
         # hm_shape: tuple[int, int] = (64, 64),
         # hm_channels: int = 2,  # Height + Mask なら 2。Heightだけなら 1 にする
         prop_encoder_dims: list[int] = [256, 256],
-        hm_mlp_dims: list[int] = [256, 256],
+        hm_mlp_dims: list[int] = [1024, 512, 256],
         projection_head_dims: list[int] = [256, 128],
         actor_hidden_dims=[128, 256],
         critic_hidden_dims=[128, 256],
@@ -1650,15 +1650,70 @@ class VisionHighRNN(ActorCriticRecurrent):
         # self.hm_mlp = nn.Sequential(*hm_layers)
         # self.hm_out_dim = hm_mlp_dims[-1]
         # self.hm_norm = nn.LayerNorm(self.hm_out_dim) if use_layernorm else nn.Identity()
+     
 
-        hm_dim = obs[self.heightmap_key].shape[1] 
-        prop_layers, in_dim = [], hm_dim
-        for dim in hm_mlp_dims:
-            prop_layers += [nn.Linear(in_dim, dim), act]
-            in_dim = dim
-        self.hm_encoder = nn.Sequential(*prop_layers)
-        self.hm_out_dim = prop_encoder_dims[-1]
+
+
+
+        # hm_dim = obs[self.heightmap_key].shape[1] 
+
+        # self.hm_in_norm = nn.LayerNorm(hm_dim)
+
+        # prop_layers, in_dim = [], hm_dim
+        # for dim in hm_mlp_dims:
+        #     prop_layers += [nn.Linear(in_dim, dim), act]
+        #     in_dim = dim
+        # self.hm_encoder = nn.Sequential(*prop_layers)
+        # self.hm_out_dim = prop_encoder_dims[-1]
+        # self.hm_norm = nn.LayerNorm(self.hm_out_dim) if use_layernorm else nn.Identity()
+
+
+
+
+        self.hm_channels = 1
+        self.hm_H = 61
+        self.hm_W = 61
+
+        # hm_dim = self.hm_channels * self.hm_H * self.hm_W  # = 3721
+
+        hm_dim = obs[self.heightmap_key].shape[-1]  # ← shape[1] じゃなく shape[-1]
+
+
+        # 入力正規化：どっちか片方でOK
+        # (A) learnable LayerNorm（入力が毎回怪しいなら便利）
+        self.hm_in_norm = nn.LayerNorm(hm_dim)
+
+        # (B) すでに「hm = (hm_flat - 2)/3」みたいな固定正規化を使うなら、
+        # self.hm_in_norm は Identity にしてもOK
+        # self.hm_in_norm = nn.Identity()
+
+        # ---- Conv encoder ----
+        # act は既存の act をそのまま使う想定（ReLU/ELU/LeakyReLUなど）
+        conv_ch1, conv_ch2, conv_ch3 = 32, 64, 64
+
+        self.hm_conv = nn.Sequential(
+            nn.Conv2d(self.hm_channels, conv_ch1, kernel_size=3, stride=2, padding=1),  # 61->31
+            act,
+            nn.Conv2d(conv_ch1, conv_ch2, kernel_size=3, stride=2, padding=1),          # 31->16
+            act,
+            nn.Conv2d(conv_ch2, conv_ch3, kernel_size=3, stride=2, padding=1),          # 16->8
+            act,
+            nn.AdaptiveAvgPool2d((1, 1)),                                               # -> [B,64,1,1]
+        )
+
+        # ---- Conv出力をベクトル化して 256 次元へ ----
+        hm_out_dim = 256
+        self.hm_fc = nn.Sequential(
+            nn.Linear(conv_ch3, hm_out_dim),
+            # ここは好み：最後は act 無しの方が安定しがち
+            # act,
+        )
+
+        self.hm_out_dim = hm_out_dim
         self.hm_norm = nn.LayerNorm(self.hm_out_dim) if use_layernorm else nn.Identity()
+
+
+
 
 
 
@@ -1703,43 +1758,79 @@ class VisionHighRNN(ActorCriticRecurrent):
         prop_feat = self.proprioception_encoder(prop_vec)                   # [B, prop_out_dim]
         return self.prop_norm(prop_feat)
 
+    # def _encode_heightmap(self, obs: dict) -> torch.Tensor:
+    #     hm_flat = obs[self.heightmap_key]           # [B, hm_channels*H*W] を想定
+
+
+    #     # ---- 最後の次元 = C*H*W であることを確認 ----
+    #     # *leading_dims, feat_dim = hm_flat.shape   # 例: [traj, T, C*H*W] → leading_dims=[traj,T]
+    #     # expected_dim = self.hm_channels * self.hm_H * self.hm_W
+    #     # assert feat_dim == expected_dim, \
+    #     #     f"heightmap dim mismatch: got {feat_dim}, expected {expected_dim} (= {self.hm_channels}*{self.hm_H}*{self.hm_W})"
+
+    #     # # ---- 先頭の軸を全部まとめてバッチにする ----
+    #     # # 例: leading_dims=(traj,T) → B_total = traj*T
+    #     # if len(leading_dims) == 0:
+    #     #     B_total = 1
+    #     # else:
+    #     #     B_total = 1
+    #     #     for d in leading_dims:
+    #     #         B_total *= d
+
+    #     # # [*, C*H*W] → [B_total, C*H*W]
+    #     # hm_2d = hm_flat.reshape(B_total, feat_dim)
+
+    #     # # [B_total, C*H*W] → [B_total, C, H, W]
+    #     # hm_img = hm_2d.view(B_total, self.hm_channels, self.hm_H, self.hm_W)
+
+    #     #  # Conv + MLP
+    #     # x = self.hm_encoder(hm_img)   # [B_total, C', h', w']
+    #     # x = x.view(B_total, -1)       # flatten
+
+    #     # x = self.hm_mlp(x)            # [B_total, hm_feat_dim]
+    #     # hm_flat = self.hm_in_norm(hm_flat)
+    #     hm = (hm_flat - 2.0) / 3.0
+    #     x = self.hm_encoder(hm) 
+    #     x = self.hm_norm(x)
+
+    #     # 元の leading_dims に戻す: [leading..., hm_feat_dim]
+    #     # hm_feat = x.view(*leading_dims, -1) if len(leading_dims) > 0 else x
+
+    #     return x
+
+
     def _encode_heightmap(self, obs: dict) -> torch.Tensor:
-        hm_flat = obs[self.heightmap_key]           # [B, hm_channels*H*W] を想定
+        hm = obs[self.heightmap_key]  # shape: [B,3721] or [T,B,3721] or [B,T,3721] etc.
 
+        feat_dim = hm.shape[-1]
+        leading = hm.shape[:-1]       # 先頭の次元全部（例: (T,B)）
 
-        # ---- 最後の次元 = C*H*W であることを確認 ----
-        # *leading_dims, feat_dim = hm_flat.shape   # 例: [traj, T, C*H*W] → leading_dims=[traj,T]
-        # expected_dim = self.hm_channels * self.hm_H * self.hm_W
-        # assert feat_dim == expected_dim, \
-        #     f"heightmap dim mismatch: got {feat_dim}, expected {expected_dim} (= {self.hm_channels}*{self.hm_H}*{self.hm_W})"
+        # 期待するdimチェック（ここ重要）
+        expected = self.hm_channels * self.hm_H * self.hm_W
+        assert feat_dim == expected, f"hm dim mismatch: got {feat_dim}, expected {expected}"
 
-        # # ---- 先頭の軸を全部まとめてバッチにする ----
-        # # 例: leading_dims=(traj,T) → B_total = traj*T
-        # if len(leading_dims) == 0:
-        #     B_total = 1
-        # else:
-        #     B_total = 1
-        #     for d in leading_dims:
-        #         B_total *= d
+        # [*, feat] -> [N, feat]
+        hm_2d = hm.reshape(-1, feat_dim)
 
-        # # [*, C*H*W] → [B_total, C*H*W]
-        # hm_2d = hm_flat.reshape(B_total, feat_dim)
+        # ---- 入力正規化（どっちか片方）----
+        hm_2d = self.hm_in_norm(hm_2d)          # LayerNorm(3721)
+        # もしくは固定スケールなら:
+        # hm_2d = (hm_2d - 2.0) / 3.0
 
-        # # [B_total, C*H*W] → [B_total, C, H, W]
-        # hm_img = hm_2d.view(B_total, self.hm_channels, self.hm_H, self.hm_W)
+        # [N, feat] -> [N, C, H, W]
+        hm_img = hm_2d.view(-1, self.hm_channels, self.hm_H, self.hm_W)
 
-        #  # Conv + MLP
-        # x = self.hm_encoder(hm_img)   # [B_total, C', h', w']
-        # x = x.view(B_total, -1)       # flatten
-
-        # x = self.hm_mlp(x)            # [B_total, hm_feat_dim]
-        x = self.hm_encoder(hm_flat) 
+        # Conv -> [N, conv_ch, 1, 1]
+        x = self.hm_conv(hm_img)
+        x = x.flatten(1)             # [N, conv_ch]
+        x = self.hm_fc(x)            # [N, hm_out_dim]
         x = self.hm_norm(x)
 
-        # 元の leading_dims に戻す: [leading..., hm_feat_dim]
-        # hm_feat = x.view(*leading_dims, -1) if len(leading_dims) > 0 else x
-
+        # [N, hm_out_dim] -> [leading..., hm_out_dim]
+        x = x.view(*leading, -1)
         return x
+
+
 
 
     # ------------------------------------------------------------

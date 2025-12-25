@@ -591,6 +591,9 @@ class FootstepPolicyAction(ActionTerm):
 
 
     def apply_actions(self):
+
+
+
         contact_now = self._estimate_contact()
         liftoff = self._contact_prev & (~contact_now)   # [B,4]
         self._contact_prev = contact_now

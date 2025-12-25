@@ -109,14 +109,14 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     use_cache=True,
     seed = 123,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.3),
+        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2),
         # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
         #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # ),
 
 
         "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.7, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.25), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
+             proportion=0.8, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.25), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
 
         ),
 
@@ -1555,7 +1555,7 @@ class ActionsCfg:
     pre_trained_policy_action: mdp.FootstepPolicyActionCfg = mdp.FootstepPolicyActionCfg(
         asset_name="robot",
         # policy_path=f"{ISAACLAB_NUCLEUS_DIR}/Policies/ANYmal-C/Blind/policy.pt", #TODO
-        policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed4/2025-12-12_10-36-24/exported/policy.pt",
+        policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed3/2025-12-10_17-03-00/exported/policy.pt",
         low_level_decimation=4,
         low_level_actions=LOW_LEVEL_ENV_CFG.actions.JointPositionAction, #lower's action
         low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy, # lower's observation
@@ -1802,7 +1802,7 @@ class RewardsCfg:
     )
     orientation_tracking = RewTerm(
         func=mdp.heading_command_error_abs,
-        weight=-0.8,
+        weight=-0.9,
         params={"command_name": "pose_command"},
     )
 
@@ -1835,7 +1835,7 @@ class RewardsCfg:
 
     # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
     # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.001)
+    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.0001)
     # # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
     # energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
@@ -1846,7 +1846,7 @@ class RewardsCfg:
     # )
 
     dont_wait = RewTerm(
-        func=mdp.dont_wait_rel3, weight=-2, 
+        func=mdp.dont_wait_rel3, weight=-3.5, 
         params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
     )
 
@@ -1859,7 +1859,7 @@ class RewardsCfg:
 
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
-        weight=-1.5,
+        weight=-0.1,
         params={
             "threshold": 1,
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["Head_.*", ".*_hip", ".*_thigh", ".*_calf"]),
@@ -1867,25 +1867,25 @@ class RewardsCfg:
     )
 
 
-    feet_gap_pen = RewTerm(
-        func=mdp.feet_gap_contact_penalty,
-        weight=-2.0,   # まずはこのくらいから
-        params={
-            "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
-            "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "hole_z":           -3.0,   # 固定
-            "gap_tol":          2.9,   # 穴面+4.7 以内で接地→減点
-            "min_contact_time": 0.02,
-            "force_z_thresh":   None,   # 任意（無ければ None）
-            "foot_sole_offset": 0.0,
-            "normalize_by_feet": False,
-        },
-    )
+    # feet_gap_pen = RewTerm(
+    #     func=mdp.feet_gap_contact_penalty,
+    #     weight=-2.5,   # まずはこのくらいから
+    #     params={
+    #         "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
+    #         "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #         "hole_z":           -3.0,   # 固定
+    #         "gap_tol":          2.9,   # 穴面+4.7 以内で接地→減点
+    #         "min_contact_time": 0.02,
+    #         "force_z_thresh":   None,   # 任意（無ければ None）
+    #         "foot_sole_offset": 0.0,
+    #         "normalize_by_feet": False,
+    #     },
+    # )
     
 
     alive = RewTerm(
         func = mdp.alive_reward_when_progress,
-        weight = 0.005
+        weight = 0.01
     )
 
 
@@ -1945,14 +1945,14 @@ class CurriculumCfg:
     terrain_levels = CurrTerm(func=mdp.terrain_levels_nav2) 
 
 
-    schedule_lin = CurrTerm(
-        func = mdp.schedule_reward_weight,
-        params = {
-            "term_name" : "distance_progress",
-            "weight": 1,
-            "num_steps": 25000
-        }
-    )
+    # schedule_lin = CurrTerm(
+    #     func = mdp.schedule_reward_weight,
+    #     params = {
+    #         "term_name" : "distance_progress",
+    #         "weight": 1,
+    #         "num_steps": 25000
+    #     }
+    # )
 
 
 
@@ -1961,10 +1961,10 @@ class CurriculumCfg:
         params={
             # commands.<あなたのterm名>...  ← term名は CommandsCfg で付けた変数名
             "address": "commands.pose_command.ranges.pos_x",
-            "modify_fn": expand_goal_x_range,
+            "modify_fn": mdp.expand_goal_x_range,
             "modify_params": {
-                "start": (0.5, 1.5),
-                "end": (0.5, 3.0),
+                "start": (1.0, 1.5),
+                "end": (1.0, 3.0),
                 "start_step": 0,
                 "end_step": 300_000,
             },
