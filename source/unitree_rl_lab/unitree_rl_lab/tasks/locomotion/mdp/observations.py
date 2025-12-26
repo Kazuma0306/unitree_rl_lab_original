@@ -1567,3 +1567,15 @@ def obs_near_blocks_col(env):
     #     dim=-1,
     # )
     return obs_blocks
+
+
+
+
+
+
+def executed_foot_targets_base(env, command_name: str = "step_fr_to_block") -> torch.Tensor:
+    term = env.command_manager.get_term(command_name)
+    # そのまま返してOK。心配なら detach() / clone() でも良い
+    return term.command
+    # return term.command.detach()
+    # return term.command.clone()

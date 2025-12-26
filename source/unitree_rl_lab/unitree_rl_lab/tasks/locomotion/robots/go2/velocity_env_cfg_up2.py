@@ -110,13 +110,13 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     seed = 123,
     sub_terrains={
         "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2),
-        # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
-        #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
-        # ),
+        # # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+        # #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
+        # # ),
 
 
         "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.8, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.25), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
+             proportion=0.8, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.35), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
 
         ),
 
@@ -1573,6 +1573,11 @@ class HighLevelPolicyObsCfg(ObsGroup):
     pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "pose_command"})
 
     last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100)) #last command
+
+    executed_foot_targets = ObsTerm( # latched action 
+        func=mdp.executed_foot_targets_base,
+        params={"command_name": "step_fr_to_block"},
+    )
 
     leg_position = ObsTerm(func = mdp.ee_pos_base_obs)#ベース座標系での脚位置
 
