@@ -98,10 +98,10 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
 
 STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     curriculum=True,
-    size=(4.0, 4.0),
+    size=(3.5, 3.5),
     border_width=0.050,
-    num_rows=10,
-    num_cols=10,
+    num_rows=8,
+    num_cols=8,
     horizontal_scale=0.02,
     vertical_scale=0.005,
     slope_threshold=0.75,
@@ -115,9 +115,13 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
         # # ),
 
 
-        "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.8, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.35), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
+        # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+        #      proportion=0.8, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.35), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
 
+        # ),
+
+        "descrete_obstacles": terrain_gen.HfDiscreteObstaclesTerrainCfg(
+             proportion=0.8, border_width=0.25, obstacle_width_range =(0.25,  0.35) , obstacle_height_range = (0.01, 0.05), num_obstacles = 30
         ),
 
 
@@ -1580,6 +1584,9 @@ class HighLevelPolicyObsCfg(ObsGroup):
     )
 
     leg_position = ObsTerm(func = mdp.ee_pos_base_obs)#ベース座標系での脚位置
+
+
+    swing_leg = ObsTerm(func = mdp.swing_leg_onehot_obs)
 
 
     # front_depth = ObsTerm(

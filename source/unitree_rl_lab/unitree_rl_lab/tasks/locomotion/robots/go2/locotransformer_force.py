@@ -553,7 +553,7 @@ class PropFtActor(nn.Module):
         ft_time_steps: int,   # K
         ft_in_dim: int,       # Fx,Fy,Fz → 3 など
         num_legs: int,
-        num_actions: int,
+        num_actions: int=12,
         ft_feat_dim: int = 128,
         prop_hidden_dims: list[int] = [256, 256],
         fused_hidden_dims: list[int] = [256, 256],

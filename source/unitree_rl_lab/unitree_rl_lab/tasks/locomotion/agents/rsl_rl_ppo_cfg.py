@@ -175,7 +175,8 @@ class VisionHighRNNCfg(RslRlPpoActorCriticCfg):
         "last_action", 
         "leg_position",
         "ft_stack",
-        "executed_foot_targets"
+        "executed_foot_targets",
+        "swing_leg"
     ]
     # vision_obs_key: str = "camera_image"
     heightmap_key : str = "heightmap"
@@ -412,7 +413,7 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
 
     # num_steps_per_env = 100
     max_iterations = 4000
-    save_interval = 50
+    save_interval = 10
     # experiment_name = "anymal_c_navigation"
     experiment_name = ""  # same as task name
     # empirical_normalization = False 
@@ -428,7 +429,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "leg_position",
             "heightmap",
             "ft_stack",
-            "executed_foot_targets"
+            "executed_foot_targets",
+            "swing_leg"
             # "front_depth",
             # "front_normals",
             # "height_scanner",
@@ -442,7 +444,8 @@ class BasePPORunnerCfg(RslRlOnPolicyRunnerCfg):
             "leg_position",
             "heightmap",
             "ft_stack",
-            "executed_foot_targets"
+            "executed_foot_targets",
+            "swing_leg"
             # "front_depth",
             # "front_normals",
             # "height_scanner",

@@ -1579,3 +1579,9 @@ def executed_foot_targets_base(env, command_name: str = "step_fr_to_block") -> t
     return term.command
     # return term.command.detach()
     # return term.command.clone()
+
+
+
+def swing_leg_onehot_obs(env, command_name="step_fr_to_block"):
+    term = env.command_manager.get_term(command_name)
+    return term.swing_leg_onehot
