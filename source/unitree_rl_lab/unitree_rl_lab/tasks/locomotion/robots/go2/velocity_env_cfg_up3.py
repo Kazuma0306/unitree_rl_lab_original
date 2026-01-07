@@ -98,7 +98,7 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
 
 STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     curriculum=True,
-    size=(8.0, 8.0),
+    size=(4.0, 4.0),
     border_width=20.0,
     num_rows=10,
     num_cols=20,
@@ -108,7 +108,7 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     difficulty_range=(0.0, 1.0),
     use_cache=False,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
+        # "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.1),
         # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
         #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # ),
@@ -119,7 +119,7 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
         # ),
 
         "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-             proportion=0.9, border_width=0.25,  horizontal_scale = 0.02, stone_height_max = 0.00, stone_width_range = (0.7, 1.5), stone_distance_range = (0.03, 0.09),  holes_depth = -3.0, platform_width = 1.0,
+             proportion=0.9, border_width=0.25,  horizontal_scale = 0.02, stone_height_max = 0.00, stone_width_range = (0.7, 0.7), stone_distance_range = (0.04, 0.04),  holes_depth = -3.0, platform_width = 1.0,
 
         ),
 
@@ -1259,43 +1259,46 @@ class RobotSceneCfg(InteractiveSceneCfg):
     
 
     # sensors
-    # height_scanner = RayCasterCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/base",
-    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-    #     attach_yaw_only=True,
-    #     # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
-    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.3, size=[1.2, 1.2]),
-    #     debug_vis=True,
-    #     mesh_prim_paths=["/World/ground"],
-    # )
-
-    # camera = TiledCameraCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
-    #     debug_vis = True,
-    #     update_period=0.02, #50Hz, Same as Low Policy, Ideal 30Hz TODO
-    #     height=64,
-    #     width=64,
-    #     data_types=["depth"],
-    #     # spawn=sim_utils.PinholeCameraCfg(
-    #     #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 5.0)
-    #     # ),
-    #     # spawn=sim_utils.PinholeCameraCfg(
-    #     #     focal_length=16.0, focus_distance=3.0, horizontal_aperture=20.955, clipping_range=(0.1, 4.0)
-    #     # ),
-
-    #     spawn=sim_utils.PinholeCameraCfg(
-    #         focal_length=10.5, focus_distance=3.0, horizontal_aperture=20.955, clipping_range=(0.1, 3.0)
-    #     ),
-    #     depth_clipping_behavior = "max",
-    #     # depth_clipping_behavior = "zero",
-    #     # offset=CameraCfg.OffsetCfg(pos=(0.510, 0.0, 0.015), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
-    #     # offset=CameraCfg.OffsetCfg(pos=(0.32, 0.0, 0.15), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
-    #     offset=CameraCfg.OffsetCfg(pos=(0.37, 0.0, 0.15), rot=(0.0616, -0.7044, 0.7044, -0.0616), convention="ros"),
-    #     # offset=CameraCfg.OffsetCfg(pos=(0.05, 0.0, 1), rot = (0.0, -0.7071, 0.7071, 0.0), convention="ros"),
+    height_scanner = RayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        attach_yaw_only=True,
+        # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.02, size=[1.2, 0.6]),
+        debug_vis=False,
+        mesh_prim_paths=["/World/ground"],
+    )
 
 
 
-    # )
+    camera = TiledCameraCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
+        debug_vis = False,
+        update_period=0.02, #50Hz, Same as Low Policy, Ideal 30Hz TODO
+        height=64,
+        width=64,
+        data_types=["rgb"],
+        # spawn=sim_utils.PinholeCameraCfg(
+        #     focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 5.0)
+        # ),
+        # spawn=sim_utils.PinholeCameraCfg(
+        #     focal_length=16.0, focus_distance=3.0, horizontal_aperture=20.955, clipping_range=(0.1, 4.0)
+        # ),
+
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length=10.5, focus_distance=3.0, horizontal_aperture=20.955, clipping_range=(0.1, 3.0)
+        ),
+        # depth_clipping_behavior = "max",
+        # depth_clipping_behavior = "zero",
+        offset=CameraCfg.OffsetCfg(pos=(0.370, 0.0, 0.15), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.370, 0.0, 0.15), rot=(0.4056, -0.5792, 0.4056, -0.5792), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.32, 0.0, 0.15), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.37, 0.0, 0.15), rot=(0.0616, -0.7044, 0.7044, -0.0616), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.05, 0.0, 1), rot = (0.0, -0.7071, 0.7071, 0.0), convention="ros"),
+
+
+
+    )
 
     # camera = CameraCfg(
     #     prim_path="{ENV_REGEX_NS}/Robot/base/front_cam",
@@ -1333,7 +1336,7 @@ class ActionsCfg:
     pre_trained_policy_action: mdp.FootstepPolicyActionCfg = mdp.FootstepPolicyActionCfg(
         asset_name="robot",
         # policy_path=f"{ISAACLAB_NUCLEUS_DIR}/Policies/ANYmal-C/Blind/policy.pt", #TODO
-        policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed4/2025-12-12_13-10-05/exported/policy.pt",
+        policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed3/2025-12-10_17-03-00/exported/policy.pt",
         low_level_decimation=4,
         low_level_actions=LOW_LEVEL_ENV_CFG.actions.JointPositionAction, #lower's action
         low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy, # lower's observation
@@ -1632,13 +1635,13 @@ class CommandsCfg:
         asset_name="robot",
         simple_heading=False,
         resampling_time_range=(24.0, 24.0),
-        debug_vis=True,
+        debug_vis=False,
         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
         ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.5, 2.5), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
     step_fr_to_block = mdp.FootstepFromHighLevelCfg(
-        debug_vis = True
+        debug_vis = False
     )
 
 
@@ -1661,6 +1664,59 @@ class TerminationsCfg:
 
 
 
+
+
+@configclass
+class EventCfg:
+    """Configuration for events."""
+
+    reset_scene = EventTerm(
+        func = mdp.reset_scene_to_default, 
+        mode = "reset",
+    )
+
+
+    reset_root = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "pose_range": {
+                # stepping stones なら x,y を動かすと溝に落ちやすいので最初は0推奨
+                "x": (0.0, 0.0),
+                "y": (0.0, 0.0),
+                "z": (-0.02, 0.02),          # 高さだけ少し
+                "roll": (-0.25, 0.25),       # ±14degくらい（最初は小さめ）
+                "pitch": (-0.25, 0.25),
+                "yaw": (-3.1416, 3.1416),
+            },
+            "velocity_range": {
+                "x": (0.0, 0.0),
+                "y": (0.0, 0.0),
+                "z": (0.0, 0.0),
+                "roll": (0.0, 0.0),
+                "pitch": (0.0, 0.0),
+                "yaw": (0.0, 0.0),
+            },
+        },
+    )
+
+    # ついでに関節初期値もちょい崩す（任意）
+    reset_joints = EventTerm(
+        func=mdp.reset_joints_by_offset,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),   # もし関節を絞るなら joint_names/joint_ids を追加
+            "position_range": (-0.05, 0.05),        # rad
+            "velocity_range": (0.0, 0.0),
+        },
+    )
+
+
+
+
+
+
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
@@ -1675,14 +1731,14 @@ class CurriculumCfg:
     #     }
     # )
 
-    schedule_lin = CurrTerm(
-        func = mdp.schedule_reward_weight,
-        params = {
-            "term_name" : "distance_progress",
-            "weight": 1,
-            "num_steps": 25000
-        }
-    )
+    # schedule_lin = CurrTerm(
+    #     func = mdp.schedule_reward_weight,
+    #     params = {
+    #         "term_name" : "distance_progress",
+    #         "weight": 1,
+    #         "num_steps": 25000
+    #     }
+    # )
 
 
     terrain_levels = CurrTerm(func=mdp.terrain_levels_nav) 
@@ -1700,11 +1756,11 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
 
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
+    scene: SceneEntityCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
 
     actions: ActionsCfg = ActionsCfg()
     observations: ObservationsCfg = ObservationsCfg()
@@ -1712,7 +1768,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     commands: CommandsCfg = CommandsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
-    curriculum: CurriculumCfg = CurriculumCfg()
+    # curriculum: CurriculumCfg = CurriculumCfg()
 
 
     def __post_init__(self):
@@ -1720,7 +1776,7 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
 
         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
-        self.decimation = LOW_LEVEL_ENV_CFG.decimation * 5#TODO　５Hz 10Hz
+        self.decimation = LOW_LEVEL_ENV_CFG.decimation #TODO　５Hz 10Hz
         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
         self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
 

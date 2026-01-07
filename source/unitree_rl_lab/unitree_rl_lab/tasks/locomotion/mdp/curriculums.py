@@ -176,8 +176,8 @@ def terrain_levels_nav2(
     env,
     env_ids,
     goal_key: str = "pose_command",
-    success_radius: float = 0.2,          # 到達半径[m]
-    demote_radius: float = 0.7,           # まだこれより遠ければ降格
+    success_radius: float = 0.15,          # 到達半径[m]
+    demote_radius: float = 0.4,           # まだこれより遠ければ降格
     check_after_frac: float = 0.85,        # エピソード何割経過で降格判定を許可
     cooldown_len: int = 8,                # ★ レベル変更後、何エピソードは固定するか
 
@@ -202,25 +202,54 @@ def terrain_levels_nav2(
     can_change = cd == 0
 
     # --- 残距離 ---
+    # cmd  = env.command_manager.get_command(goal_key)[env_ids]
+    # dist = torch.norm(cmd[:, :3], dim=1)          # 残距離 d_t
+
+    # # 成功判定（到達）
+    # is_success = dist < success_radius
+
+    # # 降格判定の時間条件
+    # max_steps = getattr(env, "max_episode_length", None)
+    # if max_steps is None:
+    #     ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
+    #     max_steps = int(env.cfg.episode_length_s / ctrl_dt)
+    # elapsed_enough = env.episode_length_buf[env_ids] > int(check_after_frac * max_steps)
+
+    # # 失敗（未達 & 十分時間経過 & まだ遠い）
+    # is_fail = (~is_success) & elapsed_enough & (dist > demote_radius)
+
+    # # --- クールダウンを考慮した昇格/降格 ---
+    # move_up   = can_change & is_success
+    # move_down = can_change & is_fail
+
+    # _reset_idxの中で呼ばれているので、ここで見られるはず
+    
+    terminated = env.termination_manager.terminated[env_ids]
+    time_out = env.termination_manager.time_outs[env_ids]
+
+    done = terminated | time_out
+    if not torch.any(done):
+        # 初回 reset 等：何もしない
+        return env.scene.terrain.terrain_levels.float().mean()
+
+    # 終了した env のみで続行
+    env_ids = env_ids[done]
+    terminated = terminated[done]
+    time_out = time_out[done]
+
+    # 距離
     cmd  = env.command_manager.get_command(goal_key)[env_ids]
-    dist = torch.norm(cmd[:, :3], dim=1)          # 残距離 d_t
+    dist = torch.norm(cmd[:, :3], dim=1)
 
-    # 成功判定（到達）
-    is_success = dist < success_radius
+    # 昇格：時間切れ（＝一応最後まで動けた）かつ近い
+    is_success = time_out & (dist < success_radius)
 
-    # 降格判定の時間条件
-    max_steps = getattr(env, "max_episode_length", None)
-    if max_steps is None:
-        ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
-        max_steps = int(env.cfg.episode_length_s / ctrl_dt)
-    elapsed_enough = env.episode_length_buf[env_ids] > int(check_after_frac * max_steps)
+    # 降格：転倒などで終了、または時間切れでもまだ遠い
+    is_fail = terminated | (time_out & (dist > demote_radius))
 
-    # 失敗（未達 & 十分時間経過 & まだ遠い）
-    is_fail = (~is_success) & elapsed_enough & (dist > demote_radius)
-
-    # --- クールダウンを考慮した昇格/降格 ---
     move_up   = can_change & is_success
     move_down = can_change & is_fail
+
 
     print("before:", terrain.terrain_levels[env_ids].tolist())
 
@@ -239,78 +268,261 @@ def terrain_levels_nav2(
 
 
 
-
 def terrain_levels_nav3(
     env,
     env_ids,
     goal_key: str = "pose_command",
-    success_radius: float = 0.25,
-    demote_radius: float = 0.8,
-    check_after_frac: float = 0.85,
-    cooldown_len: int = 8,
-    p_keep0: float = 0.3,          # ★追加：常にレベル0に固定する割合
+    success_radius: float = 0.15,
+    demote_radius: float = 0.4,
+    cooldown_len: int = 4,
+    promote_streak: int = 3,   # ★ 連続成功回数
 ):
     terrain = env.scene.terrain
+
+    # env_ids tensor化
     env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
-
-    # --- 0) keep-level0 マスクを一度だけ作る（固定メンバー方式） ---
-    if not hasattr(env, "keep_level0_mask"):
-        B = env.num_envs
-        n_keep = max(1, int(B * p_keep0))
-        perm = torch.randperm(B, device=env.device)
-        keep_ids = perm[:n_keep]
-        mask = torch.zeros(B, device=env.device, dtype=torch.bool)
-        mask[keep_ids] = True
-        env.keep_level0_mask = mask
-
-    keep0_mask_local = env.keep_level0_mask[env_ids]        # [len(env_ids)]
-    keep_env_ids = env_ids[keep0_mask_local]
-    var_env_ids  = env_ids[~keep0_mask_local]               # カリキュラム対象
-
-    # --- 1) keep0 env はレベル0固定＆origin同期 ---
-    if keep_env_ids.numel() > 0:
-        terrain.terrain_levels[keep_env_ids] = 0
-        zeros = torch.zeros_like(keep_env_ids, dtype=torch.bool)
-        terrain.update_env_origins(keep_env_ids, zeros, zeros)  # env_origins を level0 に同期 :contentReference[oaicite:2]{index=2}
-
-    # --- 2) 以降は通常カリキュラム（var_env_ids だけ） ---
-    if var_env_ids.numel() == 0:
+    if env_ids.numel() == 0:
         return terrain.terrain_levels.float().mean()
 
-    # cooldown buffer
+    # --- バッファ作成 ---
     if not hasattr(env, "level_cooldown"):
         env.level_cooldown = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
 
-    cd = env.level_cooldown[var_env_ids]
-    cd = torch.clamp(cd - 1, min=0)
-    env.level_cooldown[var_env_ids] = cd
-    can_change = cd == 0
+    if not hasattr(env, "level_success_streak"):
+        env.level_success_streak = torch.zeros(env.num_envs, device=env.device, dtype=torch.int16)
 
-    # 残距離
-    cmd  = env.command_manager.get_command(goal_key)[var_env_ids]
+    # --- _reset_idx の中で呼ばれている想定：done を取る ---
+    terminated = env.termination_manager.terminated[env_ids]
+    time_out   = env.termination_manager.time_outs[env_ids]
+    done = terminated | time_out
+
+    if not torch.any(done):
+        # 初回 reset など（step未実行等）: 何もしない
+        return terrain.terrain_levels.float().mean()
+
+    # done env のみに絞る
+    env_ids = env_ids[done]
+    terminated = terminated[done]
+    time_out   = time_out[done]
+
+    # --- cooldown 更新（done env のみでOK） ---
+    cd = env.level_cooldown[env_ids]
+    cd = torch.clamp(cd - 1, min=0)
+    env.level_cooldown[env_ids] = cd
+    can_change = (cd == 0)
+
+    # --- 距離 ---
+    cmd  = env.command_manager.get_command(goal_key)[env_ids]
     dist = torch.norm(cmd[:, :3], dim=1)
 
-    is_success = dist < success_radius
+    # 成功/失敗
+    is_success = time_out & (dist < success_radius)
+    is_fail    = terminated | (time_out & (dist > demote_radius))
 
-    max_steps = getattr(env, "max_episode_length", None)
-    if max_steps is None:
-        ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
-        max_steps = int(env.cfg.episode_length_s / ctrl_dt)
+    # --- 連続成功 streak 更新（クールダウン中は貯めない） ---
+    streak = env.level_success_streak[env_ids]
 
-    elapsed_enough = env.episode_length_buf[var_env_ids] > int(check_after_frac * max_steps)
-    is_fail = (~is_success) & elapsed_enough & (dist > demote_radius)
+    # can_change の env だけ streak を更新、それ以外は0に戻す（固定の意味を保つ）
+    new_streak = torch.where(is_success, streak + 1, torch.zeros_like(streak))
+    streak = torch.where(can_change, new_streak, torch.zeros_like(streak))
+    env.level_success_streak[env_ids] = streak
 
-    move_up   = can_change & is_success
+    cur_lvl = terrain.terrain_levels[env_ids]  # doneで絞った後のenv_ids
+    # k = torch.where(cur_lvl < 2, 1,
+    #     torch.where(cur_lvl < 4, 2, 3)
+    # )
+
+    k = torch.full_like(cur_lvl, 3)                           # default 3
+    k = torch.where(cur_lvl <= 3, torch.full_like(cur_lvl, 2), k)
+    k = torch.where(cur_lvl <= 2, torch.ones_like(cur_lvl), k)
+
+
+    # --- 昇格/降格 ---
+    # move_up   = can_change & (streak >= promote_streak)& (streak >= k)
+    move_up   = can_change & (streak >= k)
+
     move_down = can_change & is_fail
 
-    # ここでenv_originsも更新される :contentReference[oaicite:3]{index=3}
-    terrain.update_env_origins(var_env_ids, move_up, move_down)
+    
+
+
+    print("before:", terrain.terrain_levels[env_ids].tolist())
+
+    terrain.update_env_origins(env_ids, move_up, move_down)
+
+    print("after :", terrain.terrain_levels[env_ids].tolist())
+    print("up/down:", int(move_up.sum()), int(move_down.sum()))
+
+    # --- 変更が起きた env は cooldown と streak をリセット ---
+    changed = move_up | move_down
+    if torch.any(changed):
+        ch_ids = env_ids[changed]
+        env.level_cooldown[ch_ids] = cooldown_len
+        env.level_success_streak[ch_ids] = 0
+
+    return terrain.terrain_levels.float().mean()
+
+
+
+
+def terrain_levels_nav4(
+    env,
+    env_ids,
+    goal_key: str = "pose_command",
+    success_radius: float = 0.15,
+    demote_radius: float = 0.4,
+    cooldown_len: int = 4,
+):
+    terrain = env.scene.terrain
+    env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
+    if env_ids.numel() == 0:
+        return terrain.terrain_levels.float().mean()
+
+    # buffers
+    if not hasattr(env, "level_cooldown"):
+        env.level_cooldown = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
+    if not hasattr(env, "level_success_streak"):
+        env.level_success_streak = torch.zeros(env.num_envs, device=env.device, dtype=torch.int16)
+    if not hasattr(env, "level_fail_streak"):
+        env.level_fail_streak = torch.zeros(env.num_envs, device=env.device, dtype=torch.int16)
+
+    terminated = env.termination_manager.terminated[env_ids]
+    time_out   = env.termination_manager.time_outs[env_ids]
+    done = terminated | time_out
+    if not torch.any(done):
+        return terrain.terrain_levels.float().mean()
+
+    env_ids = env_ids[done]
+    terminated = terminated[done]
+    time_out   = time_out[done]
+
+    # cooldown
+    cd = env.level_cooldown[env_ids]
+    cd = torch.clamp(cd - 1, min=0)
+    env.level_cooldown[env_ids] = cd
+    can_change = (cd == 0)
+
+    # distance at episode end
+    cmd  = env.command_manager.get_command(goal_key)[env_ids]
+    dist = torch.norm(cmd[:, :3], dim=1)
+
+    # success/fail events
+    reached = dist < success_radius
+    # 成功の定義：到達していればOK（time_outに縛らない方が安全）
+    is_success = reached
+
+    # 失敗：成功ではない & (転倒等 or タイムアウトで遠い)
+    is_fail = (~is_success) & (terminated | (time_out & (dist > demote_radius)))
+
+    # streak update（cooldown中も貯める/貯めないは好み。ここでは貯める）
+    s = env.level_success_streak[env_ids]
+    f = env.level_fail_streak[env_ids]
+    s = torch.where(is_success, s + 1, torch.zeros_like(s))
+    f = torch.where(is_fail,    f + 1, torch.zeros_like(f))
+    env.level_success_streak[env_ids] = s
+    env.level_fail_streak[env_ids] = f
+
+    cur_lvl = terrain.terrain_levels[env_ids].long()
+
+    # ---- promote/demote thresholds ----
+    # 例：Lv2→3 だけ厳しく（3連続）、Lv3以上は3連続
+    k_up = torch.ones_like(cur_lvl)
+    k_up = torch.where(cur_lvl >= 2, torch.full_like(cur_lvl, 3), k_up)
+
+    # 降格はLv3以上を鈍く（2連続失敗で降格など）
+    k_down = torch.ones_like(cur_lvl)
+    k_down = torch.where(cur_lvl >= 3, torch.full_like(cur_lvl, 2), k_down)
+
+    move_up   = can_change & (s >= k_up)
+    move_down = can_change & (f >= k_down)
+
+    print("before:", terrain.terrain_levels[env_ids].tolist())
+    terrain.update_env_origins(env_ids, move_up, move_down)
+    print("after :", terrain.terrain_levels[env_ids].tolist())
+    print("up/down:", int(move_up.sum()), int(move_down.sum()))
 
     changed = move_up | move_down
     if torch.any(changed):
-        env.level_cooldown[var_env_ids[changed]] = cooldown_len
+        ch = env_ids[changed]
+        env.level_cooldown[ch] = cooldown_len
+        env.level_success_streak[ch] = 0
+        env.level_fail_streak[ch] = 0
 
     return terrain.terrain_levels.float().mean()
+
+
+
+# def terrain_levels_nav3(
+#     env,
+#     env_ids,
+#     goal_key: str = "pose_command",
+#     success_radius: float = 0.25,
+#     demote_radius: float = 0.8,
+#     check_after_frac: float = 0.85,
+#     cooldown_len: int = 8,
+#     p_keep0: float = 0.3,          # ★追加：常にレベル0に固定する割合
+# ):
+#     terrain = env.scene.terrain
+#     env_ids = torch.as_tensor(env_ids, device=env.device, dtype=torch.long)
+
+#     # --- 0) keep-level0 マスクを一度だけ作る（固定メンバー方式） ---
+#     if not hasattr(env, "keep_level0_mask"):
+#         B = env.num_envs
+#         n_keep = max(1, int(B * p_keep0))
+#         perm = torch.randperm(B, device=env.device)
+#         keep_ids = perm[:n_keep]
+#         mask = torch.zeros(B, device=env.device, dtype=torch.bool)
+#         mask[keep_ids] = True
+#         env.keep_level0_mask = mask
+
+#     keep0_mask_local = env.keep_level0_mask[env_ids]        # [len(env_ids)]
+#     keep_env_ids = env_ids[keep0_mask_local]
+#     var_env_ids  = env_ids[~keep0_mask_local]               # カリキュラム対象
+
+#     # --- 1) keep0 env はレベル0固定＆origin同期 ---
+#     if keep_env_ids.numel() > 0:
+#         terrain.terrain_levels[keep_env_ids] = 0
+#         zeros = torch.zeros_like(keep_env_ids, dtype=torch.bool)
+#         terrain.update_env_origins(keep_env_ids, zeros, zeros)  # env_origins を level0 に同期 :contentReference[oaicite:2]{index=2}
+
+#     # --- 2) 以降は通常カリキュラム（var_env_ids だけ） ---
+#     if var_env_ids.numel() == 0:
+#         return terrain.terrain_levels.float().mean()
+
+#     # cooldown buffer
+#     if not hasattr(env, "level_cooldown"):
+#         env.level_cooldown = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
+
+#     cd = env.level_cooldown[var_env_ids]
+#     cd = torch.clamp(cd - 1, min=0)
+#     env.level_cooldown[var_env_ids] = cd
+#     can_change = cd == 0
+
+#     # 残距離
+#     cmd  = env.command_manager.get_command(goal_key)[var_env_ids]
+#     dist = torch.norm(cmd[:, :3], dim=1)
+
+#     is_success = dist < success_radius
+
+#     max_steps = getattr(env, "max_episode_length", None)
+#     if max_steps is None:
+#         ctrl_dt   = env.sim.get_physics_dt() * env.cfg.decimation
+#         max_steps = int(env.cfg.episode_length_s / ctrl_dt)
+
+#     elapsed_enough = env.episode_length_buf[var_env_ids] > int(check_after_frac * max_steps)
+#     is_fail = (~is_success) & elapsed_enough & (dist > demote_radius)
+
+#     move_up   = can_change & is_success
+#     move_down = can_change & is_fail
+
+#     # ここでenv_originsも更新される :contentReference[oaicite:3]{index=3}
+#     terrain.update_env_origins(var_env_ids, move_up, move_down)
+
+#     changed = move_up | move_down
+#     if torch.any(changed):
+#         env.level_cooldown[var_env_ids[changed]] = cooldown_len
+
+#     return terrain.terrain_levels.float().mean()
 
 
 

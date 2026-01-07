@@ -211,7 +211,7 @@ def foot_clearance_reward(
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
     asset: RigidObject = env.scene[asset_cfg.name]
-    foot_z_target_error = torch.square(asset.data.body_pos_w[:, asset_cfg.body_ids, 2] - target_height)
+    foot_z_target_errorFoot_slip = torch.square(asset.data.body_pos_w[:, asset_cfg.body_ids, 2] - target_height)
     foot_velocity_tanh = torch.tanh(tanh_mult * torch.norm(asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :2], dim=2))
     reward = foot_z_target_error * foot_velocity_tanh
     return torch.exp(-torch.sum(reward, dim=1) / std)
@@ -1071,41 +1071,52 @@ class FROnBlockBonusOnce(ManagerTermBase):
 
 
 
-# def feet_gap_contact_penalty_v2(
-#     env,
-#     sensor_cfg,
-#     asset_cfg=SceneEntityCfg("robot"),
-#     *,
-#     ground_z: float = 0.0,          # 通常地面の高さ
-#     hole_depth: float = 0.3,        # 穴の深さ（底は ground_z - hole_depth）
-#     enter_depth: float = 0.02,      # これ以上“地面より下”に入ったら罰が立ち上がる
-#     smooth_depth: float = 0.05,     # 立ち上がりの滑らかさ（小さいほど急峻）
-#     min_contact_time: float = 0.06, # ノイズ接触を減らす（50Hzなら3step相当）
-#     force_z_thresh: float | None = None,
-#     foot_sole_offset: float = 0.0,
-#     normalize_by_feet: bool = True,
-#     power: float = 2.0,             # 深く踏むほど強く（1=線形,2=二乗）
-# ) -> torch.Tensor:
-#     contact = _contacts_bool(env, sensor_cfg, min_contact_time, force_z_thresh)  # (B,F) bool
-#     robot   = env.scene[asset_cfg.name]
+def feet_gap_contact_penalty_v2(
+    env,
+    sensor_cfg,
+    asset_cfg=SceneEntityCfg("robot"),
+    *,
+    ground_z: float = 0.0,          # 通常地面の高さ
+    hole_depth: float = 0.1,        # 穴の深さ（底は ground_z - hole_depth）
+    enter_depth: float = 0.005,      # これ以上“地面より下”に入ったら罰が立ち上がる
+    smooth_depth: float = 0.05,     # 立ち上がりの滑らかさ（小さいほど急峻）
+    min_contact_time: float = 0.01, # ノイズ接触を減らす（50Hzなら3step相当）
+    force_z_thresh: float | None = None,
+    foot_sole_offset: float = 0.02,
+    normalize_by_feet: bool = True,
+    power: float = 2.0,             # 深く踏むほど強く（1=線形,2=二乗）
+) -> torch.Tensor:
+    contact = _contacts_bool(env, sensor_cfg, min_contact_time, force_z_thresh)  # (B,F) bool
+    robot   = env.scene[asset_cfg.name]
 
-#     pos_w  = robot.data.body_pos_w[:, asset_cfg.body_ids, :]   # (B,F,3)
-#     foot_z = pos_w[..., 2] - foot_sole_offset                  # (B,F)
+    pos_w  = robot.data.body_pos_w[:, asset_cfg.body_ids, :]   # (B,F,3)
+    foot_z = pos_w[..., 2] - foot_sole_offset                  # (B,F)
 
-#     # 地面よりどれだけ下にあるか（+が“穴側”）
-#     below = (ground_z - foot_z)                                # (B,F), >0 で穴に入っている
+    # 地面よりどれだけ下にあるか（+が“穴側”）
+    below = (ground_z - foot_z)                                # (B,F), >0 で穴に入っている
 
-#     # “穴に入った度合い”を 0〜1 に正規化（底まで行くと 1 付近）
-#     depth01 = (below - enter_depth) / (hole_depth - enter_depth + 1e-6)
-#     depth01 = depth01.clamp(0.0, 1.0)
+    # “穴に入った度合い”を 0〜1 に正規化（底まで行くと 1 付近）
+    depth01 = (below - enter_depth) / (hole_depth - enter_depth + 1e-6)
+    depth01 = depth01.clamp(0.0, 1.0)
 
-#     # 滑らかに立ち上げ（ReLUより学習が速いことが多い）
-#     # smooth_depth が小さいほど急峻。0にしたいなら ReLU に戻してOK
-#     depth01 = depth01 / (depth01 + smooth_depth)
+    # 滑らかに立ち上げ（ReLUより学習が速いことが多い）
+    # smooth_depth が小さいほど急峻。0にしたいなら ReLU に戻してOK
+    depth01 = depth01 / (depth01 + smooth_depth)
 
-#     pen = (depth01 ** power) * contact.float()                 # (B,F)
-#     r = pen.sum(dim=1)
-#     return r / pen.shape[1] if normalize_by_feet else r
+    pen = (depth01 ** power) * (0.2 + 0.8*contact.float()) #contact.float()                 # (B,F)
+    r = pen.sum(dim=1)
+
+    gap_penalty = r / pen.shape[1] if normalize_by_feet else r
+
+    terrain = env.scene.terrain
+    cur_lvl = terrain.terrain_levels.long()  # (B,)
+
+    w = torch.ones_like(cur_lvl, dtype=torch.float32)
+
+
+    pen = w * gap_penalty
+
+    return pen
 
 
 
@@ -3869,6 +3880,46 @@ def penalty_cmd_outside_hard(
 
 
 
+@torch.no_grad()
+def debug_check_heightmap_reshape(env, sensor_name="height_scanner", n_samples=8, fill_value=-1.0):
+    sensor = env.scene.sensors[sensor_name]
+    zflat = sensor.data.ray_hits_w[..., 2]  # (B, R)
+
+    # get_hit_z_bhw と同じ前処理を再現（inf/nan埋め）
+    zflat = torch.where(
+        torch.isfinite(zflat),
+        zflat,
+        torch.as_tensor(fill_value, device=zflat.device, dtype=zflat.dtype),
+    )
+
+    hm = get_hit_z_bhw(env, sensor_name=sensor_name, fill_value=fill_value)  # (B, ny, nx)
+
+    cfg = sensor.cfg.pattern_cfg
+    res = float(cfg.resolution)
+    nx = int(float(cfg.size[0]) / res + 1e-6) + 1
+    ny = int(float(cfg.size[1]) / res + 1e-6) + 1
+    ordering = getattr(cfg, "ordering", "xy")
+
+    B = zflat.shape[0]
+    b = torch.zeros(n_samples, dtype=torch.long, device=hm.device)  # とりあえずenv 0だけ見る（見やすい）
+    iy = torch.randint(0, ny, (n_samples,), device=hm.device)
+    ix = torch.randint(0, nx, (n_samples,), device=hm.device)
+
+    # ★ ordering の定義に合わせて flat_idx を作る
+    # ここは「xy=内側x外側y」想定 → flat_idx = iy*nx + ix
+    if ordering == "xy":
+        flat_idx = iy * nx + ix
+    else:  # "yx" = 内側y外側x → flat_idx = ix*ny + iy
+        flat_idx = ix * ny + iy
+
+    diff = (hm[b, iy, ix] - zflat[b, flat_idx]).abs()
+
+    print(
+        f"[hm reshape check] ordering={ordering} nx={nx} ny={ny} "
+        f"diff max={diff.max().item():.6g} mean={diff.mean().item():.6g}"
+    )
+
+
 
 def get_hit_z_bhw(env, sensor_name="height_scanner", *, fill_value=-1.0):
     sensor = env.scene.sensors[sensor_name]
@@ -3882,6 +3933,8 @@ def get_hit_z_bhw(env, sensor_name="height_scanner", *, fill_value=-1.0):
     ny = int(float(cfg.size[1]) / res + 1e-6) + 1
     ordering = getattr(cfg, "ordering", "xy")
     B = hit_z_flat.shape[0]
+
+
     return hit_z_flat.view(B, ny, nx) if ordering == "xy" else hit_z_flat.view(B, nx, ny).transpose(1, 2)
 
 
@@ -3984,6 +4037,118 @@ def _xy_to_ij(xy_b: torch.Tensor,
 
 import torch
 import torch.nn.functional as F
+
+# def swing_mask_from_contact_forces(
+#     env,
+#     sensor_cfg,                 # SceneEntityCfg("contact_forces", body_names=[...])
+#     force_z_thresh: float = 15.0,
+# ):
+#     # IsaacLabの ContactSensor / ContactForces の実体名に合わせて取得してください
+#     # 例: env.scene.sensors["contact_forces"]
+#     sensor = env.scene.sensors[sensor_cfg.name]
+
+#     # 典型: (B, N_bodies, 3) が入ってることが多い
+#     # net_forces_w / forces_w 等、あなたのセンサ実装に合わせてどれかを使う
+#     if hasattr(sensor.data, "net_forces_w"):
+#         f_w = sensor.data.net_forces_w
+#     elif hasattr(sensor.data, "forces_w"):
+#         f_w = sensor.data.forces_w
+#     else:
+#         raise AttributeError("contact sensor has no net_forces_w / forces_w")
+
+#     # body_names を足のみにしてる前提で (B,4,3) になっている想定
+#     fz = f_w[..., 2]  # (B,F)
+
+#     contact = fz > force_z_thresh
+#     swing_mask = ~contact
+#     return swing_mask  # (B,F) True=swing
+
+
+
+
+
+import re
+import torch
+
+from copy import deepcopy
+import torch
+
+def _flatten_ids(ids):
+    # SceneEntityCfg の resolve 結果が [[4,8,14,18]] みたいにネストすることがあるので潰す
+    if ids is None:
+        return None
+    if isinstance(ids, torch.Tensor):
+        ids = ids.tolist()
+    if isinstance(ids, (list, tuple)) and len(ids) == 1 and isinstance(ids[0], (list, tuple)):
+        ids = ids[0]
+    return list(ids)
+
+
+def swing_mask_from_contact_forces(
+    env,
+    sensor_cfg,                  # SceneEntityCfg("contact_forces", body_names=".*_foot") など
+    force_z_thresh: float = 15.0,
+    expected_feet: int = 4,      # 足が4本の想定
+):
+    sensor = env.scene.sensors[sensor_cfg.name]
+
+    # (B, N, 3)
+    if hasattr(sensor.data, "net_forces_w"):
+        f_w = sensor.data.net_forces_w
+    elif hasattr(sensor.data, "forces_w"):
+        f_w = sensor.data.forces_w
+    else:
+        raise AttributeError("contact sensor has no net_forces_w / forces_w")
+
+    # ---- ここが肝：resolve結果の ids を env にキャッシュ（sensor_cfgは絶対に破壊しない）----
+    # body_names が文字列/リストのどっちでもキーにできるよう文字列化
+    key_body = str(getattr(sensor_cfg, "body_names", None))
+    cache_key = f"_feet_ids_cache__{sensor_cfg.name}__{key_body}"
+    ids_list = getattr(env, cache_key, None)
+
+    if ids_list is None:
+        # 1) すでに sensor_cfg に numeric ids が入っているならそれを使う（読むだけ）
+        raw = getattr(sensor_cfg, "body_ids", None)
+        ids_list = _flatten_ids(raw)
+
+        # 2) なければ、コピーを resolve（元の cfg は触らない）
+        if ids_list is None:
+            tmp = deepcopy(sensor_cfg)
+
+            # 衝突回避：tmp 側では body_ids を明示的に消して body_names だけで resolve
+            if hasattr(tmp, "body_ids"):
+                tmp.body_ids = None
+
+            tmp.resolve(env.scene)
+            ids_list = _flatten_ids(getattr(tmp, "body_ids", None))
+
+        if ids_list is None:
+            raise RuntimeError("Failed to obtain resolved body ids from sensor_cfg (even after resolve).")
+
+        # 足本数チェック（.*_foot が広すぎる場合はここで気づける）
+        if expected_feet is not None and len(ids_list) != expected_feet:
+            raise RuntimeError(
+                f"Resolved ids count = {len(ids_list)} (expected {expected_feet}). "
+                f"body_names={key_body}, ids={ids_list}"
+            )
+
+        # env にキャッシュ（CPU listで保持）
+        setattr(env, cache_key, ids_list)
+
+    ids = torch.as_tensor(ids_list, device=f_w.device, dtype=torch.long)
+
+    # (B, F)
+    fz = f_w[:, ids, 2]
+    contact = fz > force_z_thresh
+    swing_mask = ~contact  # True=swing
+    return swing_mask
+
+
+
+
+
+import torch
+import torch.nn.functional as F
 from typing import Tuple, Optional
 
 def planned_foothold_unsafe_penalty_minpool(
@@ -3991,23 +4156,49 @@ def planned_foothold_unsafe_penalty_minpool(
     sensor_cfg,                         # ★追加：接触センサ
     command_name: str = "step_fr_to_block",
     x_range: Tuple[float, float] = (-0.6, 0.6),
-    y_range: Tuple[float, float] = (-0.6, 0.6),
-    safe_z_thresh: float = -0.15,
+    y_range: Tuple[float, float] = (-0.3, 0.3),
+    safe_z_thresh: float = -0.1,
     sigma: float = 0.03,
-    footprint_radius_m: float = 0.06,
+    footprint_radius_m: float = 0.02,
     foot_z_b: Optional[torch.Tensor] = None,  # (B,F)
     z_gate: Optional[float] = 0.08,
-    force_z_thresh: float = 15.0,             # ★Noneにしないの推奨
+    force_z_thresh: float = 8.0,             # ★Noneにしないの推奨
     normalize_by_feet: bool = True,
 ) -> torch.Tensor:
 
     # ★inf対策済みの hit_z を取ること（get_hit_z_bhw側で fill_value=-1.0 等にする）
-    heightmap_bhw = get_hit_z_bhw(env)       
+    heightmap_bhw = get_hit_z_bhw(env)    
+
+    # if not hasattr(env, "_dbg_hm_check_count"):
+    #     env._dbg_hm_check_count = 0
+    # if env._dbg_hm_check_count % 1 == 0:  # 500stepに1回
+    #     debug_check_heightmap_reshape(env, sensor_name="height_scanner", n_samples=16, fill_value=-1.0)
+    # env._dbg_hm_check_count += 1
+
+
     B, H, W = heightmap_bhw.shape
                 # (B,H,W) 地形のZ（平地0、穴-0.3など）
     des_raw = env.command_manager.get_command(command_name)  # (B,F,3) を想定
 
     des_foot_pos_b = des_raw.view(B, 4, 3)  # (B,4,3)
+
+
+    # ---- ★ここを des_foot_pos_b の直後に追加 ----
+    # 「このステップでターゲットが更新された脚」を検出（行動に直結）
+    if not hasattr(env, "_prev_des_foot_pos_b"):
+        env._prev_des_foot_pos_b = des_foot_pos_b.detach().clone()
+
+    dxy = torch.linalg.vector_norm(
+        des_foot_pos_b[..., :2] - env._prev_des_foot_pos_b[..., :2], dim=-1
+    )  # (B,4)
+
+    # 閾値は適当に小さく（コマンドが毎回微小に揺れるなら少し上げる）
+    update_mask = dxy > 1.0e-3  # (B,4) bool
+
+    # 次回用に保存
+    env._prev_des_foot_pos_b = des_foot_pos_b.detach().clone()
+
+
 
     # # 接触→Swingマスク（True=swing）
     # swing_mask = swing_mask_from_contact_forces(
@@ -4046,20 +4237,85 @@ def planned_foothold_unsafe_penalty_minpool(
     h_at = hm_min[b_idx, iy, ix]  # (B,F)
 
     # 危険度：hが低いほど unsafe→1
-    unsafe = torch.sigmoid((safe_z_thresh - h_at) / max(1e-6, sigma))  # (B,F)
+    # unsafe = torch.sigmoid((safe_z_thresh - h_at) / max(1e-6, sigma))  # (B,F)
+
+
+
+    s = (safe_z_thresh - h_at) / max(1e-6, sigma)
+    u = torch.sigmoid(s)
+    u0 = torch.sigmoid(torch.tensor((safe_z_thresh - 0.0)/sigma, device=u.device))
+    unsafe = torch.clamp((u - u0) / (1.0 - u0), 0.0, 1.0)  # h=0で0、穴で1
+
+
 
     # マスク（swingのみ + 接地直前のみ）
+
+
+    # # 接触→Swingマスク（True=swing）
+    # swing_mask = swing_mask_from_contact_forces(
+    #     env, sensor_cfg, force_z_thresh=force_z_thresh
+    # ) 
+
     # mask = swing_mask
+
+
+
+    # mask = update_mask
+
+
+
+    # mask = getattr(env, "_planned_update_mask", None)
+    # if mask is None:
+    #     return torch.zeros(B, device=heightmap_bhw.device)
+
+    # # 必要なら device を合わせる（たいてい同じdevice）
+    # mask = mask.to(device=heightmap_bhw.device)
+
+    term = env.command_manager.get_term(command_name)
+    onehot = getattr(term, "swing_leg_onehot", None)
+    if onehot is None:
+        # フォールバック（万一onehotが無いなら接触で）
+        mask = swing_mask_from_contact_forces(env, sensor_cfg, force_z_thresh=force_z_thresh)
+    else:
+        mask = (onehot > 0.5)
+
+
+
+
+
     # if (z_gate is not None) and (foot_z_b is not None):
     #     assert foot_z_b.shape == (B, F_cmd)
     #     mask = mask & (foot_z_b < z_gate)
 
-    # if normalize_by_feet:
-    #     denom = mask.float().sum(dim=1).clamp(min=1.0)
-    #     p = (unsafe * mask.float()).sum(dim=1) / denom
-    # else:
-    #     p = (unsafe * mask.float()).sum(dim=1)
-    p = (unsafe).mean(dim=1)
+    if normalize_by_feet:
+        denom = mask.float().sum(dim=1).clamp(min=1.0)
+        p = (unsafe * mask.float()).sum(dim=1) / denom
+    else:
+        p = (unsafe * mask.float()).sum(dim=1)
+ 
+    # p = (unsafe).mean(dim=1)
+
+    # ★ここが“前ステップ参照”を潰す要：消費してクリア
+    # env._planned_update_mask[mask] = False
+
+
+    # if not hasattr(env, "_dbg_u_cnt"):
+    #     env._dbg_u_cnt = 0
+
+    # if env._dbg_u_cnt % 2 == 0:
+    #     # そのステップで “何脚ぶんイベントが消費されたか”
+    #     used_mean = float(mask.float().sum(dim=1).float().mean().item())   # だいたい 1.0 が理想（1脚/環境）
+    #     p_mean = float(p.mean().item())
+    #     unsafe_used_mean = float((unsafe * mask.float()).sum(dim=1).mean().item())
+    #     print(f"[unsafe dbg] used_legs_mean={used_mean:.3f} unsafe_used_mean={unsafe_used_mean:.3f} p_mean={p_mean:.3f}")
+
+    if not hasattr(env, "_dbg_u_cnt"):
+        env._dbg_u_cnt = 0
+    if env._dbg_u_cnt % 2 == 0:
+        used_legs_mean = float(mask.float().sum(dim=1).mean().item())
+        print("[unsafe dbg] used_legs_mean=", used_legs_mean, "p_mean=", float(p.mean().item()))
+    env._dbg_u_cnt += 1
+
 
     return p  # (B,)  正のペナルティ
 
@@ -4113,3 +4369,23 @@ def alive_reward_when_progress(
     v_b = robot.data.root_com_lin_vel_b   # (B,3) base frame forward is x
     ok = (v_b[:, 0] > min_fwd_vel).float()
     return ok * alive_bonus
+
+
+def foot_slip_penalty(env, sensor_cfg, asset_cfg=SceneEntityCfg("robot"),
+                      foot_ids=None, vel_scale=1.0):
+    robot = env.scene[asset_cfg.name]
+    # 足先速度 world（body_lin_vel_w を使えるならそれ）
+
+    leg_order = ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
+    
+    
+
+        # ロボット側の body index（位置取得用）
+    foot_ids   = [robot.body_names.index(name) for name in leg_order]
+
+
+    v_w = robot.data.body_lin_vel_w[:, foot_ids, :2]   # [B,4,2]
+    contact = _contacts_bool(env, sensor_cfg, min_contact_time=0.01, force_z_thresh=None)  # [B,4]
+    slip = torch.linalg.vector_norm(v_w, dim=-1)       # [B,4]
+    pen = (slip * contact.float()).sum(dim=1) / contact.shape[1]
+    return vel_scale * pen

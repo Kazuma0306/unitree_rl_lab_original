@@ -9,7 +9,7 @@ import numpy as np
 from torch.distributions import Normal # <-- Add this line
 import torchvision
 
-
+import torch.nn.functional as F
 
 from rsl_rl.modules import MLP 
 
@@ -1671,7 +1671,10 @@ class VisionHighRNN(ActorCriticRecurrent):
 
 
         self.hm_channels = 1
-        self.hm_H = 61
+        # self.hm_H = 61
+        # self.hm_W = 61
+
+        self.hm_H = 31
         self.hm_W = 61
 
         # hm_dim = self.hm_channels * self.hm_H * self.hm_W  # = 3721
@@ -1691,23 +1694,70 @@ class VisionHighRNN(ActorCriticRecurrent):
         # act は既存の act をそのまま使う想定（ReLU/ELU/LeakyReLUなど）
         conv_ch1, conv_ch2, conv_ch3 = 32, 64, 64
 
+        # self.hm_conv = nn.Sequential(
+        #     nn.Conv2d(self.hm_channels, conv_ch1, kernel_size=3, stride=2, padding=1),  # 61->31
+        #     act,
+        #     nn.Conv2d(conv_ch1, conv_ch2, kernel_size=3, stride=2, padding=1),          # 31->16
+        #     act,
+        #     nn.Conv2d(conv_ch2, conv_ch3, kernel_size=3, stride=2, padding=1),          # 16->8
+        #     act,
+        #     # nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1), 
+        #     # act,
+
+        #     # 空間サイズ(8x8)は変わらず、チャネルだけ 64 -> 16 になる
+        #     nn.Conv2d(64, 16, kernel_size=1), 
+        #     act,
+        #     # nn.AdaptiveAvgPool2d((1, 1)),                                               # -> [B,64,1,1]
+        # )
+
+    
+
+        C = self.hm_channels
+        act = act  # 既存の活性化
+
+        # self.hm_conv = nn.Sequential(
+        #     # 61 -> 31
+        #     nn.Conv2d(C, 32, 3, 2, 1), act,
+
+        #     # 31x31 （stride=1）
+        #     nn.Conv2d(32, 64, 3, 1, 1), act,
+        #     nn.Conv2d(64, 64, 3, 1, 1), act,
+
+        #     # ★チャネル圧縮（64 -> 8）
+        #     nn.Conv2d(64, 1, 1, 1, 0), #act,
+        # )
+
+
         self.hm_conv = nn.Sequential(
-            nn.Conv2d(self.hm_channels, conv_ch1, kernel_size=3, stride=2, padding=1),  # 61->31
-            act,
-            nn.Conv2d(conv_ch1, conv_ch2, kernel_size=3, stride=2, padding=1),          # 31->16
-            act,
-            nn.Conv2d(conv_ch2, conv_ch3, kernel_size=3, stride=2, padding=1),          # 16->8
-            act,
-            nn.AdaptiveAvgPool2d((1, 1)),                                               # -> [B,64,1,1]
+            nn.Conv2d(C, 8, 3, stride=1, padding=1), act,            # 61->61
+            nn.Conv2d(8, 8, 3, stride=1, padding=1, groups=8), act,  # depthwise（超軽い）
+            nn.Conv2d(8, 8, 1, stride=1, padding=0), act,            # pointwise
+            nn.Conv2d(8, 1, 1, stride=1, padding=0),                 # ★最後は活性化なし
         )
+
+
+        # min+avg concat → (B, 16, 16, 16) → flatten 4096
+        self.hm_fc = nn.Sequential(
+            nn.Linear(1 * 61 * 31, 256))
+
 
         # ---- Conv出力をベクトル化して 256 次元へ ----
         hm_out_dim = 256
-        self.hm_fc = nn.Sequential(
-            nn.Linear(conv_ch3, hm_out_dim),
-            # ここは好み：最後は act 無しの方が安定しがち
-            # act,
-        )
+        # self.hm_fc = nn.Sequential(
+        #     nn.Linear(conv_ch3, hm_out_dim),
+        #     # ここは好み：最後は act 無しの方が安定しがち
+        #     # act,
+        # )
+
+        # self.hm_fc = nn.Sequential(
+        #     nn.Flatten(),                      # 64*8*8 = 4096
+        #     nn.Linear(64*4*4, 256),
+        # )
+
+        # self.hm_fc = nn.Sequential(
+        #     nn.Flatten(),
+        #     nn.Linear(2048, 256), 
+        # )
 
         self.hm_out_dim = hm_out_dim
         self.hm_norm = nn.LayerNorm(self.hm_out_dim) if use_layernorm else nn.Identity()
@@ -1813,7 +1863,7 @@ class VisionHighRNN(ActorCriticRecurrent):
         hm_2d = hm.reshape(-1, feat_dim)
 
         # ---- 入力正規化（どっちか片方）----
-        hm_2d = self.hm_in_norm(hm_2d)          # LayerNorm(3721)
+        # hm_2d = self.hm_in_norm(hm_2d)          # LayerNorm(3721)
         # もしくは固定スケールなら:
         # hm_2d = (hm_2d - 2.0) / 3.0
 
@@ -1822,7 +1872,20 @@ class VisionHighRNN(ActorCriticRecurrent):
 
         # Conv -> [N, conv_ch, 1, 1]
         x = self.hm_conv(hm_img)
-        x = x.flatten(1)             # [N, conv_ch]
+        # x = x.flatten(1)             # [N, conv_ch]
+
+        # x = -torch.nn.functional.adaptive_max_pool2d(-x, (24,24))  # min相当
+        # x_avg = torch.nn.functional.adaptive_avg_pool2d(x, (24,24))
+
+        # zmin = -F.max_pool2d(-x, 3, 1, 1)      # 低い部分を太らせる（min-pool）
+        # x = -F.adaptive_max_pool2d(-x, (48,48))  # ビン内最小
+        # x = -F.adaptive_max_pool2d(-x, (32, 64))  # (B,1,32,48)
+
+
+        # x = torch.cat([x_min, x_avg], dim=1)  # (B,32,8,8)
+        x = x.flatten(1)
+
+
         x = self.hm_fc(x)            # [N, hm_out_dim]
         x = self.hm_norm(x)
 

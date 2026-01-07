@@ -99,30 +99,41 @@ COBBLESTONE_ROAD_CFG = terrain_gen.TerrainGeneratorCfg(
 STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
     curriculum=True,
     size=(3.5, 3.5),
-    border_width=0.050,
-    num_rows=8,
-    num_cols=8,
-    horizontal_scale=0.02,
+    border_width=0.020,
+    num_rows=5,
+    num_cols=10,
+    horizontal_scale=0.01,
     vertical_scale=0.005,
     slope_threshold=0.75,
-    difficulty_range=(0.0, 1.0),
+    difficulty_range=(0, 1),
     use_cache=True,
     seed = 123,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2),
+        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.4),
         # # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
         # #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
         # # ),
 
 
         # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
-        #      proportion=0.8, border_width=0.05,  horizontal_scale = 0.02, stone_height_max = 0.0, stone_width_range = (0.25, 0.35), stone_distance_range = (0.0, 0.06),  holes_depth = -3.0, platform_width = 1.5,
+        #      proportion=0.5, border_width=0.02,  horizontal_scale = 0.01, stone_height_max = 0.0, stone_width_range = (0.25, 0.35), stone_distance_range = (0.04, 0.04),  holes_depth = -0.3, platform_width = 1.0,
 
         # ),
 
-        "descrete_obstacles": terrain_gen.HfDiscreteObstaclesTerrainCfg(
-             proportion=0.8, border_width=0.25, obstacle_width_range =(0.25,  0.35) , obstacle_height_range = (0.01, 0.05), num_obstacles = 30
+         "stepping_stones1": terrain_gen.HfSteppingStonesTerrainCfg(
+             proportion=0.5, border_width=0.02,  horizontal_scale = 0.01, stone_height_max = 0.0, stone_width_range = (0.6, 0.8), stone_distance_range = (0.025, 0.025),  holes_depth = -0.3, platform_width = 1.0,
+
         ),
+
+
+         "stepping_stones2": terrain_gen.HfSteppingStonesTerrainCfg(
+             proportion=0.1, border_width=0.02,  horizontal_scale = 0.01, stone_height_max = 0.0, stone_width_range = (0.6, 0.8), stone_distance_range = (0.04, 0.04),  holes_depth = -0.3, platform_width = 1.0,
+
+        ),
+
+        # "descrete_obstacles": terrain_gen.HfDiscreteObstaclesTerrainCfg(
+        #      proportion=0.2, border_width=0.25, obstacle_width_range =(0.25,  0.35) , obstacle_height_range = (0.01, 0.04), num_obstacles = 30
+        # ),
 
 
         #difficult version
@@ -137,6 +148,52 @@ STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
         # ),
     },
 )
+
+
+
+# STEPPING_STONES_CFG = terrain_gen.TerrainGeneratorCfg(
+#     curriculum=True,
+#     size=(6, 6),
+#     border_width=0.050,
+#     num_rows=10,
+#     num_cols=20,
+#     horizontal_scale=0.05,
+#     vertical_scale=0.005,
+#     slope_threshold=0.75,
+#     difficulty_range=(0.0, 1.0),
+#     use_cache=True,
+#     seed = 123,
+#     sub_terrains={
+#         "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.2),
+#         # # "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+#         # #     proportion=0.1, noise_range=(0.01, 0.06), noise_step=0.01, border_width=0.25
+#         # # ),
+
+
+#         # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+#         #      proportion=0.8, border_width=0.05,  horizontal_scale = 0.01, stone_height_max = 0.0, stone_width_range = (0.25, 0.35), stone_distance_range = (0.04, 0.04),  holes_depth = -3.0, platform_width = 1.5,
+
+#         # ),
+
+#         # "descrete_obstacles": terrain_gen.HfDiscreteObstaclesTerrainCfg(
+#         #      proportion=0.2, border_width=0.25, obstacle_width_range =(0.25,  0.35) , obstacle_height_range = (0.01, 0.04), num_obstacles = 100
+#         # ),
+
+
+#         #difficult version
+#         # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+#         #      proportion=0.9, border_width=0.25,  horizontal_scale = 0.05, stone_height_max = 0.01, stone_width_range = (0.5, 0.9), stone_distance_range = (0.06, 0.09),  holes_depth = -5.0, platform_width = 1.5,
+
+#         # ),
+
+#         # "stepping_stones": terrain_gen.HfSteppingStonesTerrainCfg(
+#         #      proportion=1.0, border_width=0.25,  stone_height_max = 0.05, stone_width_range = (0.2, 0.9), stone_distance_range = (0.08, 0.26),  holes_depth = -5.0, platform_width = 1.5,
+
+#         # ),
+#     },
+# )
+
+
 
 BLOCK_CFG = terrain_gen.TerrainGeneratorCfg(
     curriculum=True,
@@ -245,75 +302,6 @@ def make_ring_xy4(stone_w, gap, inner_half, outer_half):
 
 
 
-# def make_ring_xy5(stone_w, inner_half, outer_half, gap=1e-4, margin=1e-3, y_limit=1.55):
-#     """
-#     - stone_w: ブロックの一辺
-#     - inner_half: 中央台の半サイズ（ここでは 0.5）
-#     - outer_half: 外側の半径（どこまで石を敷き詰めるか）
-#     - gap: ブロック同士の間隔（ほぼ 0）
-#     - margin: 台の縁からブロックまでのすき間（ほぼ 0）
-#     """
-#     pitch = stone_w + gap
-#     half_w = stone_w / 2.0
-
-#     # 台の縁 (inner_half) から見て
-#     # 「ブロック内側の縁」がほぼ接する位置にブロック中心を置きたい：
-#     #   inner_edge ≒ inner_half + margin
-#     #   center = inner_edge + half_w
-#     # => r0: 最初のリングの中心半径
-#     r0 = inner_half + margin + half_w  # 0.5 + margin + 0.15 ≒ 0.65
-
-#     # 正の側の中心座標を r0 から pitch 間隔で生成
-#     # ブロックの外側までが outer_half を越えない範囲で。
-#     max_center = outer_half - half_w
-#     if r0 > max_center:
-#         return []
-
-#     coords_pos = np.arange(r0, max_center + 1e-6, pitch)
-#     coords_neg = -coords_pos[::-1]  # 原点対称に
-
-#     if coords_pos.size == 0:
-#         return []
-
-#     xs = np.concatenate((coords_neg, coords_pos))
-#     ys = np.concatenate((coords_neg, coords_pos))
-
-#     xs_grid, ys_grid = np.meshgrid(xs, ys, indexing="xy")
-
-#     # L∞ノルム（チェビシェフ距離）でリング帯を取る
-#     max_dist_center = np.maximum(np.abs(xs_grid), np.abs(ys_grid))
-
-#     # 中央台＋マージンより外側
-#     m_inner = (max_dist_center >= r0 - half_w)   # だいたい inner_half + margin
-
-#     # outer_half からはみ出さない
-#     m_outer = (max_dist_center <= outer_half - half_w)
-
-#     # 前方（+x）側だけ使うなら：
-#     m_positive_x = (xs_grid - half_w > 0.0)
-
-#     # y 範囲制限（必要なら調整）
-#     m_y_upper = (ys_grid + half_w < y_limit)
-#     m_y_lower = (ys_grid - half_w > -y_limit)
-
-#     m = m_inner & m_outer & m_positive_x & m_y_upper & m_y_lower
-
-#     xs_flat, ys_flat = xs_grid[m], ys_grid[m]
-#     return [(float(x), float(y)) for x, y in zip(xs_flat, ys_flat)]
-
-
-# STONE_W, STONE_H, GAP = 0.2, 0.3, 0.004
-# stone_xy_list = make_ring_xy4(STONE_W, GAP, inner_half=0.7, outer_half=3.37)
-
-# stone_xy_list = [(0.6, 0.0), (0.9, 0.15), (1.2, -0.1)]
-
-
-
-# blocks_cfg, xy_list = build_block_cfgs_for_scene(
-#     stone_w=0.2, stone_h=0.3, gap=0.06,
-#     inner_half=0.75, outer_half=1.75, z=0.03, mass=3.0
-# )
-
 # def make_stone_cfg(i, pos_xyz):
 #     return RigidObjectCfg(
 #         prim_path=f"{{ENV_REGEX_NS}}/Stone_{i:04d}",
@@ -378,100 +366,9 @@ stone_xy_list = make_ring_xy4(
 )
 
 
-# 中央の台
-# PLATFORM_SIZE = 1.0          # 1.0 x 1.0
-# PLATFORM_HALF = PLATFORM_SIZE * 0.5
-
-# # Go2 のサイズ感（大雑把）
-# GO2_LENGTH = 0.70            # だいたい 70 cm
-# GO2_WIDTH  = 0.31            # だいたい 31 cm
-
-# # 石幅のレンジ [m]（例：簡単な時は 0.35、大変になると 0.22 まで細く）
-# STONE_WIDTH_RANGE = (0.22, 0.35)     # (min, max)
-
-# # 石同士のギャップのレンジ [m]（例：最初ほぼ 0、難しくなると ~0.3）
-# STONE_GAP_RANGE   = (0.0, 0.30)      # (min, max)
-
-# # リングの内側半径（台の縁+数 mm）
-# INNER_MARGIN = 0.01                  # 台とのギャップほぼ 0
-# INNER_HALF   = PLATFORM_HALF + INNER_MARGIN   # ≒ 0.51
-
-# # リングの厚さ（どこまで外側に石を置くか）
-# RING_WIDTH   = GO2_LENGTH * 2     # 体長の8割くらい外に広げる
-# OUTER_HALF   = INNER_HALF + RING_WIDTH
-# OUTER_HALF   = 5
-
-
-# Y_LIMIT      = 1.2                   # 左右にどこまで石を出すか
-# STONE_H      = 0.30                  # 高さは一定
 
 
 
-
-# def generate_stepping_stone_ring_xy(
-#     stone_w: float,
-#     inner_half: float,
-#     outer_half: float,
-#     gap: float = 1e-4,
-#     margin: float = 1e-3,
-#     y_limit: float = 1.5,
-#     front_only: bool = True,
-# ):
-#     """
-#     - stone_w   : ブロック一辺
-#     - inner_half: 中央台の半サイズ＋α (この内側には石を置かない)
-#     - outer_half: リングの外側半径
-#     - gap       : ブロック同士の隙間
-#     - margin    : inner_half から石までの隙間（ほぼ0でOK）
-#     - y_limit   : |y| <= y_limit の範囲だけ使う
-#     - front_only: True なら +x 側だけ（ロボット前方だけ）石を置く
-#     戻り値: [(x, y), ...]  （env原点基準のローカル座標）
-#     """
-#     pitch = stone_w + gap
-#     half_w = stone_w * 0.5
-
-#     # 台の縁 inner_half から margin だけ外側に、
-#     # ブロックの内側がほぼ接するように中心半径 r0 を決める
-#     #   inner_edge ≒ inner_half + margin
-#     #   center    = inner_edge + half_w
-#     r0 = inner_half + margin + half_w
-
-#     max_center = outer_half - half_w
-#     if r0 > max_center:
-#         return []
-
-#     # 正側の中心位置を r0 から pitch ごとに並べる
-#     coords_pos = np.arange(r0, max_center + 1e-6, pitch)
-#     if coords_pos.size == 0:
-#         return []
-
-#     coords_neg = -coords_pos[::-1]
-
-#     xs = np.concatenate((coords_neg, coords_pos))
-#     ys = np.concatenate((coords_neg, coords_pos))
-
-#     xs_grid, ys_grid = np.meshgrid(xs, ys, indexing="xy")
-
-#     # L∞ノルムでリング判定
-#     max_dist_center = np.maximum(np.abs(xs_grid), np.abs(ys_grid))
-
-#     m_inner = (max_dist_center >= r0 - half_w)   # 中央台＋margin から外側
-#     m_outer = (max_dist_center <= outer_half - half_w)
-
-#     # 前方だけにするかどうか
-#     if front_only:
-#         m_x = (xs_grid - half_w > 0.0)
-#     else:
-#         m_x = np.ones_like(xs_grid, dtype=bool)
-
-#     # y 範囲制限
-#     m_y_upper = (ys_grid + half_w < y_limit)
-#     m_y_lower = (ys_grid - half_w > -y_limit)
-
-#     m = m_inner & m_outer & m_x & m_y_upper & m_y_lower
-
-#     xs_flat, ys_flat = xs_grid[m], ys_grid[m]
-#     return [(float(x), float(y)) for x, y in zip(xs_flat, ys_flat)]
 
 
 
@@ -1461,12 +1358,6 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-
-
-
-
-
-
    
 
 
@@ -1489,9 +1380,15 @@ class RobotSceneCfg(InteractiveSceneCfg):
         # attach_yaw_only=True,
         ray_alignment="yaw", 
         # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[3.1, 3.1]),
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.02, size=[1.2, 1.2]),
-        # debug_vis=True,
-        debug_vis=False,
+        # pattern_cfg=patterns.GridPatternCfg(resolution=0.02, size=[1.2, 1.2]),
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.02, size=[1.2, 0.6]),
+
+        # pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.6, 0.6]),
+        # pattern_cfg=patterns.GridPatternCfg(resolution=0.01, size=[0.90, 0.40]),  # Nx=91, Ny=41 → 3731本
+
+
+        debug_vis=True,
+        # debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
 
@@ -1660,140 +1557,7 @@ class ObservationsCfg:
     critic: mdp.ObservationGroupCfg = HighLevelPolicyObsCfg()
 
 
-    # @configclass
-    # class PolicyCfg(ObsGroup):
-    #     """Observations for policy group."""
-
-    #     # observation terms (order preserved)
-    #     base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-    #     base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
-    #     projected_gravity = ObsTerm(func=mdp.projected_gravity)
-    #     pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "pose_command"})
-
-    #     # front_depth = ObsTerm(
-    #     #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
-    #     #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
-    #     # )
-
-    #     heightmap = ObsTerm(
-    #     func=mdp.depth_heightmap,
-    #     params=dict(
-    #         sensor_cfg=SceneEntityCfg("tiled_camera"),  # 定義したカメラ名
-    #         asset_cfg=SceneEntityCfg("robot"),
-    #         x_range=(-1.0, 1.0),
-    #         y_range=(-0.8, 0.8),
-    #         grid_shape=(32, 32),
-    #         default_height=0.0,
-    #     ),
-    #     )
-
-
-    #     # def __post_init__(self):
-    #     #     # self.history_length = 3
-    #     #     self.enable_corruption = True
-    #     #     self.concatenate_terms = False
-
-
-    # # observation groups
-    # policy: PolicyCfg = PolicyCfg()
-
-
-    # @configclass
-    # class CriticCfg(ObsGroup):
-    #     """Observations for critic group."""
-    #     # observation terms (order preserved)
-    #     base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-    #     base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
-    #     projected_gravity = ObsTerm(func=mdp.projected_gravity)
-    #     pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "pose_command"})
-
-    #     # front_depth = ObsTerm(
-    #     #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
-    #     #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
-    #     # )
-
-    #     heightmap = ObsTerm(
-    #     func=mdp.depth_heightmap,
-    #     params=dict(
-    #         sensor_cfg=SceneEntityCfg("tiled_camera"),  # 定義したカメラ名
-    #         asset_cfg=SceneEntityCfg("robot"),
-    #         x_range=(-1.0, 1.0),
-    #         y_range=(-0.8, 0.8),
-    #         grid_shape=(32, 32),
-    #         default_height=0.0,
-    #     ),
-    #     )
-
-    #     # def __post_init__(self):
-    #     #     # self.history_length = 3
-    #     #     # self.enable_corruption = True
-    #     #     self.concatenate_terms = False
-
-
-    # critic: CriticCfg = CriticCfg()
-
-
-
-
-
-
-# @configclass
-# class RewardsCfg:
-#     """Reward terms for the MDP."""
-
-#     # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
-#     position_tracking = RewTerm(
-#         func=mdp.position_command_error_tanh,
-#         weight=0.4,
-#         params={"std": 0.2, "command_name": "pose_command"},
-#     )
-#     position_tracking_fine_grained = RewTerm(
-#         func=mdp.position_command_error_tanh,
-#         weight=0.4,
-#         params={"std": 2.0, "command_name": "pose_command"},
-#     )
-#     orientation_tracking = RewTerm(
-#         func=mdp.heading_command_error_abs,
-#         weight=-0.6,
-#         params={"command_name": "pose_command"},
-#     )
-
-#     distance_progress = RewTerm(func= mdp.BaseProgressToTargetRel, weight = 15)#ベース座標系での進捗, all legs weighted sum
-
-
-
-#     # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
-#     # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-#     # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
-#     # # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
-#     # energy = RewTerm(func=mdp.energy, weight=-3e-5)
-
-#     # -- robot
-#     # dont_wait = RewTerm(
-#     #     func=mdp.dont_wait_rel, weight=-1.0, # 前回実装した自作関数 -2.0 for simple walking
-#     #     params={"velocity_threshold": 0.2, "distance_threshold":0.8, "command_name": "pose_command"}
-#     # )
-
-#     dont_wait = RewTerm(
-#         func=mdp.dont_wait_rel3, weight=-1, 
-#         params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
-#     )
-
-
-
-
-#     # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
-
-#     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0) 
-
-#     undesired_contacts = RewTerm(
-#         func=mdp.undesired_contacts,
-#         weight=-1.5,
-#         params={
-#             "threshold": 1,
-#             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["Head_.*", ".*_hip", ".*_thigh", ".*_calf"]),
-#         },
-#     )
+  
 
 
 
@@ -1817,16 +1581,17 @@ class RewardsCfg:
         weight=-0.9,
         params={"command_name": "pose_command"},
     )
+ 
+    distance_progress = RewTerm(func= mdp.BaseProgressToTargetRel, weight = 20)#ベース座標系での進捗, all legs weighted sum 15
 
-    distance_progress = RewTerm(func= mdp.BaseProgressToTargetRel, weight = 15)#ベース座標系での進捗, all legs weighted sum
-
-    # gap_penalty = RewTerm(func=mdp.planned_foothold_unsafe_penalty_minpool, 
-    #      weight = -1.0,
-    #      params={
-    #         "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    gap_penalty = RewTerm(func=mdp.planned_foothold_unsafe_penalty_minpool, 
+         weight = -2.0,
+        #  weight = -0.7,
+         params={
+            "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
             
-    #     },
-    # )
+        },
+    )
 
 #     cmd_on_stones = RewTerm(func = mdp.penalty_cmd_near_edge, weight = -0.5)
 
@@ -1841,9 +1606,6 @@ class RewardsCfg:
     
 #     },
 # )
-
-
-
 
     # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
     # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
@@ -1860,6 +1622,14 @@ class RewardsCfg:
     dont_wait = RewTerm(
         func=mdp.dont_wait_rel3, weight=-3.5, 
         params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
+    )
+
+    foot_slip = RewTerm(
+        func = mdp.foot_slip_penalty, weight = -0.3,
+        params={
+            "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+        },
+
     )
 
 
@@ -1879,20 +1649,18 @@ class RewardsCfg:
     )
 
 
-    # feet_gap_pen = RewTerm(
-    #     func=mdp.feet_gap_contact_penalty,
-    #     weight=-2.5,   # まずはこのくらいから
-    #     params={
-    #         "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
-    #         "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
-    #         "hole_z":           -3.0,   # 固定
-    #         "gap_tol":          2.9,   # 穴面+4.7 以内で接地→減点
-    #         "min_contact_time": 0.02,
-    #         "force_z_thresh":   None,   # 任意（無ければ None）
-    #         "foot_sole_offset": 0.0,
-    #         "normalize_by_feet": False,
-    #     },
-    # )
+    feet_gap_pen = RewTerm(
+        func=mdp.feet_gap_contact_penalty_v2,
+        weight=-0.8,   # まずはこのくらいから
+        params={
+            "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
+            "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "min_contact_time": 0.01,
+            "force_z_thresh":   None,   # 任意（無ければ None）
+            "foot_sole_offset": 0.0,
+            "normalize_by_feet": False,
+        },
+    )
     
 
     alive = RewTerm(
@@ -1913,7 +1681,7 @@ class CommandsCfg:
         resampling_time_range=(24.0, 24.0),
         debug_vis=True,
         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.5, 2.5), pos_y=(-0.0, 0.0), heading=(-0, 0)),
+        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(1.2, 1.2), pos_y=(-0.0, 0.0), heading=(-0, 0)),
     )
 
     step_fr_to_block = mdp.FootstepFromHighLevelCfg(
@@ -1933,7 +1701,7 @@ class TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     base_contact = DoneTerm(
         func=mdp.illegal_contact,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["Head_.*","base"]), "threshold": 1.0},
     )
     bad_orientation = DoneTerm(func=mdp.bad_orientation, params={"limit_angle": 0.8})
 
@@ -1944,17 +1712,8 @@ class TerminationsCfg:
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
 
-
-    # schedule_lin = CurrTerm(
-    #     func = mdp.schedule_reward_weight,
-    #     params = {
-    #         "term_name" : "position_tracking_fine_grained",
-    #         "weight": 0.1,
-    #         "num_steps": 25000
-    #     }
-    # )
     
-    terrain_levels = CurrTerm(func=mdp.terrain_levels_nav2) 
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_nav4) 
 
 
     # schedule_lin = CurrTerm(
@@ -1967,6 +1726,17 @@ class CurriculumCfg:
     # )
 
 
+    # schedule_lin = CurrTerm(
+    #     func = mdp.schedule_reward_weight,
+    #     params = {
+    #         "term_name" : "feet_gap_pen",
+    #         "weight": -1,
+    #         "num_steps": 25000
+    #     }
+    # )
+
+
+
 
     goal_x_range = CurrTerm(
         func=mdp.modify_term_cfg,
@@ -1975,10 +1745,12 @@ class CurriculumCfg:
             "address": "commands.pose_command.ranges.pos_x",
             "modify_fn": mdp.expand_goal_x_range,
             "modify_params": {
-                "start": (1.0, 1.5),
-                "end": (1.0, 3.0),
+                "start": (1.0, 1.2),
+                "end": (1.1, 1.3),
+                # "start": (1.2, 1.5),
+                # "end": (1.3, 2.5),
                 "start_step": 0,
-                "end_step": 300_000,
+                "end_step": 3000000,
             },
         },
     )
@@ -1993,31 +1765,8 @@ class EventCfg:
         mode = "reset",
     )
 
-    # stone_1 = EventTerm(
-
-    #     func = mdp.randomize_rigid_body_mass,
-    #     mode = "reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("stone1"),
-    #         "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-    #         "operation": "abs",
-    #         "distribution": "uniform",
-    #         "recompute_inertia": True,
-    #     },
-    # )
-
-    # stone_2 = EventTerm(
-
-    #     func = mdp.randomize_rigid_body_mass,
-    #     mode = "reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("stone2"),
-    #         "mass_distribution_params": (12.0, 12.0),  # 初期ステージ
-    #         "operation": "abs",
-    #         "distribution": "uniform",
-    #         "recompute_inertia": True,
-    #     },
-    # )
+ 
+    
 
     #proposed
 
@@ -2035,7 +1784,6 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the walking environment."""
 
     # environment settings
-    # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=2048, env_spacing=2.5)
 
     scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
@@ -2063,6 +1811,13 @@ class RobotEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = LOW_LEVEL_ENV_CFG.decimation * 10#TODO　５Hz 10Hz
         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
         self.sim.physx.gpu_max_rigid_patch_count = 1000000 # 例：約100万 (1,048,576) に設定
+        self.sim.physx.gpu_collision_stack_size = 2**27  # 134,217,728
+        self.sim.physx.gpu_max_rigid_contact_count = 2**24  # 2**23→2**24
+
+        # 余裕があれば
+        self.sim.physx.gpu_heap_capacity           = 2**27
+        self.sim.physx.gpu_temp_buffer_capacity    = 2**25
+
 
 
        
@@ -2093,6 +1848,6 @@ class RobotPlayEnvCfg(RobotEnvCfg):
         # disable randomization for play
         self.observations.policy.enable_corruption = False
 
-        # self.scene.terrain.terrain_generator.curriculum = False
-        self.scene.terrain.terrain_generator.curriculum = True
+        self.scene.terrain.terrain_generator.curriculum = False
+        # self.scene.terrain.terrain_generator.curriculum = True
 

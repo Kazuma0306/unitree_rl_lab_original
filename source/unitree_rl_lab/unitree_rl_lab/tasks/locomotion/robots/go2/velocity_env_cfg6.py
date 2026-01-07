@@ -671,7 +671,7 @@ class CommandsCfg:
 
 
     step_fr_to_block = mdp.MultiLegBaseCommandCfg(
-        resampling_time_range=(1.0, 2.0),
+        resampling_time_range=(0.2,  0.5),
         debug_vis=True,
     )
 
