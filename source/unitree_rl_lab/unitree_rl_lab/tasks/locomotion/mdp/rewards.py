@@ -2965,217 +2965,1191 @@ class MultiLegHoldBonusOnce3(ManagerTermBase):
 
 
 
+# class MultiLegHoldBonusPhase(ManagerTermBase):
+#     """
+#     各脚が「コマンドターゲット（ベース座標）」の近傍 & 接触を
+#     T_hold_s 秒維持したときに「そのフェーズで一度だけ」ボーナスを支払い、
+#     かつ CommandTerm のフェーズを 1 つ進める (0→1→2→...)。
+
+#     - ブロック名は一切見ない。
+#     - 判定は常に env.command_manager.get_command(cmd_name) のターゲットに対して行う。
+#     """
+
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.env = env
+
+#         # --- 時間・ボーナス ---
+#         self.T_hold_s   = P.get("T_hold_s", 0.2)
+#         self.bonus      = P.get("bonus", 5.0)
+
+#         # --- 接触判定 ---
+#         self.require_contact     = P.get("require_contact", True)
+#         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+#         self.contact_threshold   = P.get("contact_threshold", 8)
+
+#         # --- コマンド関連 ---
+#         self.cmd_name          = P.get("cmd_name", "step_fr_to_block")
+#         self.cmd_term_name     = P.get("cmd_term_name", self.cmd_name)
+#         self.auto_advance_phase = P.get("auto_advance_phase", True)
+
+#         # ターゲット近傍とみなす距離 [m]
+#         self.near_radius_cmd   = P.get("near_radius_cmd", 0.16)
+#         # XYZ で距離を見るか / XY のみか
+#         self.use_xyz           = P.get("use_xyz", True)
+
+#         # --- 脚順序 ---
+#         self.leg_order = P.get(
+#             "leg_order",
+#             ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
+#         )
+#         self.num_legs = len(self.leg_order)
+
+#         # --- シーン参照 ---
+#         scene = env.scene
+#         self.robot = scene.articulations["robot"]
+
+#         # foot index
+#         self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_order]
+
+#         # ContactSensor
+#         if self.contact_sensor_name not in scene.sensors:
+#             raise RuntimeError(
+#                 f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
+#             )
+#         self.sensor = scene.sensors[self.contact_sensor_name]
+
+#         # ContactSensor 内の body_names → 列 index
+#         sensor_body_names = self.sensor.body_names
+#         self.sensor_cols: list[int] = []
+#         for leg in self.leg_order:
+#             if leg not in sensor_body_names:
+#                 raise RuntimeError(
+#                     f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' がありません。\n"
+#                     f"  sensor.body_names = {sensor_body_names}"
+#                 )
+#             self.sensor_cols.append(sensor_body_names.index(leg))
+
+#         # コマンド term
+#         if self.cmd_term_name not in env.command_manager._terms:
+#             raise RuntimeError(
+#                 f"command_manager._terms に '{self.cmd_term_name}' が見つかりません。"
+#             )
+#         self.cmd_term = env.command_manager._terms[self.cmd_term_name]
+
+#         # --- 状態（フェーズごとに 1 回だけ進行させるためのバッファ） ---
+#         B = env.num_envs
+#         dev = env.device
+#         self.hold_t         = torch.zeros(B, device=dev)
+#         self.paid_for_phase = torch.zeros(B, dtype=torch.bool, device=dev)
+#         # 「前回のステップでこの env がどの phase だったか」
+#         # → cmd_term.phase と比較して phase が変わったらリセット
+#         self.prev_phase     = self.cmd_term.phase.clone().detach()
+
+
+    
+#     def reset(self, env_ids=None):
+#         # RewardManager から呼ばれる
+#         if env_ids is None:
+#             env_ids = slice(None)
+
+#         self.hold_t[env_ids] = 0.0
+#         self.paid_for_phase[env_ids] = False
+
+#         # phase の同期（存在するなら）
+#         if hasattr(self.cmd_term, "phase"):
+#             self.prev_phase[env_ids] = self.cmd_term.phase[env_ids]
+
+#             # ★ reset 時に phase を 0 に戻したいならここでやる
+#             if hasattr(self.cmd_term, "set_phase"):
+#                 self.cmd_term.set_phase(env_ids, phase=0)
+#                 self.prev_phase[env_ids] = 0
+
+
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         device = env.device
+#         B = env.num_envs
+#         dt = env.step_dt
+
+#         # ==============================
+#         # 0. phase 変更を検出して per-phase 状態をリセット
+#         # ==============================
+#         curr_phase = self.cmd_term.phase      # [B]
+#         changed = curr_phase != self.prev_phase
+#         if changed.any():
+#             self.hold_t[changed]         = 0.0
+#             self.paid_for_phase[changed] = False
+#             self.prev_phase[changed]     = curr_phase[changed]
+
+#         # ==============================
+#         # 1. 足先位置 (world) [B, L, 3]
+#         # ==============================
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+#         else:
+#             feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+
+#         # ==============================
+#         # 2. 接触判定
+#         # ==============================
+#         if self.require_contact:
+#             F = self.sensor.data.net_forces_w   # [B, num_sensor_bodies, 3]
+#             if F is None:
+#                 raise RuntimeError(
+#                     f"ContactSensor '{self.contact_sensor_name}' の net_forces_w が None です。"
+#                 )
+#             Fz_list = [F[:, col, 2] for col in self.sensor_cols]
+#             Fz = torch.stack(Fz_list, dim=-1)             # [B, L]
+#             contacts = (Fz.abs() > self.contact_threshold)  # [B, L]
+#         else:
+#             contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+
+#         # ==============================
+#         # 3. 足先位置を base 座標に変換
+#         # ==============================
+#         base_p = self.robot.data.root_pos_w   # [B,3]
+#         base_q = self.robot.data.root_quat_w  # [B,4]
+#         R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3]
+
+#         diff_w = feet_w - base_p.unsqueeze(1)                 # [B,L,3]
+#         feet_b = torch.matmul(
+#             R_wb3.unsqueeze(1), diff_w.unsqueeze(-1)
+#         ).squeeze(-1)                                         # [B,L,3]
+
+#         # ==============================
+#         # 4. コマンドターゲット（base）
+#         # ==============================
+#         cmd = env.command_manager.get_command(self.cmd_name)  # [B, 3*L]
+#         tgt_b = cmd.view(B, self.num_legs, 3)                 # [B,L,3]
+
+#         # ==============================
+#         # 5. ターゲットとの距離 & 接触で good_legs 判定
+#         # ==============================
+#         if self.use_xyz:
+#             diff = feet_b - tgt_b
+#             dist = diff.norm(dim=-1)             # [B,L]
+#         else:
+#             diff_xy = feet_b[..., :2] - tgt_b[..., :2]
+#             dist = diff_xy.norm(dim=-1)          # [B,L]
+
+#         near_cmd  = dist <= self.near_radius_cmd   # [B,L]
+#         good_legs = near_cmd & contacts           # [B,L]
+
+#         # 全脚 OK ?
+#         good_all = good_legs.all(dim=-1)          # [B]
+
+#         # ==============================
+#         # 6. hold_t 更新（この phase で）
+#         # ==============================
+#         self.hold_t = torch.where(
+#             good_all,
+#             self.hold_t + dt,
+#             torch.zeros_like(self.hold_t),
+#         )
+
+#         # 「この phase でまだ進行しておらず、初めて T_hold_s を超えた env」
+#         reached = (self.hold_t >= self.T_hold_s) & (~self.paid_for_phase)
+
+
+#         # ==============================
+#                # 6.5 カリキュラム用: 成功マスク / 成功カウントを env.extras に書く
+#        # ==============================
+#               # - success_mask: 「いま hold 条件を満たしている env」
+#       #   ※ self.hold_t は good_all が False になった時点で 0 にリセットされるので、
+#       #      self.hold_t >= T_hold_s なら「今も good_all かつ十分ホールドしている」ことになる
+#         success_mask = self.hold_t >= self.T_hold_s  # [B] bool
+
+#         # 「このステップで新たに成功に到達した env の数」をカリキュラムに渡す
+#         # shared_mass_curriculum ではこれを `ctx.succ += n_succ_step` で累積する想定
+#         self.env.extras["fr_hold_ok_mask"]  = success_mask
+#         self.env.extras["fr_hold_ok_count"] = int(reached.sum().item())
+
+#         # 報酬（重みは 1e-6 にする想定なので、ここは好きに）
+#         payout = torch.where(
+#             reached,
+#             torch.full_like(self.hold_t, self.bonus / dt),
+#             torch.zeros_like(self.hold_t),
+#         )
+
+#         # この phase ではもう一度進行させない
+#         self.paid_for_phase |= reached
+
+#         # ==============================
+#         # 7. フェーズ進行（0→1→2 ...）
+#         # ==============================
+#         if self.auto_advance_phase and reached.any():
+#             env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+#             self.cmd_term.advance_phase(env_ids)
+
+#         # ==============================
+#         # 8. reset 時に状態クリア
+#         # ==============================
+#         if hasattr(env, "reset_buf"):
+#             m = env.reset_buf > 0
+#             if m.any():
+#                 self.hold_t[m]         = 0.0
+#                 self.paid_for_phase[m] = False
+#                 self.prev_phase[m]     = self.cmd_term.phase[m]
+
+#                 env_ids = torch.nonzero(m, as_tuple=False).squeeze(-1)# ★ ここで phase を 0 に戻す
+#                 self.cmd_term.set_phase(env_ids, phase=0)
+
+#         return payout
+
+
+# class MultiLegHoldBonusPhase(ManagerTermBase):
+#     """
+#     各脚が「コマンドターゲット（base相対）」の近傍 & 接触を
+#     T_hold_s 秒維持したときに「そのフェーズで一度だけ」ボーナスを支払い、
+#     かつ CommandTerm のフェーズを 1 つ進める (0→1→2→...)。
+
+#     ★チャタリング対策（完全版）:
+#       - feet と tgt を同じ yaw-base 座標に揃えて距離判定
+#       - near 判定ヒステリシス（near_on / near_off）
+#       - contact 判定ヒステリシス（contact_on / contact_off）
+#       - dropout 許容（badが短時間なら hold を維持）
+#       - reset時に prev_phase を phase=0 と同期
+#     """
+
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.env = env
+
+#         # ---- time / bonus ----
+#         self.T_hold_s = float(P.get("T_hold_s", 0.2))
+#         self.bonus    = float(P.get("bonus", 5.0))
+
+#         # ---- contact hysteresis ----
+#         self.require_contact     = bool(P.get("require_contact", True))
+#         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+
+#         # 互換：contact_threshold しかない場合も拾う
+#         thr = P.get("contact_threshold", None)
+#         if thr is not None:
+#             thr = float(thr)
+#             self.contact_on  = float(P.get("contact_on",  thr))
+#             self.contact_off = float(P.get("contact_off", thr * 0.6))
+#         else:
+#             self.contact_on  = float(P.get("contact_on",  10.0))
+#             self.contact_off = float(P.get("contact_off",  6.0))
+
+#         # ---- command ----
+#         self.cmd_name           = P.get("cmd_name", "step_fr_to_block")
+#         self.cmd_term_name      = P.get("cmd_term_name", self.cmd_name)
+#         self.auto_advance_phase = bool(P.get("auto_advance_phase", True))
+
+#         # ---- near hysteresis ----
+#         # 互換：near_radius_cmd しかない場合も拾う
+#         r = P.get("near_radius_cmd", None)
+#         if ("near_on" in P) or ("near_off" in P):
+#             self.near_on  = float(P.get("near_on",  0.16))
+#             self.near_off = float(P.get("near_off", 0.20))
+#         elif r is not None:
+#             r = float(r)
+#             self.near_on  = r
+#             self.near_off = max(r + 0.03, r * 1.25)
+#         else:
+#             self.near_on  = 0.16
+#             self.near_off = 0.20
+
+#         # ---- distance mode ----
+#         # ここは “yaw-base で距離判定” は固定（今回の目的）
+#         # use_xyz=True だと Z の揺れでチャタるので、まずは False 推奨
+#         self.use_xyz = bool(P.get("use_xyz", False))
+
+#         # ---- dropout (瞬断許容) ----
+#         self.dropout_s = float(P.get("dropout_s", 0.2))
+
+#         # ---- leg order ----
+#         self.leg_order = P.get("leg_order", ["FL_foot", "FR_foot", "RL_foot", "RR_foot"])
+#         self.num_legs = len(self.leg_order)
+
+#         # ---- scene ----
+#         scene = env.scene
+#         self.robot = scene.articulations["robot"]
+#         self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_order]
+
+#         if self.contact_sensor_name not in scene.sensors:
+#             raise RuntimeError(f"scene.sensors に '{self.contact_sensor_name}' が存在しません。")
+#         self.sensor = scene.sensors[self.contact_sensor_name]
+
+#         sensor_body_names = self.sensor.body_names
+#         self.sensor_cols = []
+#         for leg in self.leg_order:
+#             if leg not in sensor_body_names:
+#                 raise RuntimeError(
+#                     f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' がありません。\n"
+#                     f"  sensor.body_names = {sensor_body_names}"
+#                 )
+#             self.sensor_cols.append(sensor_body_names.index(leg))
+
+#         if self.cmd_term_name not in env.command_manager._terms:
+#             raise RuntimeError(f"command_manager._terms に '{self.cmd_term_name}' が見つかりません。")
+#         self.cmd_term = env.command_manager._terms[self.cmd_term_name]
+
+#         # ---- state ----
+#         B = env.num_envs
+#         dev = env.device
+#         self.hold_t         = torch.zeros(B, device=dev)
+#         self.bad_t          = torch.zeros(B, device=dev)
+#         self.paid_for_phase = torch.zeros(B, dtype=torch.bool, device=dev)
+#         self.prev_phase     = self.cmd_term.phase.clone().detach()
+
+#         # hysteresis memory
+#         self.contact_prev = torch.zeros(B, self.num_legs, dtype=torch.bool, device=dev)
+#         self.near_prev    = torch.zeros(B, self.num_legs, dtype=torch.bool, device=dev)
+
+#     # ----------------------------
+#     # quaternion utils (wxyz)
+#     # ----------------------------
+#     @staticmethod
+#     def _quat_conj(q):
+#         out = q.clone()
+#         out[..., 1:] *= -1
+#         return out
+
+#     @staticmethod
+#     def _quat_apply(q, v):
+#         w, x, y, z = q.unbind(-1)
+#         vx, vy, vz = v.unbind(-1)
+#         tx = 2 * (y * vz - z * vy)
+#         ty = 2 * (z * vx - x * vz)
+#         tz = 2 * (x * vy - y * vx)
+#         vpx = vx + w * tx + (y * tz - z * ty)
+#         vpy = vy + w * ty + (z * tx - x * tz)
+#         vpz = vz + w * tz + (x * ty - y * tx)
+#         return torch.stack([vpx, vpy, vpz], dim=-1)
+
+#     @staticmethod
+#     def _yaw_quat(q_wxyz):
+#         w, x, y, z = q_wxyz.unbind(-1)
+#         yaw = torch.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+#         cy = torch.cos(0.5 * yaw)
+#         sy = torch.sin(0.5 * yaw)
+#         return torch.stack([cy, torch.zeros_like(cy), torch.zeros_like(cy), sy], dim=-1)
+
+#     # ----------------------------
+#     # reset hook (RewardManager から呼ばれる想定)
+#     # ----------------------------
+#     def reset(self, env_ids=None):
+#         if env_ids is None:
+#             env_ids = slice(None)
+
+#         self.hold_t[env_ids] = 0.0
+#         self.bad_t[env_ids]  = 0.0
+#         self.paid_for_phase[env_ids] = False
+#         self.contact_prev[env_ids] = False
+#         self.near_prev[env_ids]    = False
+
+#         # phase を 0 に戻すなら prev_phase も同期
+#         if hasattr(self.cmd_term, "set_phase"):
+#             self.cmd_term.set_phase(env_ids, phase=0)
+#             if isinstance(env_ids, slice):
+#                 self.prev_phase[:] = 0
+#             else:
+#                 self.prev_phase[env_ids] = 0
+#         else:
+#             if isinstance(env_ids, slice):
+#                 self.prev_phase[:] = self.cmd_term.phase
+#             else:
+#                 self.prev_phase[env_ids] = self.cmd_term.phase[env_ids]
+
+#     # ----------------------------
+#     # main call
+#     # ----------------------------
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         device = env.device
+#         B = env.num_envs
+#         dt = env.step_dt
+
+#         # ==============================
+#         # 0) phase change -> reset per-phase buffers
+#         # ==============================
+#         curr_phase = self.cmd_term.phase
+#         changed = curr_phase != self.prev_phase
+#         if changed.any():
+#             self.hold_t[changed]         = 0.0
+#             self.bad_t[changed]          = 0.0
+#             self.paid_for_phase[changed] = False
+#             self.contact_prev[changed]   = False
+#             self.near_prev[changed]      = False
+#             self.prev_phase[changed]     = curr_phase[changed]
+
+#         # ==============================
+#         # 1) feet world pos
+#         # ==============================
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]  # (B,4,3)
+#         else:
+#             feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+
+#         # base pose (world)
+#         base_p = self.robot.data.root_pos_w      # (B,3)
+#         base_q = self.robot.data.root_quat_w     # (B,4) wxyz
+
+#         # ==============================
+#         # 2) contacts with hysteresis
+#         # ==============================
+#         if self.require_contact:
+#             F = self.sensor.data.net_forces_w
+#             if F is None:
+#                 raise RuntimeError(f"ContactSensor '{self.contact_sensor_name}' の net_forces_w が None です。")
+#             Fz = torch.stack([F[:, col, 2] for col in self.sensor_cols], dim=-1).abs()  # (B,4)
+#             contacts = torch.where(self.contact_prev, Fz > self.contact_off, Fz > self.contact_on)
+#         else:
+#             contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+#         self.contact_prev = contacts
+
+#         # ==============================
+#         # 3) command target (base relative) -> yaw-base
+#         # ==============================
+#         cmd = env.command_manager.get_command(self.cmd_name)   # (B,12)
+#         tgt_b = cmd.view(B, self.num_legs, 3)                  # base相対 (roll/pitch含む base)
+
+#         # yaw quaternion
+#         qy = self._yaw_quat(base_q)                             # (B,4)
+#         qy_conj = self._quat_conj(qy)                           # (B,4)
+
+#         # feet: world -> yaw-base
+#         rel_w_feet = feet_w - base_p[:, None, :]                # (B,4,3)
+#         feet_y = self._quat_apply(qy_conj[:, None, :], rel_w_feet)  # (B,4,3)
+
+#         # tgt: base相対 -> world -> yaw-base（★ここが重要）
+#         tgt_w = base_p[:, None, :] + self._quat_apply(base_q[:, None, :], tgt_b)   # (B,4,3)
+#         rel_w_tgt = tgt_w - base_p[:, None, :]                                     # (B,4,3)
+#         tgt_y = self._quat_apply(qy_conj[:, None, :], rel_w_tgt)                   # (B,4,3)
+
+#         # ==============================
+#         # 4) distance + near hysteresis
+#         # ==============================
+#         if self.use_xyz:
+#             dist = (feet_y - tgt_y).norm(dim=-1)                 # (B,4)
+#         else:
+#             dist = (feet_y[..., :2] - tgt_y[..., :2]).norm(dim=-1)
+
+#         near = torch.where(self.near_prev, dist <= self.near_off, dist <= self.near_on)
+#         self.near_prev = near
+
+#         good_legs = near & contacts                               # (B,4)
+#         good_all  = good_legs.all(dim=-1)                         # (B,)
+
+#         # ==============================
+#         # 5) hold with dropout
+#         # ==============================
+#         self.bad_t = torch.where(good_all, torch.zeros_like(self.bad_t), self.bad_t + dt)
+#         hold_keep = (~good_all) & (self.bad_t < self.dropout_s)
+
+#         self.hold_t = torch.where(
+#             good_all,
+#             self.hold_t + dt,
+#             torch.where(hold_keep, self.hold_t, torch.zeros_like(self.hold_t)),
+#         )
+
+#         reached = (self.hold_t >= self.T_hold_s) & (~self.paid_for_phase)
+
+#         # ==============================
+#         # 6) curriculum/debug extras（見える化）
+#         # ==============================
+#         success_mask = self.hold_t >= self.T_hold_s
+#         env.extras["fr_hold_ok_mask"]   = success_mask
+#         env.extras["fr_hold_ok_count"]  = int(reached.sum().item())
+
+#         # チャタリング可視化用（おすすめ）
+#         env.extras["hold_progress"] = (self.hold_t / max(self.T_hold_s, 1e-6)).clamp(0, 1).detach()
+#         env.extras["hold_good_all"] = good_all.detach()
+#         env.extras["hold_near"]     = near.detach()          # (B,4)
+#         env.extras["hold_contact"]  = contacts.detach()      # (B,4)
+#         env.extras["hold_dist"]     = dist.detach()          # (B,4)
+#         env.extras["hold_phase"]    = curr_phase.detach()
+
+#         # ==============================
+#         # 7) payout + phase advance
+#         # ==============================
+#         payout = torch.where(
+#             reached,
+#             torch.full_like(self.hold_t, self.bonus / dt),
+#             torch.zeros_like(self.hold_t),
+#         )
+#         self.paid_for_phase |= reached
+
+#         if self.auto_advance_phase and reached.any():
+#             env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+#             self.cmd_term.advance_phase(env_ids)
+
+#         # ==============================
+#         # 8) reset_buf handling（prev_phase 同期込み）
+#         # ==============================
+#         if hasattr(env, "reset_buf"):
+#             m = env.reset_buf > 0
+#             if m.any():
+#                 env_ids = torch.nonzero(m, as_tuple=False).squeeze(-1)
+
+#                 self.hold_t[env_ids] = 0.0
+#                 self.bad_t[env_ids]  = 0.0
+#                 self.paid_for_phase[env_ids] = False
+#                 self.contact_prev[env_ids] = False
+#                 self.near_prev[env_ids]    = False
+
+#                 if hasattr(self.cmd_term, "set_phase"):
+#                     self.cmd_term.set_phase(env_ids, phase=0)
+#                     self.prev_phase[env_ids] = 0
+#                 else:
+#                     self.prev_phase[env_ids] = self.cmd_term.phase[env_ids]
+
+
+        
+
+#             # good_rate = good_all.float().mean().item()
+#             # near_rate = near.float().mean().item()
+#             # con_rate  = contacts.float().mean().item()
+#             # hold_mean = self.hold_t.mean().item()
+#             # hold_p95  = torch.quantile(self.hold_t, 0.95).item() if B >= 2 else self.hold_t.max().item()
+#             # n_reached = int(reached.sum().item())
+#             # n_changed = int(changed.sum().item())
+
+#             # print(
+#             #     f"[HoldDBG  "
+#             #     f"good={good_rate:.3f} near={near_rate:.3f} contact={con_rate:.3f} "
+#             #     f"hold_mean={hold_mean:.3f}s p95={hold_p95:.3f}s "
+#             #     f"reached={n_reached} phase_changed={n_changed}"
+#             # )
+
+#             # e = int(max(0, min(0, B - 1)))
+#             # def bits(x): return "".join("1" if b else "0" for b in x)
+
+#             # dist_e = dist[e].detach().cpu().tolist()
+#             # near_e = near[e].detach().cpu().tolist()
+#             # con_e  = contacts[e].detach().cpu().tolist()
+#             # good_e = good_legs[e].detach().cpu().tolist()
+
+#             # msg = (
+#             #     f"  env={e} phase={int(curr_phase[e].item())} "
+#             #     f"hold={self.hold_t[e].item():.3f}s bad={self.bad_t[e].item():.3f}s paid={int(self.paid_for_phase[e].item())} "
+#             #     f"| near={bits(near_e)} contact={bits(con_e)} good={bits(good_e)} "
+#             #     f"| dist(m)={[round(x,3) for x in dist_e]}"
+#             # )
+#             # print(msg)
+
+#             # if Fz is not None:
+#             #     fz_e = Fz[e].detach().cpu().tolist()
+#             #     print(
+#             #         f"  env={e} Fz(N)={[round(x,1) for x in fz_e]} "
+#             #         f"(on={self.contact_on:.1f}, off={self.contact_off:.1f}) "
+#             #         f"near(on={self.near_on:.3f}, off={self.near_off:.3f}) dropout={self.dropout_s:.3f}s"
+#             #     )
+
+
+#         return payout
+
+
+
+
+
+
+
+
+import torch
+
+# class MultiLegHoldBonusPhase(ManagerTermBase):
+#     DEBUG = True
+#     PRINT_EVERY = 50
+#     PRINT_ENV = 0
+
+#     # --- chatter対策 ---
+#     DROPOUT_S = 0.04
+#     CONTACT_OFF_RATIO = 0.6
+
+#     # 「更新脚」だけnearを厳しく
+#     NEAR_MOVED_ON  = 0.05     # 5cm
+#     NEAR_MOVED_OFF = 0.07     # ヒステリシス
+
+#     # touchdownチャタ対策：接触がこの秒数“連続”したらOK
+#     CONTACT_STABLE_S = 0.03
+
+#     # moved判定しきい値（cmdターゲットがこれ以上変わった脚をmoved扱い）
+#     MOVED_EPS = 0.02
+
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+#         P = cfg.params
+#         self.env = env
+
+#         self.T_hold_s = float(P.get("T_hold_s", 0.2))
+#         self.bonus    = float(P.get("bonus", 5.0))
+
+#         self.require_contact     = bool(P.get("require_contact", True))
+#         self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
+#         self.contact_on          = float(P.get("contact_threshold", 8.0))
+#         self.contact_off         = self.contact_on * self.CONTACT_OFF_RATIO
+
+#         self.cmd_name           = P.get("cmd_name", "step_fr_to_block")
+#         self.cmd_term_name      = P.get("cmd_term_name", self.cmd_name)
+#         self.auto_advance_phase = bool(P.get("auto_advance_phase", True))
+
+#         self.near_on  = float(P.get("near_radius_cmd", 0.16))
+#         self.near_off = max(self.near_on + 0.03, self.near_on * 1.25)
+
+#         self.use_xyz = bool(P.get("use_xyz", True))
+
+#         self.leg_order = P.get("leg_order", ["FL_foot", "FR_foot", "RL_foot", "RR_foot"])
+#         self.num_legs = len(self.leg_order)
+
+#         scene = env.scene
+#         self.robot = scene.articulations["robot"]
+#         self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_order]
+
+#         if self.contact_sensor_name not in scene.sensors:
+#             raise RuntimeError(f"scene.sensors に '{self.contact_sensor_name}' が存在しません。")
+#         self.sensor = scene.sensors[self.contact_sensor_name]
+
+#         sensor_body_names = self.sensor.body_names
+#         self.sensor_cols = [sensor_body_names.index(leg) for leg in self.leg_order]
+
+#         if self.cmd_term_name not in env.command_manager._terms:
+#             raise RuntimeError(f"command_manager._terms に '{self.cmd_term_name}' が見つかりません。")
+#         self.cmd_term = env.command_manager._terms[self.cmd_term_name]
+
+#         B = env.num_envs
+#         dev = env.device
+#         self.hold_t         = torch.zeros(B, device=dev)
+#         self.bad_t          = torch.zeros(B, device=dev)
+#         self.paid_for_phase = torch.zeros(B, dtype=torch.bool, device=dev)
+#         self.prev_phase     = self.cmd_term.phase.clone().detach()
+
+#         # hysteresis state
+#         self.contact_prev = torch.zeros(B, self.num_legs, dtype=torch.bool, device=dev)
+#         self.near_prev    = torch.zeros(B, self.num_legs, dtype=torch.bool, device=dev)
+
+#         # 接触安定時間（脚ごと）
+#         self.contact_stable_t = torch.zeros(B, self.num_legs, device=dev)
+
+#         # moved脚の検出用
+#         self.prev_cmd_ver = self.cmd_term.cmd_version.clone().detach()
+#         cmd0 = env.command_manager.get_command(self.cmd_name).view(B, self.num_legs, 3).detach()
+#         self.prev_tgt_b = cmd0.clone()
+#         self.moved_mask_phase = torch.zeros(B, self.num_legs, dtype=torch.bool, device=dev)
+
+#         self._step = 0
+
+#         if self.DEBUG:
+#             print(f"[HoldV2:init] T_hold={self.T_hold_s:.3f} near_on={self.near_on:.3f} moved_on={self.NEAR_MOVED_ON:.3f} "
+#                   f"contact_on={self.contact_on:.1f} stable={self.CONTACT_STABLE_S:.3f} legs={self.leg_order}")
+
+#     @staticmethod
+#     def _rot_from_quat_wxyz(q):
+#         w, x, y, z = q.unbind(-1)
+#         ww, xx, yy, zz = w*w, x*x, y*y, z*z
+#         wx, wy, wz = w*x, w*y, w*z
+#         xy, xz, yz = x*y, x*z, y*z
+#         R = torch.stack([
+#             ww+xx-yy-zz, 2*(xy-wz),     2*(xz+wy),
+#             2*(xy+wz),   ww-xx+yy-zz,   2*(yz-wx),
+#             2*(xz-wy),   2*(yz+wx),     ww-xx-yy+zz
+#         ], dim=-1).reshape(q.shape[:-1] + (3,3))
+#         return R
+
+#     def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+#         self._step += 1
+#         B = env.num_envs
+#         dt = env.step_dt
+#         dev = env.device
+
+#         # --- phase change reset ---
+#         curr_phase = self.cmd_term.phase
+#         changed = curr_phase != self.prev_phase
+#         if changed.any():
+#             self.hold_t[changed] = 0.0
+#             self.bad_t[changed]  = 0.0
+#             self.paid_for_phase[changed] = False
+#             # self.contact_prev[changed] = False
+#             # self.near_prev[changed] = False
+#             # self.contact_stable_t[changed] = 0.0
+#             self.prev_phase[changed] = curr_phase[changed]
+
+#         # --- detect moved legs when cmd_version updates ---
+#         cmd_ver = self.cmd_term.cmd_version
+#         tgt_b = env.command_manager.get_command(self.cmd_name).view(B, self.num_legs, 3)
+
+#         updated = cmd_ver != self.prev_cmd_ver
+#         if updated.any():
+#             d = (tgt_b[updated] - self.prev_tgt_b[updated]).norm(dim=-1)  # (Bu,4)
+#             self.moved_mask_phase[updated] = d > self.MOVED_EPS
+#             self.prev_tgt_b[updated] = tgt_b[updated].detach()
+#             self.prev_cmd_ver[updated] = cmd_ver[updated]
+
+#         # --- feet world ---
+#         if hasattr(self.robot.data, "body_link_pose_w"):
+#             feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
+#         else:
+#             feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+
+#         # --- contact hysteresis ---
+#         if self.require_contact:
+#             F = self.sensor.data.net_forces_w
+#             Fz = torch.stack([F[:, col, 2] for col in self.sensor_cols], dim=-1).abs()
+#             contacts = torch.where(self.contact_prev, Fz > self.contact_off, Fz > self.contact_on)
+#         else:
+#             Fz = None
+#             contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=dev)
+#         self.contact_prev = contacts
+
+#         # --- contact stable timer ---
+#         self.contact_stable_t = torch.where(
+#             contacts,
+#             self.contact_stable_t + dt,
+#             torch.zeros_like(self.contact_stable_t),
+#         )
+#         contact_ok = contacts & (self.contact_stable_t >= self.CONTACT_STABLE_S)
+
+#         # --- feet to base ---
+#         base_p = self.robot.data.root_pos_w
+#         base_q = self.robot.data.root_quat_w
+#         R_bw = self._rot_from_quat_wxyz(base_q).transpose(-1, -2)
+
+#         diff_w = feet_w - base_p[:, None, :]
+#         feet_b = torch.matmul(R_bw[:, None, :, :], diff_w[..., None]).squeeze(-1)
+
+#         # --- dist ---
+#         if self.use_xyz:
+#             dist = (feet_b - tgt_b).norm(dim=-1)
+#         else:
+#             dist = (feet_b[..., :2] - tgt_b[..., :2]).norm(dim=-1)
+
+#         # --- near hysteresis (moved leg uses tighter thresholds) ---
+#         moved = self.moved_mask_phase
+#         near_on_leg  = torch.where(moved, torch.full_like(dist, self.NEAR_MOVED_ON),  torch.full_like(dist, self.near_on))
+#         near_off_leg = torch.where(moved, torch.full_like(dist, self.NEAR_MOVED_OFF), torch.full_like(dist, self.near_off))
+
+#         near = torch.where(self.near_prev, dist <= near_off_leg, dist <= near_on_leg)
+#         self.near_prev = near
+
+#         good_legs = near & contact_ok
+
+#         # 全脚条件（※ここは好みで「moved脚だけ」でもOK）
+
+#         # req_mask: moved があれば moved、なければ全脚
+#         moved_any = moved.any(dim=-1)                          # (B,)
+#         req_mask = torch.where(moved_any[:,None], moved, torch.ones_like(moved))
+#         good_all = (good_legs | (~req_mask)).all(dim=-1) 
+
+#         # good_all = good_legs.all(dim=-1)
+
+#         # dropout debounce
+#         self.bad_t = torch.where(good_all, torch.zeros_like(self.bad_t), self.bad_t + dt)
+#         keep_hold = (~good_all) & (self.bad_t < self.DROPOUT_S)
+
+#         self.hold_t = torch.where(
+#             good_all,
+#             self.hold_t + dt,
+#             torch.where(keep_hold, self.hold_t, torch.zeros_like(self.hold_t)),
+#         )
+
+#         reached = (self.hold_t >= self.T_hold_s) & (~self.paid_for_phase)
+
+#         # extras（観測に入れたいならここから拾える）
+#         env.extras["phase_hold_t"] = self.hold_t
+#         env.extras["phase_moved_mask"] = moved.to(torch.uint8)
+
+#         payout = torch.where(
+#             reached,
+#             torch.full_like(self.hold_t, self.bonus / dt),
+#             torch.zeros_like(self.hold_t),
+#         )
+#         self.paid_for_phase |= reached
+
+#         if self.auto_advance_phase and reached.any():
+#             env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+#             self.cmd_term.advance_phase(env_ids)
+
+#         # print
+#         if self.DEBUG:
+#             do_periodic = (self.PRINT_EVERY > 0) and (self._step % self.PRINT_EVERY == 0)
+#             do_event = changed.any() or reached.any() or updated.any()
+#             if do_periodic or do_event:
+#                 e = int(max(0, min(self.PRINT_ENV, B - 1)))
+#                 def bits(x): return "".join("1" if bool(b) else "0" for b in x)
+
+#                 print(f"[HoldV2 step={self._step}] good={good_all.float().mean().item():.3f} "
+#                       f"near={near.float().mean().item():.3f} contact={contacts.float().mean().item():.3f} "
+#                       f"reached={int(reached.sum().item())} phase_changed={int(changed.sum().item())} cmd_updated={int(updated.sum().item())}")
+
+#                 print(f"  env={e} phase={int(curr_phase[e].item())} hold={self.hold_t[e].item():.3f}s bad={self.bad_t[e].item():.3f}s "
+#                       f"| moved={bits(moved[e])} near={bits(near[e])} contact_ok={bits(contact_ok[e])} good={bits(good_legs[e])} "
+#                       f"| dist(m)={[round(x,3) for x in dist[e].detach().cpu().tolist()]}")
+#                 if Fz is not None:
+#                     print(f"  env={e} Fz(N)={[round(x,1) for x in Fz[e].detach().cpu().tolist()]} stable_t={[round(x,3) for x in self.contact_stable_t[e].detach().cpu().tolist()]}")
+
+#         return payout
+
+
+
+
+
+# class MultiLegHoldBonusPhase(ManagerTermBase):
+#     def __init__(self, cfg, env):
+#         super().__init__(cfg, env)
+#         self.env = env
+#         scene = env.scene
+#         self.robot = scene.articulations["robot"]
+
+#         # ---- 固定パラメータ（ここだけ編集） ----
+#         self.T_hold_s = 0.20
+#         self.dropout_s = 0.20
+
+#         self.near_on  = 0.16
+#         self.near_off = 0.20
+
+#         self.F_on  = 10.0
+#         self.F_off = 6.0
+#         self.contact_stable_s = 0.03
+#         self.bonus = 5.0
+
+#         self.use_xyz = True
+
+#         self.cmd_name = "step_fr_to_block"
+#         self.cmd_term = env.command_manager._terms[self.cmd_name]
+#         self.sensor = scene.sensors["contact_forces"]
+
+#         self.leg_order = ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
+#         self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_order]
+#         self.sensor_cols = [self.sensor.body_names.index(n) for n in self.leg_order]
+
+#         B = env.num_envs
+#         dev = env.device
+
+#         self.hold_t = torch.zeros(B, device=dev)
+#         self.bad_t  = torch.zeros(B, device=dev)
+#         self.paid_for_phase = torch.zeros(B, dtype=torch.bool, device=dev)
+#         self.prev_phase = self.cmd_term.phase.clone().detach()
+
+#         # hysteresis state
+#         self.contact_state = torch.zeros(B, 4, dtype=torch.bool, device=dev)
+#         self.near_state    = torch.zeros(B, 4, dtype=torch.bool, device=dev)
+
+#         self.contact_stable_t = torch.zeros(B, 4, device=dev)
+
+#         # debug
+#         self._step = 0
+#         self.PRINT_EVERY = 20
+#         self.PRINT_ENV = 0
+
+#     def _hyst_contact(self, Fz_abs):
+#         # contact_state: keep if between off/on
+#         on  = Fz_abs > self.F_on
+#         off = Fz_abs < self.F_off
+#         state = self.contact_state
+#         state = torch.where(on, torch.ones_like(state), state)
+#         state = torch.where(off, torch.zeros_like(state), state)
+#         self.contact_state = state
+#         return state
+
+#     def _hyst_near(self, dist):
+#         on  = dist <= self.near_on
+#         off = dist >= self.near_off
+#         state = self.near_state
+#         state = torch.where(on, torch.ones_like(state), state)
+#         state = torch.where(off, torch.zeros_like(state), state)
+#         self.near_state = state
+#         return state
+
+#     def __call__(self, env):
+#         dev = env.device
+#         dt = env.step_dt
+#         B = env.num_envs
+#         self._step += 1
+
+#         # ---- phase change: hold系だけリセット（接触ヒステリシスは維持） ----
+#         curr_phase = self.cmd_term.phase
+#         phase_changed = curr_phase != self.prev_phase
+#         if phase_changed.any():
+#             self.hold_t[phase_changed] = 0.0
+#             self.bad_t[phase_changed]  = 0.0
+#             self.paid_for_phase[phase_changed] = False
+#             self.prev_phase[phase_changed] = curr_phase[phase_changed]
+
+#         # ---- feet pos world/base ----
+#         feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :]  # (B,4,3)
+#         base_p = self.robot.data.root_pos_w
+#         base_q = self.robot.data.root_quat_w
+#         R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)
+
+#         diff_w = feet_w - base_p[:, None, :]
+#         feet_b = torch.matmul(R_wb3[:, None, :, :], diff_w[..., None]).squeeze(-1)  # (B,4,3)
+
+#         # ---- target ----
+#         cmd = env.command_manager.get_command(self.cmd_name).view(B, 4, 3)
+#         if self.use_xyz:
+#             dist = (feet_b - cmd).norm(dim=-1)          # (B,4)
+#         else:
+#             dist = (feet_b[..., :2] - cmd[..., :2]).norm(dim=-1)
+
+#         # ---- contact ----
+#         F = self.sensor.data.net_forces_w[:, self.sensor_cols, :]  # (B,4,3)
+#         Fz_abs = F[..., 2].abs()
+
+#         contact_state = self._hyst_contact(Fz_abs)          # (B,4) bool
+#         near_state    = self._hyst_near(dist)               # (B,4) bool
+
+#         # stable timer（contact_state が True の間だけ増える）
+#         self.contact_stable_t = torch.where(
+#             contact_state,
+#             self.contact_stable_t + dt,
+#             torch.zeros_like(self.contact_stable_t),
+#         )
+#         contact_ok = contact_state & (self.contact_stable_t >= self.contact_stable_s)
+#         near_ok = near_state
+
+#         # ---- swing脚の推定（優先：cmd_termにあれば使う）----
+#         swing_leg = None
+#         if hasattr(self.cmd_term, "swing_leg"):
+#             swing_leg = self.cmd_term.swing_leg.long()
+#         elif hasattr(self.cmd_term, "_swing_leg"):
+#             swing_leg = self.cmd_term._swing_leg.long()
+
+#         # fallback: 「一番接触が弱い脚」を swing とみなす（簡易）
+#         if swing_leg is None:
+#             swing_leg = contact_state.float().argmin(dim=1)  # (B,) 0..3
+
+#         # ---- 判定：swing脚だけ near&contact、他脚は contactだけ ----
+#         ar = torch.arange(4, device=dev)[None, :].expand(B, -1)
+#         is_swing = (ar == swing_leg[:, None])
+
+#         good_leg = torch.where(
+#             is_swing,
+#             (near_ok & contact_ok),
+#             contact_ok
+#         )  # (B,4)
+
+#         good_all = good_leg.all(dim=-1)  # (B,)
+
+#         # ---- dropout付き hold ----
+#         self.hold_t = torch.where(good_all, self.hold_t + dt, self.hold_t)
+#         self.bad_t  = torch.where(good_all, torch.zeros_like(self.bad_t), self.bad_t + dt)
+
+#         reset_mask = (self.bad_t >= self.dropout_s)
+#         if reset_mask.any():
+#             self.hold_t[reset_mask] = 0.0
+#             self.bad_t[reset_mask]  = 0.0
+
+#         reached = (self.hold_t >= self.T_hold_s) & (~self.paid_for_phase)
+
+#         payout = torch.where(
+#             reached,
+#             torch.full_like(self.hold_t, self.bonus / dt),
+#             torch.zeros_like(self.hold_t),
+#         )
+#         self.paid_for_phase |= reached
+
+#         if reached.any():
+#             env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+#             self.cmd_term.advance_phase(env_ids)
+
+#         # ---- extras: モデルに見せたいならここを obs に入れる ----
+#         env.extras["hold_t"] = self.hold_t
+#         env.extras["bad_t"]  = self.bad_t
+#         env.extras["phase"]  = curr_phase
+#         env.extras["swing_leg"] = swing_leg
+
+#         # ---- print ----
+#         if (self._step % self.PRINT_EVERY) == 0:
+#             e = self.PRINT_ENV
+#             print(
+#                 f"[HoldSimple step={self._step}] env={e} phase={int(curr_phase[e].item())} "
+#                 f"swing={int(swing_leg[e].item())} good_all={int(good_all[e].item())} "
+#                 f"hold={self.hold_t[e].item():.3f}s bad={self.bad_t[e].item():.3f}s reached={int(reached[e].item())}"
+#             )
+#             print(f"  Fz(N)={[round(x,1) for x in Fz_abs[e].detach().cpu().tolist()]} stable_t={[round(x,2) for x in self.contact_stable_t[e].detach().cpu().tolist()]}")
+#             print(f"  dist(m)={[round(x,3) for x in dist[e].detach().cpu().tolist()]}")
+#             print(f"  near={''.join(['1' if b else '0' for b in near_ok[e].tolist()])} contact_ok={''.join(['1' if b else '0' for b in contact_ok[e].tolist()])} good={''.join(['1' if b else '0' for b in good_leg[e].tolist()])}")
+
+#         return payout
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class MultiLegHoldBonusPhase(ManagerTermBase):
-    """
-    各脚が「コマンドターゲット（ベース座標）」の近傍 & 接触を
-    T_hold_s 秒維持したときに「そのフェーズで一度だけ」ボーナスを支払い、
-    かつ CommandTerm のフェーズを 1 つ進める (0→1→2→...)。
-
-    - ブロック名は一切見ない。
-    - 判定は常に env.command_manager.get_command(cmd_name) のターゲットに対して行う。
-    """
-
-    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+    def __init__(self, cfg, env):
         super().__init__(cfg, env)
         P = cfg.params
         self.env = env
+        self.robot = env.scene.articulations["robot"]
 
-        # --- 時間・ボーナス ---
-        self.T_hold_s   = P.get("T_hold_s", 0.1)
-        self.bonus      = P.get("bonus", 5.0)
+        self.cmd_name = P.get("cmd_name", "step_fr_to_block")
+        self.cmd_term = env.command_manager._terms[P.get("cmd_term_name", self.cmd_name)]
 
-        # --- 接触判定 ---
-        self.require_contact     = P.get("require_contact", True)
-        self.contact_sensor_name = P.get("contact_sensor_name", "contact_forces")
-        self.contact_threshold   = P.get("contact_threshold", 0.0)
+        self.T_hold_s = float(P.get("T_hold_s", 0.2))
+        self.bonus    = float(P.get("bonus", 5.0))
 
-        # --- コマンド関連 ---
-        self.cmd_name          = P.get("cmd_name", "step_fr_to_block")
-        self.cmd_term_name     = P.get("cmd_term_name", self.cmd_name)
-        self.auto_advance_phase = P.get("auto_advance_phase", True)
+        self.contact_sensor = env.scene.sensors[P.get("contact_sensor_name", "contact_forces")]
+        self.contact_on  = float(P.get("contact_on", 10.0))
+        self.contact_off = float(P.get("contact_off", 6.0))
 
-        # ターゲット近傍とみなす距離 [m]
-        self.near_radius_cmd   = P.get("near_radius_cmd", 0.16)
-        # XYZ で距離を見るか / XY のみか
-        self.use_xyz           = P.get("use_xyz", True)
+        # self.near_on  = float(P.get("near_on", 0.16))
+        # self.near_off = float(P.get("near_off", 0.20))
 
-        # --- 脚順序 ---
-        self.leg_order = P.get(
-            "leg_order",
-            ["FL_foot", "FR_foot", "RL_foot", "RR_foot"],
-        )
-        self.num_legs = len(self.leg_order)
+        self.near_on  = float(P.get("near_on", 0.23))
+        self.near_off = float(P.get("near_off", 0.30))
 
-        # --- シーン参照 ---
-        scene = env.scene
-        self.robot = scene.articulations["robot"]
+        self.dropout_s = float(P.get("dropout_s", 0.2))
+        self.cooldown_s = float(P.get("cooldown_s", 0.2))  # ★reset直後無効時間
 
-        # foot index
+        self.leg_order = P.get("leg_order", ["FL_foot","FR_foot","RL_foot","RR_foot"])
         self.foot_ids = [self.robot.body_names.index(n) for n in self.leg_order]
 
-        # ContactSensor
-        if self.contact_sensor_name not in scene.sensors:
-            raise RuntimeError(
-                f"scene.sensors に '{self.contact_sensor_name}' が存在しません。"
-            )
-        self.sensor = scene.sensors[self.contact_sensor_name]
+        # sensor cols
+        names = self.contact_sensor.body_names
+        self.sensor_cols = [names.index(n) for n in self.leg_order]
 
-        # ContactSensor 内の body_names → 列 index
-        sensor_body_names = self.sensor.body_names
-        self.sensor_cols: list[int] = []
-        for leg in self.leg_order:
-            if leg not in sensor_body_names:
-                raise RuntimeError(
-                    f"ContactSensor '{self.contact_sensor_name}' の body_names に '{leg}' がありません。\n"
-                    f"  sensor.body_names = {sensor_body_names}"
-                )
-            self.sensor_cols.append(sensor_body_names.index(leg))
-
-        # コマンド term
-        if self.cmd_term_name not in env.command_manager._terms:
-            raise RuntimeError(
-                f"command_manager._terms に '{self.cmd_term_name}' が見つかりません。"
-            )
-        self.cmd_term = env.command_manager._terms[self.cmd_term_name]
-
-        # --- 状態（フェーズごとに 1 回だけ進行させるためのバッファ） ---
         B = env.num_envs
         dev = env.device
-        self.hold_t         = torch.zeros(B, device=dev)
+
+        self.hold_t = torch.zeros(B, device=dev)
+        self.bad_t  = torch.zeros(B, device=dev)
         self.paid_for_phase = torch.zeros(B, dtype=torch.bool, device=dev)
-        # 「前回のステップでこの env がどの phase だったか」
-        # → cmd_term.phase と比較して phase が変わったらリセット
-        self.prev_phase     = self.cmd_term.phase.clone().detach()
+        self.prev_phase = self.cmd_term.phase.clone().detach()
 
-    def __call__(self, env: ManagerBasedRLEnv) -> torch.Tensor:
-        device = env.device
-        B = env.num_envs
+        # hysteresis state
+        self.contact_state = torch.zeros(B, 4, dtype=torch.bool, device=dev)
+        self.near_state    = torch.zeros(B, 4, dtype=torch.bool, device=dev)
+
+        # reset cooldown
+        self.cooldown_t = torch.zeros(B, device=dev)
+
+        self._step = 0
+
+    def reset(self, env_ids=None):
+        if env_ids is None:
+            env_ids = slice(None)
+
+        self.hold_t[env_ids] = 0.0
+        self.bad_t[env_ids]  = 0.0
+        self.paid_for_phase[env_ids] = False
+
+        self.contact_state[env_ids] = False
+        self.near_state[env_ids]    = False
+
+        # ★ reset直後の判定無効
+        self.cooldown_t[env_ids] = self.cooldown_s
+
+        # phase同期（ここでだけやる）
+        if hasattr(self.cmd_term, "set_phase"):
+            self.cmd_term.set_phase(env_ids, phase=0)
+        self.prev_phase[env_ids] = self.cmd_term.phase[env_ids]
+
+        print(f"[HoldSimple.reset] ids={env_ids if isinstance(env_ids, slice) else env_ids.tolist()}")
+
+    def __call__(self, env):
+        self._step += 1
         dt = env.step_dt
+        B  = env.num_envs
+        dev = env.device
 
-        # ==============================
-        # 0. phase 変更を検出して per-phase 状態をリセット
-        # ==============================
-        curr_phase = self.cmd_term.phase      # [B]
-        changed = curr_phase != self.prev_phase
+        # ---- cooldown ----
+        if (self.cooldown_t > 0).any():
+            self.cooldown_t = torch.clamp(self.cooldown_t - dt, min=0.0)
+            # cooldown中は何もしない
+            return torch.zeros(B, device=dev)
+
+        # ---- phase change detect ----
+        curr_phase = self.cmd_term.phase
+        changed = (curr_phase != self.prev_phase)
         if changed.any():
-            self.hold_t[changed]         = 0.0
+            self.hold_t[changed] = 0.0
+            self.bad_t[changed]  = 0.0
             self.paid_for_phase[changed] = False
-            self.prev_phase[changed]     = curr_phase[changed]
+            self.prev_phase[changed] = curr_phase[changed]
 
-        # ==============================
-        # 1. 足先位置 (world) [B, L, 3]
-        # ==============================
-        if hasattr(self.robot.data, "body_link_pose_w"):
-            feet_w = self.robot.data.body_link_pose_w[:, self.foot_ids, :3]
-        else:
-            feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :3]
+        # ---- feet world -> base ----
+        feet_w = self.robot.data.body_pos_w[:, self.foot_ids, :]  # (B,4,3)
+        base_p = self.robot.data.root_pos_w
+        base_q = self.robot.data.root_quat_w
+        R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)
 
-        # ==============================
-        # 2. 接触判定
-        # ==============================
-        if self.require_contact:
-            F = self.sensor.data.net_forces_w   # [B, num_sensor_bodies, 3]
-            if F is None:
-                raise RuntimeError(
-                    f"ContactSensor '{self.contact_sensor_name}' の net_forces_w が None です。"
-                )
-            Fz_list = [F[:, col, 2] for col in self.sensor_cols]
-            Fz = torch.stack(Fz_list, dim=-1)             # [B, L]
-            contacts = (Fz.abs() > self.contact_threshold)  # [B, L]
-        else:
-            contacts = torch.ones(B, self.num_legs, dtype=torch.bool, device=device)
+        diff_w = feet_w - base_p.unsqueeze(1)
+        feet_b = torch.matmul(R_wb3.unsqueeze(1), diff_w.unsqueeze(-1)).squeeze(-1)  # (B,4,3)
 
-        # ==============================
-        # 3. 足先位置を base 座標に変換
-        # ==============================
-        base_p = self.robot.data.root_pos_w   # [B,3]
-        base_q = self.robot.data.root_quat_w  # [B,4]
-        R_wb3  = _rot3_from_quat_wxyz(base_q).transpose(-1, -2)  # [B,3,3]
+        # ---- target ----
+        cmd = env.command_manager.get_command(self.cmd_name)      # (B,12)
+        tgt_b = cmd.view(B, 4, 3)
 
-        diff_w = feet_w - base_p.unsqueeze(1)                 # [B,L,3]
-        feet_b = torch.matmul(
-            R_wb3.unsqueeze(1), diff_w.unsqueeze(-1)
-        ).squeeze(-1)                                         # [B,L,3]
+        dist = (feet_b - tgt_b).norm(dim=-1)  # (B,4)
 
-        # ==============================
-        # 4. コマンドターゲット（base）
-        # ==============================
-        cmd = env.command_manager.get_command(self.cmd_name)  # [B, 3*L]
-        tgt_b = cmd.view(B, self.num_legs, 3)                 # [B,L,3]
+        # ---- contact hysteresis ----
+        F = self.contact_sensor.data.net_forces_w[:, self.sensor_cols, :]  # (B,4,3)
+        Fz = F[..., 2].abs()
 
-        # ==============================
-        # 5. ターゲットとの距離 & 接触で good_legs 判定
-        # ==============================
-        if self.use_xyz:
-            diff = feet_b - tgt_b
-            dist = diff.norm(dim=-1)             # [B,L]
-        else:
-            diff_xy = feet_b[..., :2] - tgt_b[..., :2]
-            dist = diff_xy.norm(dim=-1)          # [B,L]
+        c_prev = self.contact_state
+        c_now = torch.where(c_prev, Fz > self.contact_off, Fz > self.contact_on)
+        self.contact_state = c_now
 
-        near_cmd  = dist <= self.near_radius_cmd   # [B,L]
-        good_legs = near_cmd & contacts           # [B,L]
+        # ---- near hysteresis ----
+        n_prev = self.near_state
+        n_now = torch.where(n_prev, dist < self.near_off, dist < self.near_on)
+        self.near_state = n_now
 
-        # 全脚 OK ?
-        good_all = good_legs.all(dim=-1)          # [B]
+        # ---- good_all ----
+        good_legs = c_now & n_now
+        good_all  = good_legs.all(dim=-1)
 
-        # ==============================
-        # 6. hold_t 更新（この phase で）
-        # ==============================
+        # dropout（瞬断許容）
+        self.bad_t = torch.where(good_all, torch.zeros_like(self.bad_t), self.bad_t + dt)
+        broke = self.bad_t > self.dropout_s
+
         self.hold_t = torch.where(
             good_all,
             self.hold_t + dt,
-            torch.zeros_like(self.hold_t),
+            torch.where(broke, torch.zeros_like(self.hold_t), self.hold_t)
         )
 
-        # 「この phase でまだ進行しておらず、初めて T_hold_s を超えた env」
         reached = (self.hold_t >= self.T_hold_s) & (~self.paid_for_phase)
 
-
-        # ==============================
-               # 6.5 カリキュラム用: 成功マスク / 成功カウントを env.extras に書く
-       # ==============================
-              # - success_mask: 「いま hold 条件を満たしている env」
-      #   ※ self.hold_t は good_all が False になった時点で 0 にリセットされるので、
-      #      self.hold_t >= T_hold_s なら「今も good_all かつ十分ホールドしている」ことになる
-        success_mask = self.hold_t >= self.T_hold_s  # [B] bool
-
-        # 「このステップで新たに成功に到達した env の数」をカリキュラムに渡す
-        # shared_mass_curriculum ではこれを `ctx.succ += n_succ_step` で累積する想定
-        self.env.extras["fr_hold_ok_mask"]  = success_mask
-        self.env.extras["fr_hold_ok_count"] = int(reached.sum().item())
-
-        # 報酬（重みは 1e-6 にする想定なので、ここは好きに）
         payout = torch.where(
             reached,
             torch.full_like(self.hold_t, self.bonus / dt),
             torch.zeros_like(self.hold_t),
         )
-
-        # この phase ではもう一度進行させない
         self.paid_for_phase |= reached
 
-        # ==============================
-        # 7. フェーズ進行（0→1→2 ...）
-        # ==============================
-        if self.auto_advance_phase and reached.any():
-            env_ids = torch.nonzero(reached, as_tuple=False).squeeze(-1)
+        if reached.any():
+            env_ids = reached.nonzero(as_tuple=False).squeeze(-1)
             self.cmd_term.advance_phase(env_ids)
 
-        # ==============================
-        # 8. reset 時に状態クリア
-        # ==============================
-        if hasattr(env, "reset_buf"):
-            m = env.reset_buf > 0
-            if m.any():
-                self.hold_t[m]         = 0.0
-                self.paid_for_phase[m] = False
-                self.prev_phase[m]     = self.cmd_term.phase[m]
-
-                env_ids = torch.nonzero(m, as_tuple=False).squeeze(-1)# ★ ここで phase を 0 に戻す
-                self.cmd_term.set_phase(env_ids, phase=0)
+        # ---- prints (軽め) ----
+        if self._step % 50 == 0:
+            print(f"[HoldSimple step={self._step}] good={good_all.float().mean().item():.3f} "
+                  f"hold_mean={self.hold_t.mean().item():.3f}s reached={int(reached.sum().item())}")
 
         return payout
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3441,6 +4415,30 @@ class MultiLegHoldBonusOnce(ManagerTermBase):
                 self.paid[m]   = False
 
         return payout
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

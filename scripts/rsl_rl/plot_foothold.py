@@ -47,6 +47,20 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+
+
+
+# PATH   = "/home/digital/isaac_ws/unitree_rl_lab/teacher_static.h5"          # ★
+
+
+
+PATH = "/home/digital/isaac_ws/unitree_rl_lab/teacher_walk2.h5"
+
+
+
+
+
 def xy_to_ij(xy, L, W, res, Hb, Wb):
     # xy: (...,2) in [-L/2,L/2],[-W/2,W/2]
     x = xy[...,0]; y = xy[...,1]
@@ -60,7 +74,7 @@ def show_distribution(h5_path, max_n=None):
     with h5py.File(h5_path, "r") as f:
         L, W = f.attrs["ray_size_xy"]
         res = float(f.attrs["ray_resolution"])
-        foot_xy = f["foot_xy"][:]  # (N,4,2)
+        foot_xy = f["cmd_xy"][:]  # (N,4,2)
         Hb, Wb = f["hits_z"].shape[1:3]
         N = foot_xy.shape[0]
         if max_n is not None:
@@ -183,7 +197,7 @@ def show_one(h5_path: str, idx: int, pred_xy=None, bg="trav"):
         L, W = f.attrs["ray_size_xy"]
         hits_z = f["hits_z"][idx]          # (Hb,Wb)
         trav  = f["trav"][idx]             # (Hb,Wb)
-        gt_xy = f["foot_xy"][idx]          # (4,2)
+        gt_xy = f["cmd_xy"][idx]          # (4,2)
 
     extent = [-L/2, L/2, -W/2, W/2]
 
@@ -283,8 +297,7 @@ def visualize_prediction(h5_path: str, ckpt_path: str = None, sample_idx: int = 
 
 
 if __name__ == "__main__":
-    h5_path   = "/home/digital/isaac_ws/unitree_rl_lab/teacher_static.h5"          # ★
     ckpt_path = "student_ckpt.pt"            # ★学習後の重み
     # visualize_prediction(h5_path, ckpt_path, sample_idx=0, device="cuda")
-    visualize_prediction(h5_path, sample_idx=0, device="cuda")
+    visualize_prediction(PATH, sample_idx=0, device="cuda")
 

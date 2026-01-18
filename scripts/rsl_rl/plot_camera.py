@@ -29,7 +29,8 @@ import matplotlib.pyplot as plt
 # ---------------------------
 # ここだけあなたの設定に合わせる
 # ---------------------------
-PATH = "/home/digital/isaac_ws/unitree_rl_lab/teacher_static.h5"
+# PATH = "/home/digital/isaac_ws/unitree_rl_lab/teacher_static.h5"
+PATH = "/home/digital/isaac_ws/unitree_rl_lab/teacher_walk.h5"
 
 # BEV（raycasterと合わせる）
 L = 1.2
@@ -53,7 +54,10 @@ cy = (IMG_H - 1) * 0.5
 # カメラ offset（base -> cam）
 # OffsetCfg.pos / rot をそのまま入れる（rotは wxyz）
 t_bc = torch.tensor([0.370, 0.0, 0.15], dtype=torch.float32)
-q_bc_wxyz = torch.tensor([0.4056, -0.5792, 0.4056, -0.5792], dtype=torch.float32)
+# q_bc_wxyz = torch.tensor([0.5, -0.5, 0.5, -0.5], dtype=torch.float32)
+# q_bc_wxyz = torch.tensor([0.2418, -0.6645,  0.6645, -0.2418], dtype=torch.float32)
+
+
 
 # ---------------------------
 # 回転・姿勢ユーティリティ
@@ -202,7 +206,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 # ---- 固定パラメータ（あなたの設定）----
-PATH = "teacher_static.h5"
+# PATH = "teacher_static.h5"
 L, W = 1.2, 0.6
 Z_PLANE = 0.0
 
@@ -603,7 +607,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 # ---- パラメータ設定 ----
-PATH = "teacher_static.h5"
+# PATH = "teacher_static.h5"
 
 # 【重要】BEVの表示範囲設定
 # ロボット座標系 (Base Link) での範囲を指定します
@@ -614,7 +618,7 @@ Y_WIDTH = 0.8 # 横幅 (m) -> Y: +1.5 ~ -1.5
 
 BEV_H = 128# 出力画像の高さ
 BEV_W = 64  # 出力画像の幅
-Z_GROUND = 0.0
+Z_GROUND = -0.30
 
 # カメラ内部パラメータ
 IMG_H = 64; IMG_W = 64
@@ -631,7 +635,9 @@ cy = (IMG_H - 1) * 0.5
 t_bc = torch.tensor([0.370, 0.0, 0.15], dtype=torch.float32)
 # q_off: Base座標系をCamera座標系に合わせる回転 (あるいはその逆)
 # 通常、TFデータは "Parent to Child" (Base -> Camera) の回転を表します
-q_bc_wxyz = torch.tensor([0.5, -0.5, 0.5, -0.5], dtype=torch.float32)
+# q_bc_wxyz = torch.tensor([0.5, -0.5, 0.5, -0.5], dtype=torch.float32)
+q_bc_wxyz = torch.tensor([0.2418, -0.6645,  0.6645, -0.2418], dtype=torch.float32)
+
 
 def quat_to_R_wxyz(q):
     w,x,y,z = q.unbind(-1)
@@ -680,6 +686,7 @@ def transform_points_base_to_cam(points_base, R_bc, t_bc):
     # einsumで (Hb, Wb, 3) x (3, 3) -> (Hb, Wb, 3)
     # p_centered[... , j] * R_cb[j, i] -> out[... , i]
     points_cam = torch.einsum('...j,ij->...i', p_centered, R_cb)
+
     
     return points_cam
 
@@ -737,6 +744,10 @@ def generate_bev(img_t, Hb, Wb):
     
     # サンプリング
     bev = F.grid_sample(img_t, grid, mode="bilinear", padding_mode="zeros", align_corners=True)
+
+    print("points_base x(min,max) =", points_base[...,0].min().item(), points_base[...,0].max().item())
+    print("points_base y(min,max) =", points_base[...,1].min().item(), points_base[...,1].max().item())
+
     return bev
 
 # ---- メイン処理 ----
@@ -774,6 +785,9 @@ with h5py.File(PATH, "r") as f:
     # ロボット位置の方向を示す矢印
     # plt.arrow(0, X_MIN, 0, 0.2, head_width=0.1, head_length=0.1, fc='red', ec='red')
     # plt.text(0, X_MIN-0.1, "Robot", ha='center', color='red')
+
+   
+
     
     plt.show()
 
@@ -836,7 +850,7 @@ IDX0 = 0
 import h5py, numpy as np
 from scipy.spatial.transform import Rotation as R
 
-PATH="teacher_static.h5"
+# PATH="teacher_static.h5"
 with h5py.File(PATH,"r") as f:
     q = f["root_state_w"][:,3:7]  # (N,4) wxyz のはず
     # scipy は xyzw なので並べ替え
@@ -861,7 +875,45 @@ with h5py.File(PATH,"r") as f:
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-q_bc_wxyz = np.array([0.4056, -0.5792, 0.4056, -0.5792])
+# q_bc_wxyz = np.array([0.4056, -0.5792, 0.4056, -0.5792])
 q_bc_xyzw = np.array([q_bc_wxyz[1], q_bc_wxyz[2], q_bc_wxyz[3], q_bc_wxyz[0]])
 eul = R.from_quat(q_bc_xyzw).as_euler("xyz", degrees=True)
 print("camera offset euler xyz [deg] roll,pitch,yaw =", eul)
+
+
+
+
+
+
+with h5py.File(PATH, "r") as f:
+    print("Keys in attrs:", list(f.attrs.keys()))
+    
+    # 1. 解像度 (res)
+    if "ray_resolution" in f.attrs:
+        res_true = f.attrs["ray_resolution"]
+        print(f"✅ True Resolution (res): {res_true}")
+    else:
+        print("⚠️ 'ray_resolution' not found in attrs")
+
+    # 2. 物理サイズ (L, W)
+    if "ray_size_xy" in f.attrs:
+        size_true = f.attrs["ray_size_xy"]
+        L_true, W_true = size_true[0], size_true[1]
+        print(f"✅ True Size (L, W): {L_true}, {W_true}")
+        
+        # グリッド数検算
+        Hb = int(round(L_true / res_true)) + 1
+        Wb = int(round(W_true / res_true)) + 1
+        print(f"   -> Expected Grid Shape (Hb, Wb): ({Hb}, {Wb})")
+    else:
+        print("⚠️ 'ray_size_xy' not found in attrs")
+
+    # 3. 評価コードの設定と比較
+    print("-" * 20)
+    print("あなたの評価コードの設定: res=0.02, L=1.2, W=0.6")
+    
+    if "ray_size_xy" in f.attrs:
+        if not np.isclose(L_true, 1.2) or not np.isclose(W_true, 0.6):
+            print("🚨【警告】L, W の値がズレています！評価コードを修正してください！")
+        else:
+            print("values match. (値は合っています)")

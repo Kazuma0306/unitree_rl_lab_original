@@ -1,4 +1,4 @@
-#Upper Model  Environment (Heightmap)
+#Upper Model  Environment (Heightmap) for collecting data
 
 import math
 
@@ -879,6 +879,14 @@ from dataclasses import field
 
 
 
+
+sizex = 0.2
+sizey = 0.25
+MASS_B = 1.0
+
+MASS_B = 100
+
+
 @configclass
 class RobotSceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with a legged robot."""
@@ -890,9 +898,9 @@ class RobotSceneCfg(InteractiveSceneCfg):
         # terrain_generator=COBBLESTONE_ROAD_CFG,  # None, ROUGH_TERRAINS_CFG
         # terrain_generator=ROUGH_TERRAINS_CFG,
         # terrain_generator=DESCRETE_OBSTACLES_CFG,
-        terrain_generator= STEPPING_STONES_CFG, 
+        # terrain_generator= STEPPING_STONES_CFG, 
         # terrain_generator= MOAT_CFG, # proposed env
-        # terrain_generator= BLOCK_CFG,
+        terrain_generator= BLOCK_CFG,
         max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -923,7 +931,7 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-    # #左前
+    # # #左前
     # stone1 = RigidObjectCfg(
     #     prim_path="{ENV_REGEX_NS}/Stone_1",
     #     spawn=sim_utils.CuboidCfg(
@@ -1246,6 +1254,410 @@ class RobotSceneCfg(InteractiveSceneCfg):
     # )
 
 
+        #左前
+    stone1 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_1",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.48, 0.2, -0.14)
+        )
+    )
+
+    #右前
+    stone2 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_2",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.48, -0.2, -0.14)
+        )
+    )
+
+    #ML
+    stone3 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_3",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False,),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0, 0.2, -0.14)
+        )
+    )
+
+
+    #MR
+    stone4 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_4",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0, -0.2, -0.14)
+        )
+    )
+
+
+    #FL
+    stone5 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_5",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.24, 0.2, -0.14)
+        )
+    )
+
+
+    #FR
+    stone6 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_6",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.24, -0.2, -0.14)
+        )
+    )
+
+    #RL
+    stone7 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_7",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(-0.24, 0.2, -0.14)
+        )
+    )
+
+    #RR
+    stone8 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_8",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(-0.24, -0.2, -0.14)
+        )
+    )
+
+    #左前2
+    stone9 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_9",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.72, 0.2, -0.14)
+        )
+    )
+
+    #右前2
+    stone10 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_10",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.72, -0.2, -0.14)
+        )
+    )
+
+
+
+      #左前3
+    stone11 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_11",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.96, 0.2, -0.14)
+        )
+    )
+
+    #右前3
+    stone12 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_12",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(0.96, -0.2, -0.14)
+        )
+    )
+
+
+    #左前4
+    stone13 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_13",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.2, 0.2, -0.14)
+        )
+    )
+
+
+    #右前4
+    stone14= RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_14",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.2, -0.2, -0.14)
+        )
+    )
+
+
+
+    #左前4
+    stone15 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_15",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.44, 0.2, -0.14)
+        )
+    )
+
+
+    #右前4
+    stone16= RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_16",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.44, -0.2, -0.14)
+    )
+    )
+
+
+
+    #左前4
+    stone17 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_17",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.68, 0.2, -0.14)
+        )
+    )
+
+
+    #右前4
+    stone18= RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_18",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.68, -0.2, -0.14)
+        )
+
+
+    )
+
+
+
+    #左前4
+    stone19 = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_19",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.92, 0.2, -0.14)
+        )
+    )
+
+
+    #右前4
+    stone20= RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Stone_20",
+        spawn=sim_utils.CuboidCfg(
+            size=(sizex, sizey, 0.3),  # 天板サイズ
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=MASS_B),   # ランダム化候補
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0, dynamic_friction=1.0, restitution=0.0
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.25, 0.6, 0.8))
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            # ここは各ENVの原点からの相対。与えられた足置き位置に合わせて配置する
+            pos=(1.92, -0.2, -0.14)
+        )
+
+
+    )
+
+
+
+
+
 
 
 
@@ -1290,7 +1702,15 @@ class RobotSceneCfg(InteractiveSceneCfg):
         ),
         # depth_clipping_behavior = "max",
         # depth_clipping_behavior = "zero",
-        offset=CameraCfg.OffsetCfg(pos=(0.370, 0.0, 0.15), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        # offset=CameraCfg.OffsetCfg(pos=(0.370, 0.0, 0.15), rot=(0.5, -0.5, 0.5, -0.5), convention="ros"),
+        # 下に20度傾ける設定
+
+        # x, y, z, w
+        offset = CameraCfg.OffsetCfg(
+            pos=(0.370, 0.0, 0.15),
+            rot=(0.2418, -0.6645,  0.6645, -0.2418), 
+            convention="ros"
+        )
         # offset=CameraCfg.OffsetCfg(pos=(0.370, 0.0, 0.15), rot=(0.4056, -0.5792, 0.4056, -0.5792), convention="ros"),
         # offset=CameraCfg.OffsetCfg(pos=(0.32, 0.0, 0.15), rot=(0.2418, -0.6645,  0.6645, -0.2418), convention="ros"),
         # offset=CameraCfg.OffsetCfg(pos=(0.37, 0.0, 0.15), rot=(0.0616, -0.7044, 0.7044, -0.0616), convention="ros"),
@@ -1329,93 +1749,157 @@ class RobotSceneCfg(InteractiveSceneCfg):
 
 
 
-@configclass
-class ActionsCfg:
-    """Action terms for the MDP."""
+# @configclass
+# class ActionsCfg:
+#     """Action terms for the MDP."""
 
-    pre_trained_policy_action: mdp.FootstepPolicyActionCfg = mdp.FootstepPolicyActionCfg(
-        asset_name="robot",
-        # policy_path=f"{ISAACLAB_NUCLEUS_DIR}/Policies/ANYmal-C/Blind/policy.pt", #TODO
-        policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed3/2025-12-10_17-03-00/exported/policy.pt",
-        low_level_decimation=4,
-        low_level_actions=LOW_LEVEL_ENV_CFG.actions.JointPositionAction, #lower's action
-        low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy, # lower's observation
+#     pre_trained_policy_action: mdp.FootstepPolicyActionCfg = mdp.FootstepPolicyActionCfg(
+#         asset_name="robot",
+#         # policy_path=f"{ISAACLAB_NUCLEUS_DIR}/Policies/ANYmal-C/Blind/policy.pt", #TODO
+#         policy_path=f"/home/digital/isaac_ws/unitree_rl_lab/logs/rsl_rl/unitree_go2_proposed3/2025-12-10_17-03-00/exported/policy.pt",
+#         low_level_decimation=4,
+#         low_level_actions=LOW_LEVEL_ENV_CFG.actions.JointPositionAction, #lower's action
+#         low_level_observations=LOW_LEVEL_ENV_CFG.observations.policy, # lower's observation
+#     )
+
+
+
+
+@configclass
+class CommandsCfg:
+    """Command specifications for the MDP."""
+
+    # base_velocity = mdp.UniformLevelVelocityCommandCfg(
+    #     asset_name="robot",
+    #     resampling_time_range=(20.0, 20.0),
+    #     rel_standing_envs=0.1,
+    #     debug_vis=False,
+    #     # ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+    #     #     lin_vel_x=(0.25, 1.0), lin_vel_y=(-0.25, 0.25), ang_vel_z=(-1, 1)
+    #     # ),
+
+    #     # ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+    #     #     lin_vel_x=(0.25, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-0.3, 0.3)
+    #     # ),
+
+    #     ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+    #         lin_vel_x=(0.6, 1.0), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-0.3, 0.3)
+    #     ),
+
+    #     limit_ranges=mdp.UniformLevelVelocityCommandCfg.Ranges(
+    #         lin_vel_x=(-1.0, 1.0), lin_vel_y=(-0.4, 0.4), ang_vel_z=(-1.0, 1.0)
+    #     ),
+    # )
+
+
+
+    # step_fr_to_block = mdp.StepFRToBlockCommandCfg(
+    #     resampling_time_range=(2.0, 3.0),
+    #     local_offset_range=(-0.02, 0.02),
+    #     debug_vis=True,
+    # )
+
+
+    step_fr_to_block = mdp.MultiLegBaseCommand3Cfg(
+        resampling_time_range=(10000.0, 10000.0),
+        debug_vis=False,
     )
 
 
 
+
 @configclass
-class HighLevelPolicyObsCfg(ObsGroup):
+class ActionsCfg:
+    """Action specifications for the MDP."""
 
-    # observation terms (order preserved)
-    base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
-    base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
-    projected_gravity = ObsTerm(func=mdp.projected_gravity)
-    pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "pose_command"})
-
-    last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100)) #last command
-
-    leg_position = ObsTerm(func = mdp.ee_pos_base_obs)#ベース座標系での脚位置
+    JointPositionAction = mdp.JointPositionActionCfg(
+        asset_name="robot", joint_names=[".*"], scale=0.25, use_default_offset=True, clip={".*": (-100.0, 100.0)}
+    )
 
 
-    # front_depth = ObsTerm(
-    #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
-    #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
-    # )
 
-    # heightmap = ObsTerm(
-    # func=mdp.depth_heightmap4,
-    # params=dict(
-    #     sensor_cfg=SceneEntityCfg("camera"),  # 定義したカメラ名
-    #     asset_cfg=SceneEntityCfg("robot"),
-    #     x_range=(0.1, 3.0),
-    #     y_range=(-2.0, 2.0),
-    #     grid_shape=(64, 64),
-    #     default_height=-4,
-    # ),
-    # )
+# @configclass
+# class HighLevelPolicyObsCfg(ObsGroup):
 
-    # heightmap = ObsTerm(
-    #     func=mdp.image,
-    #     # env.scene.sensors["camera"] に合わせて名前を変える
-    #     params={
-    #         "sensor_cfg": SceneEntityCfg("camera"),
-    #         "data_type": "depth",   # TiledCameraCfg.data_types=["depth"] と合わせる
-    #         "normalize": True,      # depthの inf を0にするなどの処理をしてくれる
-    #     },
-    #     # ↓ここがキモ：このtermだけ履歴を持たせる
-    #     history_length=2,           # 4フレーム分スタック
-    #     flatten_history_dim=True,   # (B,4,H,W,C) → (B, 4*H*W*C)にflatten
-    # )
+#     # observation terms (order preserved)
+#     base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+#     base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
+#     projected_gravity = ObsTerm(func=mdp.projected_gravity)
+#     pose_command = ObsTerm(func=mdp.generated_commands, params={"command_name": "pose_command"})
 
-    # heightmap = ObsTerm(
-    #     func = mdp.obs_near_blocks_col
+#     last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100)) #last command
 
-    # )
-
-    # heightmap = ObsTerm(func=mdp.height_scan,
-    #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
-    #     clip=(-1.0, 5.0),
-    # )
-
-    ft_stack = ObsTerm(
-            func=mdp.contact_ft_stack,   # 下の関数
-            params=dict(
-                sensor_cfg=SceneEntityCfg("contact_forces",
-                # body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"]),
-                body_names=".*_foot"),
-                mass_kg=15.0,
-                return_shape="flat",
-                components="z"
-            ),
-            clip=(-3.0, 3.0),
-        )
+#     leg_position = ObsTerm(func = mdp.ee_pos_base_obs)#ベース座標系での脚位置
 
 
-    def __post_init__(self):
-            # self.history_length = 3
-            # self.enable_corruption = True
-            self.concatenate_terms = False
+#     # front_depth = ObsTerm(
+#     #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
+#     #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
+#     # )
+
+#     # heightmap = ObsTerm(
+#     # func=mdp.depth_heightmap4,
+#     # params=dict(
+#     #     sensor_cfg=SceneEntityCfg("camera"),  # 定義したカメラ名
+#     #     asset_cfg=SceneEntityCfg("robot"),
+#     #     x_range=(0.1, 3.0),
+#     #     y_range=(-2.0, 2.0),
+#     #     grid_shape=(64, 64),
+#     #     default_height=-4,
+#     # ),
+#     # )
+
+#     # heightmap = ObsTerm(
+#     #     func=mdp.image,
+#     #     # env.scene.sensors["camera"] に合わせて名前を変える
+#     #     params={
+#     #         "sensor_cfg": SceneEntityCfg("camera"),
+#     #         "data_type": "depth",   # TiledCameraCfg.data_types=["depth"] と合わせる
+#     #         "normalize": True,      # depthの inf を0にするなどの処理をしてくれる
+#     #     },
+#     #     # ↓ここがキモ：このtermだけ履歴を持たせる
+#     #     history_length=2,           # 4フレーム分スタック
+#     #     flatten_history_dim=True,   # (B,4,H,W,C) → (B, 4*H*W*C)にflatten
+#     # )
+
+#     # heightmap = ObsTerm(
+#     #     func = mdp.obs_near_blocks_col
+
+#     # )
+
+#     # heightmap = ObsTerm(func=mdp.height_scan,
+#     #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+#     #     clip=(-1.0, 5.0),
+#     # )
+
+#     ft_stack = ObsTerm(
+#             func=mdp.contact_ft_stack,   # 下の関数
+#             params=dict(
+#                 sensor_cfg=SceneEntityCfg("contact_forces",
+#                 # body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"]),
+#                 body_names=".*_foot"),
+#                 mass_kg=15.0,
+#                 return_shape="flat",
+#                 components="z"
+#             ),
+#             clip=(-3.0, 3.0),
+#         )
+
+
+#     def __post_init__(self):
+#             # self.history_length = 3
+#             # self.enable_corruption = True
+#             self.concatenate_terms = False
+
+
+
+
+# @configclass
+# class ObservationsCfg:
+#     """Observation specifications for the MDP."""
+
+#     policy: mdp.ObservationGroupCfg = HighLevelPolicyObsCfg()
+#     critic: mdp.ObservationGroupCfg = HighLevelPolicyObsCfg()
 
 
 
@@ -1423,9 +1907,168 @@ class HighLevelPolicyObsCfg(ObsGroup):
 @configclass
 class ObservationsCfg:
     """Observation specifications for the MDP."""
+    @configclass
+    class PolicyCfg(ObsGroup):
+        """Observations for policy group."""
 
-    policy: mdp.ObservationGroupCfg = HighLevelPolicyObsCfg()
-    critic: mdp.ObservationGroupCfg = HighLevelPolicyObsCfg()
+        # observation terms (order preserved)
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
+        projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100), noise=Unoise(n_min=-0.05, n_max=0.05))
+        # position_commands = ObsTerm(
+        #     func = mdp.generated_commands, params={"command_name": "base_velocity"}
+        # )
+
+
+        position_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "step_fr_to_block"}) #ベース座標系での目標
+
+        # fr_target_xy_rel = ObsTerm(func=mdp.fr_target_xy_rel_single_block, clip=(-1.0, 1.0)) 
+        # fr_target_xy_rel = ObsTerm(func=mdp.leg_xy_err) #ベース座標系での目標誤差
+
+        fr_target_xy_rel = ObsTerm(func=mdp.legs_err_base_all) #ベース座標系での目標誤差
+
+
+
+        leg_position = ObsTerm(func = mdp.ee_pos_base_obs)#ベース座標系での脚位置
+
+
+        # position_commands = ObsTerm(
+        #     func = mdp.generated_commands, params={"command_name": "goal_position"}
+        # )
+        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel, clip=(-100, 100), noise=Unoise(n_min=-0.01, n_max=0.01))
+        joint_vel_rel = ObsTerm(
+            func=mdp.joint_vel_rel, scale=0.05, clip=(-100, 100), noise=Unoise(n_min=-1.5, n_max=1.5)
+        )
+        last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
+        # height_scanner = ObsTerm(func=mdp.height_scan,
+        #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+        #     clip=(-1.0, 5.0),
+        # )
+
+        ft_stack = ObsTerm(
+            func=mdp.contact_ft_stack,   # 下の関数
+            params=dict(
+                sensor_cfg=SceneEntityCfg("contact_forces",
+                # body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"]),
+                body_names=".*_foot"),
+                mass_kg=15.0,
+                return_shape="flat",
+                components = "z"
+            ),
+            clip=(-3.0, 3.0),
+        )
+
+
+
+       
+
+
+        # front_depth = ObsTerm(
+        #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
+        #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
+        # )
+
+        # front_normals = ObsTerm(
+        #         func=mdp.image,
+        #         params=dict(
+        #             sensor_cfg=SceneEntityCfg("camera"),
+        #             data_type="normals",
+        #             normalize=False,            # ← [-1,1]のままもらう
+        #         ),
+        # )
+        
+
+        def __post_init__(self):
+            # self.history_length = 3
+            self.enable_corruption = True
+            self.concatenate_terms = False
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+
+
+    @configclass
+    class CriticCfg(ObsGroup):
+        """Observations for critic group."""
+
+     
+        base_lin_vel = ObsTerm(func=mdp.base_lin_vel)
+        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, scale=0.2, clip=(-100, 100), noise=Unoise(n_min=-0.2, n_max=0.2))
+        projected_gravity = ObsTerm(func=mdp.projected_gravity, clip=(-100, 100), noise=Unoise(n_min=-0.05, n_max=0.05))
+        # position_commands = ObsTerm(
+        #     func = mdp.generated_commands, params={"command_name": "base_velocity"}
+        # )
+
+
+        position_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "step_fr_to_block"})#ベース座標系での目標
+
+        # fr_target_xy_rel = ObsTerm(func=mdp.fr_target_xy_rel_single_block, clip=(-1.0, 1.0)) 
+
+        # fr_target_xy_rel = ObsTerm(func=mdp.leg_xy_err) 
+
+        fr_target_xy_rel = ObsTerm(func=mdp.legs_err_base_all) #ベース座標系での目標誤差
+
+        leg_position = ObsTerm(func = mdp.ee_pos_base_obs)
+
+        
+
+
+
+
+
+        # position_commands = ObsTerm(
+        #     func = mdp.generated_commands, params={"command_name": "goal_position"}
+        # )
+        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel, clip=(-100, 100), noise=Unoise(n_min=-0.01, n_max=0.01))
+        joint_vel_rel = ObsTerm(
+            func=mdp.joint_vel_rel, scale=0.05, clip=(-100, 100), noise=Unoise(n_min=-1.5, n_max=1.5)
+        )
+        # joint_effort = ObsTerm(func=mdp.joint_effort, scale=0.01, clip=(-100, 100))
+        last_action = ObsTerm(func=mdp.last_action, clip=(-100, 100))
+        # height_scanner = ObsTerm(func=mdp.height_scan,
+        #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
+        #     clip=(-1.0, 5.0),
+        # )
+
+        ft_stack = ObsTerm(
+            func=mdp.contact_ft_stack,   # 下の関数
+            params=dict(
+                sensor_cfg=SceneEntityCfg("contact_forces",
+                # body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"]),
+                body_names=".*_foot"),
+                mass_kg=15.0,
+                return_shape="flat",
+                components = "z"
+
+            ),
+            clip=(-3.0, 3.0),
+        )
+
+    
+        # front_depth = ObsTerm(
+        #     func=mdp.image, # mdpに関数がある場合。なければ自作関数
+        #     params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "depth"}
+        # )
+
+        # front_normals = ObsTerm(
+        #         func=mdp.image,
+        #         params=dict(
+        #             sensor_cfg=SceneEntityCfg("camera"),
+        #             data_type="normals",
+        #             normalize=False,            # ← [-1,1]のままもらう
+        #         ),
+        # )
+    
+    
+
+        def __post_init__(self):
+            self.concatenate_terms = False
+            # self.history_length = 3
+
+    # privileged observations
+    critic: CriticCfg = CriticCfg()
+
+
 
 
     # @configclass
@@ -1565,84 +2208,311 @@ class ObservationsCfg:
 
 
 
+# @configclass
+# class RewardsCfg:
+#     """Reward terms for the MDP."""
+
+#     # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
+#     position_tracking = RewTerm(
+#         func=mdp.position_command_error_tanh,
+#         weight=0.3,
+#         params={"std": 0.2, "command_name": "pose_command"},
+#     )
+#     position_tracking_fine_grained = RewTerm(
+#         func=mdp.position_command_error_tanh,
+#         weight=0.4,
+#         params={"std": 2.0, "command_name": "pose_command"},
+#     )
+#     orientation_tracking = RewTerm(
+#         func=mdp.heading_command_error_abs,
+#         weight=-0.6,
+#         params={"command_name": "pose_command"},
+#     )
+
+#     distance_progress = RewTerm(func= mdp.BaseProgressToTargetRel, weight = 15)#ベース座標系での進捗, all legs weighted sum
+
+
+
+#     # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
+#     # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
+#     # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+#     # # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
+#     # energy = RewTerm(func=mdp.energy, weight=-3e-5)
+
+#     # -- robot
+#     # dont_wait = RewTerm(
+#     #     func=mdp.dont_wait_rel, weight=-1.0, # 前回実装した自作関数 -2.0 for simple walking
+#     #     params={"velocity_threshold": 0.2, "distance_threshold":0.8, "command_name": "pose_command"}
+#     # )
+
+#     dont_wait = RewTerm(
+#         func=mdp.dont_wait_rel3, weight=-1, 
+#         params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
+#     )
+
+
+
+
+#     # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
+
+#     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0) 
+
+#     undesired_contacts = RewTerm(
+#         func=mdp.undesired_contacts,
+#         weight=-1.5,
+#         params={
+#             "threshold": 1,
+#             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["Head_.*", ".*_hip", ".*_thigh", ".*_calf"]),
+#         },
+#     )
+
+
+
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # termination_penalty = RewTerm(func=mdp.is_terminated, weight=-400.0)
-    position_tracking = RewTerm(
-        func=mdp.position_command_error_tanh,
-        weight=0.3,
-        params={"std": 0.2, "command_name": "pose_command"},
-    )
-    position_tracking_fine_grained = RewTerm(
-        func=mdp.position_command_error_tanh,
-        weight=0.4,
-        params={"std": 2.0, "command_name": "pose_command"},
-    )
-    orientation_tracking = RewTerm(
-        func=mdp.heading_command_error_abs,
-        weight=-0.6,
-        params={"command_name": "pose_command"},
-    )
+    # -- task
+    # track_lin_vel_xy = RewTerm(
+    #     func=mdp.track_lin_vel_xy_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
+    # track_ang_vel_z = RewTerm(
+    #     func=mdp.track_ang_vel_z_exp, weight=0.75, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
 
-    distance_progress = RewTerm(func= mdp.BaseProgressToTargetRel, weight = 15)#ベース座標系での進捗, all legs weighted sum
+    # track_lin_vel_xy = RewTerm(
+    #     func=mdp.track_lin_vel_xy_exp, weight=2.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
+    # track_ang_vel_z = RewTerm(
+    #     func=mdp.track_ang_vel_z_exp, weight=0.75, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
+
+  
+
+    # position_tracking = RewTerm(
+    #     func=mdp.position_command_error_tanh,
+    #     weight=15.0,
+    #     params={"std": 2.0, "command_name": "goal_position"},
+    # )
+
+    # orientation_tracking = RewTerm(
+    #     func=mdp.heading_command_error_abs,
+    #     weight=-1.0,
+    #     params={"command_name": "goal_position"},
+    # )
 
 
 
-    # joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
-    # # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
-    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
-    # # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
-    # energy = RewTerm(func=mdp.energy, weight=-3e-5)
+    # orientation_tracking = RewTerm(
+    #     func=mdp.heading_endgame_reward,
+    #     weight=5.0,
+    #     params={"command_name": "goal_position"},
+    # )
+
+
+
+    # position_tracking = RewTerm(
+    #     func=mdp.position_endgame_reward,
+    #     weight=6.0,
+    #     params={"command_name": "goal_position"}
+    # )
+
+    # move_dir_early = RewTerm(  # 初期フェーズだけ2→後で1へ
+    #     func=mdp.move_in_direction_early, weight=3.0,
+    #     params=dict(command_name="goal_position")
+    # )
+
+
+    #指定位置へ脚を置くbonus
+    # fr_on_block = RewTerm(func=mdp.fr_on_block_rect, weight=0.05, params=dict(margin=0.01)) #ブロック座標系で、脚がブロック範囲内かどうか
+    # fr_on_block_bonus = RewTerm(func=mdp.FROnBlockBonusOnce, weight= 1.0) #ブロック座標系、連続タッチ評価
+
+    # bonus for all legs contact
+    # fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusOnce2, weight= 0.001)
+    fr_on_block_bonus = RewTerm(func=mdp.MultiLegHoldBonusPhase, weight= 0.001)
+    
+    # そっと置く
+    # impact_spike_fr = RewTerm(func=mdp.impact_spike_penalty_fr, weight=-0.3, params=dict(dfz_thresh=0.15))
+    # gentle_band = RewTerm(func=mdp.support_force_band_reward, weight=0.6, params=dict(
+    #         sensor_cfg=SceneEntityCfg(
+    #             "contact_forces",
+    #             body_names=["FL_foot", "FR_foot", "RL_foot", "RR_foot"],  # センサ側の定義と一致させる
+    #         ),)  # 体重比基準
+    # )
+
+    # ブロックを動かさない
+    # block_angvel = RewTerm(func=mdp.ang_vel, weight=-0.35)
+
+    block_stability_penalty = RewTerm(
+    func=mdp.BlocksMovementPenalty,
+    weight=-1.0,  # ペナルティなのでマイナス
+)
+
+    # progress_to_stone = RewTerm(func=mdp.fr_target_progress_reward3, weight=2.5,#ワールド座標系だが内積を撮っているので問題なし、FRProgressToStoneBaseと役割がかぶる
+    # )　しかも報酬内でDtをかけるようになっているので二重がけになる
+
+    # distance_to_stone = RewTerm(func= mdp.fr_target_distance_reward_3d4, weight = 0.5) #ベース座標系での距離
+    distance_to_stone = RewTerm(func= mdp.legs_reward_gaussian, weight = 0.2) #ベース座標系での距離 , all legs
+
+
+    distance_progress = RewTerm(func= mdp.LegsProgressToTargetsBase, weight = 8)#ベース座標系での進捗, all legs weighted sum
+
+    wrong_penalty = RewTerm(func = mdp.WrongPlacePenalty, weight = -0.01)
+
+
+  
+
+
+
+    # -- base
+    base_linear_velocity = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.5)
+    # base_angular_velocity = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
+    # joint_vel = RewTerm(func=mdp.joint_vel_l2, weight=-0.001)
+    # joint_acc = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    joint_torques = RewTerm(func=mdp.joint_torques_l2, weight=-2e-4)
+    # action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.02)
+    action_rate = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
+    # dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=-5.0)
+    energy = RewTerm(func=mdp.energy, weight=-3e-5)
 
     # -- robot
     # dont_wait = RewTerm(
     #     func=mdp.dont_wait_rel, weight=-1.0, # 前回実装した自作関数 -2.0 for simple walking
-    #     params={"velocity_threshold": 0.2, "distance_threshold":0.8, "command_name": "pose_command"}
+    #     params={"velocity_threshold": 0.2, "distance_threshold": 1.0, "command_name": "goal_position"}
     # )
-
-    dont_wait = RewTerm(
-        func=mdp.dont_wait_rel3, weight=-1, 
-        params={"distance_threshold": 0.2, "max_distance":0.8, "command_name": "pose_command"}
-    )
-
-
-
 
     # base_acc = RewTerm(func = mdp.base_accel_l2, weight = -0.0005)
 
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0) 
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0) #-5.0 for simple walking
 
+    # for navigation
+    # joint_pos = RewTerm(
+    #     func=mdp.joint_position_penalty_nav,
+    #     weight=-0.1,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+    #         "stand_still_scale": 5.0,
+    #         "velocity_threshold": 0.3,
+    #         "distance_threshold": 0.5,
+    #         "command_name": "goal_position",
+    #     },
+    # )
+
+    # joint_pos = RewTerm(
+    #     func=mdp.joint_position_penalty,
+    #     weight=-0.4,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+    #         "stand_still_scale": 5.0,
+    #         "velocity_threshold": 0.3,
+    #     },
+    # )
+
+    # -- feet
+    # feet_air_time = RewTerm(
+    #     func=mdp.feet_air_time,
+    #     weight=0.1,
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #         "command_name": "base_velocity",
+    #         "threshold": 0.5,
+    #     },
+    # )
+    # air_time_variance = RewTerm(
+    #     func=mdp.air_time_variance_penalty,
+    #     # weight=-1.0,
+    #     weight=-0.2,
+    #     params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
+    # )
+    # feet_slide = RewTerm(
+    #     func=mdp.feet_slide,
+    #     weight=-0.1,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #     },
+    # )
+
+
+    # feet_contact_forces = RewTerm(
+    #     func=mdp.contact_forces,
+    #     weight=-0.02,
+    #     params={
+    #         "threshold": 100.0,
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #     },
+    # )
+
+    # -- other
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
-        weight=-1.5,
+        weight=-1,
         params={
             "threshold": 1,
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["Head_.*", ".*_hip", ".*_thigh", ".*_calf"]),
         },
     )
 
+    # termination_penalty = RewTerm(func=mdp.is_terminated, weight= -2.0)
+
+    # stand_still = RewTerm(
+    #     func=mdp.stand_still,
+    #     weight=0.5,  # この重みは調整が必要です
+    #     params={
+    #         "distance_threshold": 0.1,  # 25cm以内
+    #         "heading_threshold": 0.8,    # 0.5ラジアン以内
+    #         "time_threshold": 2.0,       # 最後の2秒間
+    #     }
+    # )
+
+    # === 到達後の静止（負項） ===
+    # stand_still_neg = RewTerm(
+    #     func=mdp.stand_still_negative, weight=-1.0,
+    #     params=dict(last_seconds=1.0, lin_coef=2.5, ang_coef=1.0,
+    #                 command_name="goal_position", reach_radius=0.2)
+    # )
 
 
 
 
-@configclass
-class CommandsCfg:
-    """Command terms for the MDP."""
 
-    pose_command = mdp.UniformPose2dCommandCfg(
-        asset_name="robot",
-        simple_heading=False,
-        resampling_time_range=(24.0, 24.0),
-        debug_vis=False,
-        # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
-        ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.5, 2.5), pos_y=(-0.0, 0.0), heading=(-0, 0)),
-    )
+    # # ==== 踏み外し（石ゾーン外 or 上面帯から下方に外れた接触） ====
 
-    step_fr_to_block = mdp.FootstepFromHighLevelCfg(
-        debug_vis = False
-    )
+    # feet_gap_pen = RewTerm(
+    #     func=mdp.feet_gap_contact_penalty,
+    #     weight=-20.0,   # まずはこのくらいから
+    #     params={
+    #         "asset_cfg":        SceneEntityCfg("robot", body_names=".*_foot"),
+    #         "sensor_cfg":       SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #         "hole_z":           -5.0,   # 固定
+    #         "gap_tol":          4.75,   # 穴面+4.7 以内で接地→減点
+    #         "min_contact_time": 0.02,
+    #         "force_z_thresh":   60.0,   # 任意（無ければ None）
+    #         "foot_sole_offset": 0.0,
+    #         "normalize_by_feet": False,
+    #     },
+    # )
+
+
+
+
+
+# @configclass
+# class CommandsCfg:
+#     """Command terms for the MDP."""
+
+#     pose_command = mdp.UniformPose2dCommandCfg(
+#         asset_name="robot",
+#         simple_heading=False,
+#         resampling_time_range=(24.0, 24.0),
+#         debug_vis=False,
+#         # ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(-3.0, 3.0), pos_y=(-3.0, 3.0), heading=(-math.pi, math.pi)),
+#         ranges=mdp.UniformPose2dCommandCfg.Ranges(pos_x=(0.5, 2.5), pos_y=(-0.0, 0.0), heading=(-0, 0)),
+#     )
+
+#     step_fr_to_block = mdp.FootstepFromHighLevelCfg(
+#         debug_vis = False
+#     )
 
 
 
@@ -1675,42 +2545,66 @@ class EventCfg:
         mode = "reset",
     )
 
+    # randomize stone position
+    # randomize_all_stones = EventTerm(
+    #     func=mdp.randomize_multiple_stones,
+    #     mode="reset",
+    #     params={
+    #         "stone_names": [f"stone{i}" for i in range(1, 20)],
+    #         "pose_range": {
+    #             "x": (-0.0, 0.0),
+    #             "y": (-0.04, 0.04),
+    #             "z": (0.0, 0.0),
+    #         },
 
-    reset_root = EventTerm(
-        func=mdp.reset_root_state_uniform,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "pose_range": {
-                # stepping stones なら x,y を動かすと溝に落ちやすいので最初は0推奨
-                "x": (0.0, 0.0),
-                "y": (0.0, 0.0),
-                "z": (-0.02, 0.02),          # 高さだけ少し
-                "roll": (-0.25, 0.25),       # ±14degくらい（最初は小さめ）
-                "pitch": (-0.25, 0.25),
-                "yaw": (-3.1416, 3.1416),
-            },
-            "velocity_range": {
-                "x": (0.0, 0.0),
-                "y": (0.0, 0.0),
-                "z": (0.0, 0.0),
-                "roll": (0.0, 0.0),
-                "pitch": (0.0, 0.0),
-                "yaw": (0.0, 0.0),
-            },
-        },
-    )
+    #         "velocity_range": {
+    #             # 位置だけ振りたいなら全部 (0,0) でOK
+    #             "x": (0.0, 0.0),
+    #             "y": (0.0, 0.0),
+    #             "z": (0.0, 0.0),
+    #             "roll": (0.0, 0.0),
+    #             "pitch": (0.0, 0.0),
+    #             "yaw": (0.0, 0.0),
+    #         },
+    #     },
+    # )
 
-    # ついでに関節初期値もちょい崩す（任意）
-    reset_joints = EventTerm(
-        func=mdp.reset_joints_by_offset,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),   # もし関節を絞るなら joint_names/joint_ids を追加
-            "position_range": (-0.05, 0.05),        # rad
-            "velocity_range": (0.0, 0.0),
-        },
-    )
+
+    # reset_root = EventTerm(
+    #     func=mdp.reset_root_state_uniform,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "pose_range": {
+    #             # stepping stones なら x,y を動かすと溝に落ちやすいので最初は0推奨
+    #             "x": (0.0, 0.0),
+    #             "y": (0.0, 0.0),
+    #             "z": (-0.02, 0.02),          # 高さだけ少し
+    #             "roll": (-0.25, 0.25),       # ±14degくらい（最初は小さめ）
+    #             "pitch": (-0.25, 0.25),
+    #             "yaw": (-3.1416, 3.1416),
+    #         },
+    #         "velocity_range": {
+    #             "x": (0.0, 0.0),
+    #             "y": (0.0, 0.0),
+    #             "z": (0.0, 0.0),
+    #             "roll": (0.0, 0.0),
+    #             "pitch": (0.0, 0.0),
+    #             "yaw": (0.0, 0.0),
+    #         },
+    #     },
+    # )
+
+    # # ついでに関節初期値もちょい崩す（任意）
+    # reset_joints = EventTerm(
+    #     func=mdp.reset_joints_by_offset,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),   # もし関節を絞るなら joint_names/joint_ids を追加
+    #         "position_range": (-0.05, 0.05),        # rad
+    #         "velocity_range": (0.0, 0.0),
+    #     },
+    # )
 
 
 
@@ -1748,63 +2642,181 @@ class CurriculumCfg:
 
 
 
-@configclass
-class RobotEnvCfg(ManagerBasedRLEnvCfg):
-    """Configuration for the walking environment."""
+# @configclass
+# class RobotEnvCfg(ManagerBasedRLEnvCfg):
+#     """Configuration for the walking environment."""
 
-    # environment settings
-    # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
+#     # environment settings
+#     # scene: SceneEntityCfg = LOW_LEVEL_ENV_CFG.scene
+#     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
 
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
+#     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=1024, env_spacing=2.5)
+#     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=512, env_spacing=2.5)
 
-    # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
-    scene: SceneEntityCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
+#     # scene: SceneEntityCfg = RobotSceneCfg(num_envs=256, env_spacing=2.5)
+#     scene: SceneEntityCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
 
-    actions: ActionsCfg = ActionsCfg()
-    observations: ObservationsCfg = ObservationsCfg()
-    # events: EventCfg = EventCfg()
-    commands: CommandsCfg = CommandsCfg()
-    rewards: RewardsCfg = RewardsCfg()
-    terminations: TerminationsCfg = TerminationsCfg()
-    # curriculum: CurriculumCfg = CurriculumCfg()
+#     actions: ActionsCfg = ActionsCfg()
+#     observations: ObservationsCfg = ObservationsCfg()
+#     # events: EventCfg = EventCfg()
+#     commands: CommandsCfg = CommandsCfg()
+#     rewards: RewardsCfg = RewardsCfg()
+#     terminations: TerminationsCfg = TerminationsCfg()
+#     # curriculum: CurriculumCfg = CurriculumCfg()
 
 
-    def __post_init__(self):
-        """Post initialization."""
+#     def __post_init__(self):
+#         """Post initialization."""
 
-        self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
-        self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
-        self.decimation = LOW_LEVEL_ENV_CFG.decimation #TODO　５Hz 10Hz
-        self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
-        self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
+#         self.sim.dt = LOW_LEVEL_ENV_CFG.sim.dt
+#         self.sim.render_interval = LOW_LEVEL_ENV_CFG.decimation
+#         self.decimation = LOW_LEVEL_ENV_CFG.decimation #TODO　５Hz 10Hz
+#         self.episode_length_s = self.commands.pose_command.resampling_time_range[1]
+#         self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
 
 
        
-        if self.scene.contact_forces is not None:
-            self.scene.contact_forces.update_period = self.sim.dt
+#         if self.scene.contact_forces is not None:
+#             self.scene.contact_forces.update_period = self.sim.dt
 
         
+#         # if self.scene.terrain.terrain_generator is not None:
+#         #     self.scene.terrain.terrain_generator.num_rows = 2
+#         #     self.scene.terrain.terrain_generator.num_cols = 2
+
+
+
+
+
+# class RobotPlayEnvCfg(RobotEnvCfg):
+#     def __post_init__(self) -> None:
+#         # post init of parent
+#         super().__post_init__()
+
+#         # make a smaller scene for play
+#         self.scene.num_envs = 2
+#         if self.scene.terrain.terrain_generator is not None:
+#             self.scene.terrain.terrain_generator.num_rows = 2
+#             self.scene.terrain.terrain_generator.num_cols = 2
+
+#         self.scene.env_spacing = 2.5
+#         # disable randomization for play
+#         self.observations.policy.enable_corruption = False
+
+
+
+
+
+
+@configclass
+class RobotEnvCfg(ManagerBasedRLEnvCfg):
+    """Configuration for the locomotion velocity-tracking environment."""
+    # Scene settings
+    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=4096, env_spacing=2.5)
+    # scene: RobotSceneCfg = RobotSceneCfg(num_envs=2, env_spacing=2.5)
+    scene: RobotSceneCfg = RobotSceneCfg(num_envs=64, env_spacing=2.5)
+
+    # Basic settings
+    observations: ObservationsCfg = ObservationsCfg()
+    actions: ActionsCfg = ActionsCfg()
+    commands: CommandsCfg = CommandsCfg()
+    # MDP settings
+    rewards: RewardsCfg = RewardsCfg()
+    terminations: TerminationsCfg = TerminationsCfg()
+    events: EventCfg = EventCfg()
+    # curriculum: CurriculumCfg = CurriculumCfg()
+
+    def __post_init__(self):
+        """Post initialization."""
+        # general settings
+        self.decimation = 4
+        self.episode_length_s = 20.0
+        # simulation settings
+        self.sim.dt = 0.005
+        self.sim.render_interval = self.decimation
+        self.sim.physics_material = self.scene.terrain.physics_material
+        # self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
+
+        # self.render_on_reset = True
+
+        # エラーが ~820,000 を要求しているので、それより大きい2のべき乗（例: 2**20）に設定するのが一般的です。
+        self.sim.physx.gpu_max_rigid_patch_count = 900000 # 例：約100万 (1,048,576) に設定
+
+        # update sensor update periods
+        # we tick all the sensors based on the smallest update period (physics update period)
+        self.scene.contact_forces.update_period = self.sim.dt
+        # self.scene.height_scanner.update_period = self.decimation * self.sim.dt
+
+        # check if terrain levels curriculum is enabled - if so, enable curriculum for terrain generator
+        # this generates terrains with increasing difficulty and is useful for training
+
         # if self.scene.terrain.terrain_generator is not None:
         #     self.scene.terrain.terrain_generator.num_rows = 2
         #     self.scene.terrain.terrain_generator.num_cols = 2
 
 
+       
+
+
+        # self.scene.terrain.terrain_generator.curriculum = False
 
 
 
+
+        # if getattr(self.curriculum, "terrain_levels", None) is not None:
+        #     if self.scene.terrain.terrain_generator is not None:
+        #         self.scene.terrain.terrain_generator.curriculum = True
+        # else:
+        #     if self.scene.terrain.terrain_generator is not None:
+        #         self.scene.terrain.terrain_generator.curriculum = False
+
+
+
+        
+        
+        
+
+
+
+
+# @configclass
+# class RobotPlayEnvCfg(RobotEnvCfg):
+#     def __post_init__(self):
+#         super().__post_init__()
+#         self.scene.num_envs = 32
+#         self.scene.terrain.terrain_generator.num_rows = 2
+#         self.scene.terrain.terrain_generator.num_cols = 1
+#         self.commands.base_velocity.ranges = self.commands.base_velocity.limit_ranges
+
+
+@configclass
 class RobotPlayEnvCfg(RobotEnvCfg):
-    def __post_init__(self) -> None:
-        # post init of parent
+    def __post_init__(self):
+        # 親クラスの設定をまず継承する
         super().__post_init__()
 
-        # make a smaller scene for play
+        # --- 以下は再生（テスト）時専用の設定 ---
+        
+        # 表示する環境の数を減らす
         self.scene.num_envs = 2
+
+        # self.scene.env_spacing = 8.0
+        
+        # 表示する地形のサイズを小さくする
         if self.scene.terrain.terrain_generator is not None:
             self.scene.terrain.terrain_generator.num_rows = 2
             self.scene.terrain.terrain_generator.num_cols = 2
+        
+        # [最終修正] 古い速度コマンドの行を、新しい位置コマンドの設定に変更
+        # hasattrで "base_position" が存在するか安全にチェック
 
-        self.scene.env_spacing = 2.5
         # disable randomization for play
         self.observations.policy.enable_corruption = False
+
+        # remove random pushing
+        # self.events.base_external_force_torque = None
+        # self.events.push_robot = None
+
+        self.scene.terrain.terrain_generator.curriculum = False
+
+        # self.scene.terrain.terrain_levels = 0

@@ -663,7 +663,7 @@ class MlpHFP(ActorCritic):
         num_actions: int,
         prop_obs_keys: list[str],
         ft_stack_key: str = "ft_stack",
-        ft_in_dim: int = 3,                 # 例: Fx,Fy,Fz のみ使用
+        ft_in_dim: int = 1,                 # 例: Fx,Fy,Fz のみ使用
         ft_time_steps: int = 12,            # Conv後の時間トークン数(K->この数に集約)
         prop_encoder_dims: list[int] = [256, 256],
         projection_head_dims: list[int] = [256, 256],
